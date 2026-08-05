@@ -6,3 +6,6 @@ tsconfig.tsbuildinfo
 
 # generated design artefact — rebuild with `npm run build:mock`
 mock/index.html
+
+# Claude Code scratch worktrees
+.claude/
