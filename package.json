@@ -10,7 +10,8 @@
     "typecheck": "tsc -b --noEmit",
     "sim": "tsx scripts/simulate.ts",
     "build:mock": "node scripts/build-mock.mjs",
-    "test": "tsx scripts/test.ts"
+    "test": "tsx scripts/test.ts",
+    "bench": "tsx scripts/bench.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

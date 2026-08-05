@@ -14,6 +14,7 @@ Other scripts:
 | --- | --- |
 | `npm test` | ~200 assertions over the rules (cards, combat, reinforcement, placement) |
 | `npm run sim` | soak test: hundreds of bot-vs-bot games, invariants checked after **every move** |
+| `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
 | `npm run sim -- 2000 easy` | 2000 games where every seat is the `easy` bot |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build:mock` | rebuilds `mock/index.html`, the static design mock |
@@ -143,9 +144,11 @@ export const myBot: Bot = {
 }
 ```
 
-Add it to `BOTS` in `src/bots/index.ts` and it shows up in the seat dropdown. To
-benchmark it, put it in the pool and run `npm run sim -- 500` — the win-rate table at
-the end is the scoreboard.
+Add it to `BOTS` in `src/bots/index.ts` and it shows up in the seat dropdown. To find
+out whether it's actually better, run `npm run bench -- mine easy 300`. See
+[`BOTS.md`](BOTS.md) for the design of the tiers and why the benchmark is built the
+way it is — going first is worth ~39 points heads-up, so a comparison without seat
+rotation measures position rather than skill.
 
 The two current bots are intentionally weak. `easy` reinforces its most threatened
 border, attacks only when it already outnumbers the defender, and never plans past the
