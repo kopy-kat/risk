@@ -94,6 +94,14 @@ Undo is a stack of previous states rather than a set of inverse operations, whic
 works only because `applyMove` never mutates. `scripts/test.ts` asserts that purity
 directly, since undo silently depends on it.
 
+**Every game is reproducible from one number.** The seed shows in the ⚙ popover and
+can be pasted into the setup screen to replay a game exactly — the deal, the dice and
+the bots all derive from it. That's the difference between "the bot did something
+stupid once" and a case you can re-run while fixing it.
+
+When control returns to you — including after Skip — a transient panel lists what the
+bots did. It clears on your next move; it's a recap, not a log panel.
+
 Continent labels on the map double as a progress readout — `AUSTRALIA 3/4 +2`, tinted
 by whoever leads and solid once someone holds it outright. Being one territory off a
 continent bonus is the most decision-relevant fact on the board, so it belongs on the

@@ -4,11 +4,12 @@ import type { SeatConfig } from '../engine/game'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[]): void
+  onStart(seats: SeatConfig[], seed?: number): void
 }
 
 export function Setup({ onStart }: Props) {
   const [count, setCount] = useState(4)
+  const [seed, setSeed] = useState('')
   const [seats, setSeats] = useState<SeatConfig[]>(
     PALETTE_NAMES.map((name, i) => ({ name, bot: i === 0 ? null : DEFAULT_BOT })),
   )
@@ -63,9 +64,25 @@ export function Setup({ onStart }: Props) {
           </div>
         </div>
 
+        <div className="field seedfield">
+          <span className="mono-label">Seed</span>
+          <input
+            value={seed}
+            onChange={(e) => setSeed(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            placeholder="random — paste one to replay a game"
+            aria-label="Game seed"
+            inputMode="numeric"
+          />
+        </div>
+
         <button
           className="go"
-          onClick={() => onStart(active.map((s) => ({ ...s, name: s.name.trim() || 'Player' })))}
+          onClick={() =>
+            onStart(
+              active.map((s) => ({ ...s, name: s.name.trim() || 'Player' })),
+              seed ? Number(seed) : undefined,
+            )
+          }
         >
           {humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>

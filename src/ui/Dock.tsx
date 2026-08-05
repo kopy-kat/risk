@@ -31,6 +31,7 @@ export interface DockProps {
   settingsOpen: boolean
   onSetRollMode(m: RollMode): void
   onCloseSettings(): void
+  seed: number
   onUndo(): void
   canUndo: boolean
 }
@@ -68,7 +69,7 @@ function Amount({
 
 export function Dock(props: DockProps) {
   const { state, primary, onShowSettings, onUndo, canUndo } = props
-  const { settingsOpen, rollMode, onSetRollMode, onCloseSettings } = props
+  const { settingsOpen, rollMode, onSetRollMode, onCloseSettings, seed } = props
   const me = state.players[state.current]
   const showUndo = !me.bot && state.phase !== 'setup'
 
@@ -127,6 +128,7 @@ export function Dock(props: DockProps) {
         <Settings
           rollMode={rollMode}
           onSetRollMode={onSetRollMode}
+          seed={seed}
           onClose={onCloseSettings}
         />
       )}

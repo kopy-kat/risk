@@ -5,7 +5,7 @@ import { attackableFrom, connectedOwn, createGame, applyMove, territoriesOf, HAN
 import type { SeatConfig } from '../engine/game'
 import { findSets } from '../engine/cards'
 import { rngFrom } from '../engine/rng'
-import type { GameState, Move } from '../engine/types'
+import type { GameState, LogEntry, Move } from '../engine/types'
 import { BOT_BY_KEY } from '../bots'
 import { easyBot } from '../bots/easy'
 import { stepBot } from '../bots/play'
@@ -41,17 +41,27 @@ export function App() {
    * have been rolled, rewinding and re-rolling would be save-scumming.
    */
   const [history, setHistory] = useState<GameState[]>([])
+  /** the seed this game was created from, so a bad game can be replayed exactly */
+  const [seed, setSeed] = useState(0)
+  /** what the bots did while you weren't looking */
+  const [recap, setRecap] = useState<LogEntry[] | null>(null)
+  const logMark = useRef(0)
   const rng = useRef(rngFrom(12345))
   /** in-flight typed digits, so multi-digit amounts work without a focusable field */
   const digits = useRef({ buf: '', at: 0 })
 
-  const start = useCallback((seats: SeatConfig[]) => {
-    rng.current = rngFrom(Math.floor(Math.random() * 1e9))
-    setGame(createGame({ seats, seed: Math.floor(Math.random() * 1e9) }))
+  const start = useCallback((seats: SeatConfig[], chosenSeed?: number) => {
+    const s = chosenSeed ?? Math.floor(Math.random() * 1e9)
+    // one number reproduces the whole game: the deal, the dice, and the bots
+    rng.current = rngFrom(s ^ 0x9e3779b9)
+    setSeed(s)
+    setGame(createGame({ seats, seed: s }))
     setSelected(null)
     setFortifyTo(null)
     setSelectedCards([])
     setAutoSetup(false)
+    setRecap(null)
+    logMark.current = 0
   }, [])
 
   // State updaters must stay side-effect free: React double-invokes them in dev to
@@ -63,6 +73,7 @@ export function App() {
       try {
         const next = applyMove(game, move)
         setError(null)
+        setRecap(null)
         setGame(next)
         if (UNDOABLE.has(move.type)) setHistory((h) => [...h, game])
         else if (CLEARS_UNDO.has(move.type)) setHistory([])
@@ -133,6 +144,23 @@ export function App() {
   // The undo window never spans a change of player — but it *does* survive a phase
   // change, so deploys stay undoable right up until your first roll.
   useEffect(() => { setHistory([]) }, [current])
+
+  /**
+   * What happened while you weren't acting. Deliberately transient rather than a
+   * permanent log panel: it appears when control returns to you (which is also
+   * what Skip does) and clears on your next move.
+   */
+  useEffect(() => {
+    if (!game) return
+    if (game.players[game.current].bot) {
+      logMark.current = game.log.length          // your turn just ended; start recording
+      return
+    }
+    const since = game.log.slice(logMark.current)
+    logMark.current = game.log.length
+    setRecap(since.length ? since : null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current])
 
   const me = game ? game.players[game.current] : null
   const isHuman = !!me && !me.bot
@@ -414,6 +442,22 @@ export function App() {
           onPick={pick}
           onHover={setHover}
         />
+        {recap && (
+          <div className="recap" onClick={() => setRecap(null)}>
+            <span className="mono-label">While you were away</span>
+            {recap.slice(-7).map((e, i) => (
+              <div
+                className="line"
+                key={i}
+                style={{ ['--c' as string]: e.player === null ? 'var(--ink-3)' : playerColor(game.players[e.player].color) }}
+              >
+                <span className="who">{e.player === null ? '·' : game.players[e.player].name}</span>
+                <span className="what">{e.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <Dock
           state={game}
           selected={sel}
@@ -436,6 +480,7 @@ export function App() {
           onShowSettings={() => setShowSettings((v) => !v)}
           settingsOpen={showSettings}
           onSetRollMode={setRollMode}
+          seed={seed}
           onCloseSettings={() => setShowSettings(false)}
           onUndo={undo}
           canUndo={history.length > 0}

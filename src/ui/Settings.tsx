@@ -16,11 +16,12 @@ const KEYS: [string, string][] = [
 interface Props {
   rollMode: RollMode
   onSetRollMode(m: RollMode): void
+  seed: number
   onClose(): void
 }
 
 /** Small popover above the bar — for the knobs that aren't worth permanent space. */
-export function Settings({ rollMode, onSetRollMode, onClose }: Props) {
+export function Settings({ rollMode, onSetRollMode, seed, onClose }: Props) {
   return (
     <>
       <div className="popover-scrim" onClick={onClose} />
@@ -36,6 +37,15 @@ export function Settings({ rollMode, onSetRollMode, onClose }: Props) {
           Blitz rolls until the territory falls or you're down to one army.
           Shift-click a target to invert it for a single attack.
         </p>
+        <div className="row seedrow">
+          <span className="mono-label">Seed</span>
+          <button
+            className="seedval"
+            title="Copy — paste it on the setup screen to replay this exact game"
+            onClick={() => navigator.clipboard?.writeText(String(seed))}
+          >{seed}</button>
+        </div>
+
         <div className="keys">
           <span className="mono-label">Keys</span>
           {KEYS.map(([k, what]) => (
