@@ -150,10 +150,13 @@ out whether it's actually better, run `npm run bench -- mine easy 300`. See
 way it is — going first is worth ~39 points heads-up, so a comparison without seat
 rotation measures position rather than skill.
 
-`Colonel` is the first real tier — it picks an efficient continent, masses for it,
+`General` and `Colonel` are the current tiers, with General the default opponent.
+`Colonel` is the first tier — it picks an efficient continent, masses for it,
 garrisons what it holds, and uses exact combat odds from `src/engine/combat.ts`. It
-beats the old heuristic bot 67/33. `easy` and `random` are still in the codebase as
-benchmark rungs but are hidden from the seat picker.
+beats the old heuristic bot 67/33. `General` adds denial, card cycling and the
+discipline to decline ground it can't hold, and beats Colonel 57/43. `easy` and
+`random` are still in the codebase as benchmark rungs but are hidden from the seat
+picker.
 
 What Colonel deliberately does *not* do, and what the higher tiers add: break other
 players' continents, time its card cash-ins, notice who is about to receive a pile of

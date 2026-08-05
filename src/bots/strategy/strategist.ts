@@ -10,16 +10,20 @@ import { ADJACENCY } from '../../engine/board'
 import type { TerritoryId } from '../../engine/board'
 import { findSets } from '../../engine/cards'
 import { expectedLoss, expectedSurvivors, winProb } from '../../engine/combat'
-import { attackableFrom, connectedOwn, legalMoves, territoriesOf } from '../../engine/game'
+import { HAND_LIMIT, attackableFrom, connectedOwn, legalMoves, territoriesOf } from '../../engine/game'
 import type { GameState, Move, PlayerId } from '../../engine/types'
 import {
   borderSecurityRatio,
+  breaksContinent,
   chooseGoal,
   completesContinent,
   isBorder,
   pressure,
   stagingFor,
 } from './board-sense'
+import { primaryThreat } from './evaluate'
+import { cashValue } from '../../engine/cards'
+import { CONTINENTS as CONTS } from '../../engine/board'
 import type { Bot } from '../types'
 
 export type Plan = 'expand' | 'consolidate' | 'deny' | 'cycle' | 'decapitate'
@@ -38,9 +42,27 @@ export interface Doctrine {
   /** how much a predicted army loss counts against the value of a target */
   lossAversion: number
   plans: ReadonlySet<Plan>
+  /**
+   * How strongly it refuses ground it can't hold. 0 grabs anything with good odds;
+   * 1 discards targets whose new border would outgun the garrison left on them.
+   * This is the main thing separating a sprawling bot from a solid one.
+   */
+  holdDiscipline?: number
+  /** weigh targets by who owns them, and concentrate on the strongest rival */
+  modelsOpponents?: boolean
+  /**
+   * Sit on sets instead of cashing on sight. The cash-in counter is global, so
+   * every set an opponent trades raises the payout on ours — patience is worth
+   * real armies, up to the point the hand limit forces the issue.
+   */
+  cardPatience?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
+
+/** How many players are still in the game besides us. Never below 1. */
+const liveOpponents = (s: GameState, me: PlayerId): number =>
+  Math.max(1, s.players.filter((p) => p.alive && p.id !== me).length)
 
 /**
  * How much we want a territory, ignoring whether we can take it.
@@ -49,13 +71,46 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
  * per turn plus progress toward a card. Priced too low, the bot stops expanding
  * once it holds its goal continent and quietly loses to anything that doesn't.
  */
-function targetValue(s: GameState, me: PlayerId, t: TerritoryId, goal: string | null): number {
+function targetValue(
+  s: GameState,
+  me: PlayerId,
+  t: TerritoryId,
+  goal: string | null,
+  d: Doctrine,
+  threatId: PlayerId | null,
+): number {
   let v = 1.5
   const completed = completesContinent(s, me, t)
   if (completed) v += CONTINENTS[completed].bonus * 3
   else if (goal && goalContains(t, goal)) v += 3
   if (s.troops[t] <= 2) v += 0.4 // cheap mop-up
+
+  // Breaking someone's bonus costs us a territory and costs them income — but the
+  // relief is shared with everyone still standing. Heads-up we capture all of it;
+  // at a full table we're doing two bystanders' work for them, and the benchmark
+  // agrees emphatically (denial alone: +7 points at 2 seats, −4 at 4).
+  if (d.plans.has('deny')) {
+    const broken = breaksContinent(s, t)
+    if (broken && s.owner[t] !== me) v += (CONTS[broken].bonus * 2.5) / liveOpponents(s, me)
+  }
+
+  // a card is worth a third of the next cash-in; guaranteeing one every turn is
+  // most of what separates good players from adequate ones
+  if (d.plans.has('cycle') && !s.conqueredThisTurn) v += cashValue(s.setsTraded) / 3
+
+  if (d.modelsOpponents && threatId !== null && s.owner[t] === threatId) v *= 1.25
+
   return v
+}
+
+/**
+ * Enemy strength that would bear on `to` once we hold it, ignoring the territory
+ * we attacked from. Taking ground you immediately lose is worse than not taking it.
+ */
+function postCapturePressure(s: GameState, me: PlayerId, from: TerritoryId, to: TerritoryId): number {
+  return ADJACENCY[to]
+    .filter((n) => n !== from && s.owner[n] !== me)
+    .reduce((sum, n) => sum + s.troops[n], 0)
 }
 
 // avoid importing CONTINENT_OF twice; small helper keeps targetValue readable
@@ -67,6 +122,25 @@ function garrisonFor(s: GameState, me: PlayerId, t: TerritoryId): number {
   if (!isBorder(s, me, t)) return 1
   const threat = pressure(s, me, t)
   return clamp(Math.ceil(threat * 0.55), 2, 12)
+}
+
+/**
+ * Whether to cash a set now. Impatient bots trade on sight; patient ones wait,
+ * because the cash-in counter is global and every rival's trade raises our payout.
+ */
+function shouldTrade(
+  s: GameState,
+  me: PlayerId,
+  d: Doctrine,
+  goal: { resistance: number } | null,
+): boolean {
+  if (!d.cardPatience) return true
+  const hand = s.players[me].cards.length
+  if (hand >= HAND_LIMIT) return true // forced
+  const value = cashValue(s.setsTraded)
+  // cash when it actually buys something: enough to finish the continent we're on
+  if (goal && value >= goal.resistance * 1.3) return true
+  return value >= 15
 }
 
 export function makeStrategist(doctrine: Doctrine): Bot {
@@ -101,7 +175,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
         // ── reinforcement ───────────────────────────────────────
         case 'deploy': {
           const sets = findSets(s.players[me].cards)
-          if (sets.length) return { type: 'tradeCards', cards: sets[0] }
+          if (sets.length && shouldTrade(s, me, doctrine, goal)) {
+            return { type: 'tradeCards', cards: sets[0] }
+          }
 
           const mine = territoriesOf(s, me)
           // defend anything about to fall, before thinking about expansion
@@ -130,6 +206,8 @@ export function makeStrategist(doctrine: Doctrine): Bot {
         // ── attack ──────────────────────────────────────────────
         case 'attack': {
           let best: { from: TerritoryId; to: TerritoryId; score: number } | null = null
+          const threat = doctrine.modelsOpponents ? primaryThreat(s, me) : null
+          const threatId = threat?.id ?? null
 
           for (const from of territoriesOf(s, me)) {
             const a = s.troops[from]
@@ -148,7 +226,20 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const leftBehind = survivors - 1
               if (isBorder(s, me, from) && leftBehind < keep * 0.5) continue
 
-              const value = targetValue(s, me, to, goalId)
+              let value = targetValue(s, me, to, goalId, doctrine, threatId)
+
+              // Discipline: don't take what the neighbours will simply take back.
+              // Scaled by table size for the mirror-image reason denial isn't —
+              // sprawl heads-up has one punisher, sprawl at a full table has three.
+              const discipline = (doctrine.holdDiscipline ?? 0) * liveOpponents(s, me) * 0.6
+              if (discipline > 0) {
+                const after = postCapturePressure(s, me, from, to)
+                const holding = survivors - 1 // what actually advances
+                if (after > holding * 1.4) {
+                  value -= discipline * (after - holding) * 0.4
+                }
+              }
+
               const cost = expectedLoss(a, d) * doctrine.lossAversion
               const score = value * p - cost
 

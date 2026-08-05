@@ -159,11 +159,47 @@ from one that opened.
 
 ```
 win rate, row vs column
-           colonel     easy   random
-colonel          —      67%     100%
-easy           33%        —      99%
-random          0%       1%        —
+           general  colonel     easy   random
+general          —      57%      68%     100%
+colonel        43%        —      65%     100%
+easy           32%      35%        —      99%
+random          0%       0%       1%        —
 ```
+
+At four seats General beats Colonel 64/36.
+
+### Strategy inverts with table size
+
+The most useful thing the benchmark has produced. Ablating General's four additions
+against Colonel gave near-opposite answers at two and four seats:
+
+| addition | alone, 2 seats | alone, 4 seats |
+| --- | --- | --- |
+| denial | **57.5%** | 46.5% |
+| hold discipline | 50.1% | **58.2%** |
+| card cycling | 50.0% | 51.7% |
+| card patience | 49.3% | 51.4% |
+
+Heads-up, denial is the *entire* gain — strip it and General falls to 49.9%, pure
+chance. At four seats denial is actively negative and discipline is everything.
+
+Both directions have the same cause. Breaking a continent costs you a territory and
+costs them their income, but the relief is *shared with everyone still standing*.
+Heads-up you capture all of it; at a full table you're doing two bystanders' work.
+Overextension mirrors it: sprawl heads-up has one punisher, sprawl at a full table
+has three.
+
+So both are scaled by live opponent count. Doing that lifted the four-seat result
+from 56.7% to 64.4% while leaving heads-up unchanged, and cut stalled games from 54
+to 36 per 600.
+
+The general lesson for Marshal: **a tier tuned only heads-up will be wrong**, and
+possibly backwards, at the table sizes people actually play. Benchmark both.
+
+Card cycling and patience measured as roughly neutral at both counts. They're kept
+because the effect is small rather than adverse and the mechanisms are sound — but
+they are not currently earning their keep, and that's worth revisiting rather than
+assuming the strategy literature applies unchanged to this rule set.
 
 ### What tuning Colonel actually taught us
 
@@ -197,9 +233,13 @@ Two bugs the harness caught that would otherwise have been invisible:
    `expectedLoss`, `armiesNeededFor`, `chainOdds`, pinned in tests against the known
    closed-form values (15/36 for 1v1, 2890/7776 for 3v2).
 3. **Colonel** — done. Beats the old bot 67/33 and random 100/0.
-4. **Evaluation function** — a real position score, rather than Colonel's per-target
-   heuristic. Needed before the higher tiers can search over plans.
-5. **General**, then **Marshal**, each validated against the tier below.
+4. **Evaluation function** — done (`src/bots/strategy/evaluate.ts`). Positions scored
+   in army units: income over a horizon, plus armies and hand value, minus exposure.
+   Also rival tracking (income, hand size, adjacency, about-to-cash).
+5. **General** — done. 57/43 over Colonel heads-up, 64/36 at four seats.
+6. **Marshal** — elimination hunting, predicting rivals' cash-ins, and searching over
+   plans rather than scoring targets one at a time. The evaluation function is the
+   piece that makes plan search possible.
 
 ## Open questions
 
