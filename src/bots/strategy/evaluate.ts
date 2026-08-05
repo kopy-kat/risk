@@ -106,6 +106,31 @@ export function rivals(s: GameState, me: PlayerId): Rival[] {
     }))
 }
 
+/**
+ * A rival we could plausibly wipe out this turn, taking their whole hand with them.
+ *
+ * Elimination is the biggest single swing in Risk: their cards become ours, and
+ * with an escalating cash-in a captured hand is often worth more than the
+ * territory. The estimate is deliberately rough — it compares total defence
+ * against the force we have adjacent — because the real check is whether the
+ * attacks actually succeed, and the bot finds that out by trying.
+ */
+export function killableRival(s: GameState, me: PlayerId, reach = 2.2): Rival | null {
+  const mine = territoriesOf(s, me)
+  for (const r of rivals(s, me)) {
+    const theirs = territoriesOf(s, r.id)
+    // a sweep of more than a handful of territories in one turn is fantasy
+    if (!theirs.length || theirs.length > 5) continue
+    const defence = theirs.reduce((n, t) => n + s.troops[t], 0)
+    const theirSet = new Set(theirs)
+    const force = mine
+      .filter((t) => ADJACENCY[t].some((n) => theirSet.has(n)))
+      .reduce((n, t) => n + Math.max(0, s.troops[t] - 1), 0)
+    if (force > defence * reach) return r
+  }
+  return null
+}
+
 /** The rival most worth hurting: strong, and close enough to matter. */
 export function primaryThreat(s: GameState, me: PlayerId): Rival | null {
   const rs = rivals(s, me)

@@ -158,15 +158,39 @@ from one that opened.
 ## Results so far
 
 ```
-win rate, row vs column
-           general  colonel     easy   random
-general          —      57%      68%     100%
-colonel        43%        —      65%     100%
-easy           32%      35%        —      99%
-random          0%       0%       1%        —
+heads-up, win rate, row vs column
+           marshal  general  colonel     easy   random
+marshal          —      49%      57%      68%     100%
+general        51%        —      57%      68%     100%
+colonel        43%      43%        —      67%     100%
+easy           32%      32%      33%        —      99%
+random          0%       0%       0%       1%        —
 ```
 
-At four seats General beats Colonel 64/36.
+Mixed games (random seat counts, 150 games): marshal 42% · general 32% · colonel 19%
+· easy 7% · random 1%.
+
+At four seats: General beats Colonel 64/36, Marshal beats General 59/41 and Colonel
+70/30.
+
+### Marshal ties General heads-up, and that is the correct answer
+
+Both of Marshal's tools are inherently multi-player. "Eliminate a rival for their
+cards" and "win the game" are the same sentence when there is one opponent, and
+there is no table to read. The ablation is unambiguous:
+
+| Marshal's addition | 2 seats | 4 seats |
+| --- | --- | --- |
+| elimination hunting | 0.0 | **+7.3** |
+| table reading | +0.3 | **+4.3** |
+| pressing an advantage | +0.2 | −1.7 |
+
+So Marshal is a multiplayer specialist, not a uniformly stronger bot. Giving it a
+heads-up edge needs genuine multi-turn planning, not another heuristic — that is
+the honest next piece of work rather than something to paper over.
+
+Pressing an advantage was **removed**: it measured mildly *harmful*, which is not
+what anyone would guess about "take longer odds when you're clearly winning".
 
 ### Strategy inverts with table size
 
@@ -237,9 +261,29 @@ Two bugs the harness caught that would otherwise have been invisible:
    in army units: income over a horizon, plus armies and hand value, minus exposure.
    Also rival tracking (income, hand size, adjacency, about-to-cash).
 5. **General** — done. 57/43 over Colonel heads-up, 64/36 at four seats.
-6. **Marshal** — elimination hunting, predicting rivals' cash-ins, and searching over
-   plans rather than scoring targets one at a time. The evaluation function is the
-   piece that makes plan search possible.
+6. **Marshal** — done, with a caveat. Elimination hunting and table reading both pay
+   at four seats and do nothing heads-up.
+
+### The lookahead that didn't work
+
+Searching over positions with the evaluation function was the plan, and it failed in
+an instructive way. Scoring each candidate attack by `relativeStanding` after the
+capture made Marshal *worse*: 37.7% at four seats against 59.2% without it, with
+games ballooning to 205 turns and 164 of 600 stalling out.
+
+The cause is structural, not a bad weight — scaling it down by table size barely
+helped. `relativeStanding` measures you against the **strongest** rival, so attacking
+anyone else always scores negative: you spend armies, the leader doesn't. At a full
+table that talks the bot out of attacking almost entirely.
+
+A working version needs an objective that doesn't punish aggression against
+non-leaders — own-score delta plus damage dealt, or a proper multi-player
+maximin — plus a real notion of the opponent's reply. That is the next serious piece
+of work, and it is what the tier table's "lookahead: opponents' replies" row still
+owes.
+
+7. **Still open** — plan-level search, personality/posture variation, and a heads-up
+   edge for the top tier.
 
 ## Open questions
 
