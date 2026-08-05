@@ -1,35 +1,30 @@
-# Licensing
+MIT License
 
-This project has two parts with different terms.
+Copyright (c) 2026 Konrad Kopp
 
-## Map data — CC BY-SA 3.0 (not optional)
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-`data/territories.json` and `data/sea-routes.json` are derived from
-[`Risk_board.svg`](https://commons.wikimedia.org/wiki/File:Risk_board.svg) by
-**Gr0gmint**, published on Wikimedia Commons under
-[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (and, at the
-author's option, the GFDL).
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-The territory outlines were extracted from that file and re-baked into JSON, which
-makes them an adaptation. Under share-alike they stay CC BY-SA 3.0: you may copy,
-distribute and modify them provided you keep this attribution and license any
-derivative of them on the same terms.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-`data/board.json` (adjacency, continent bonuses, names) is not derived from the SVG —
-it's the standard Risk board topology, which is a fact rather than a creative work.
+---
 
-## Code
+NOTE: the map geometry in `data/` is NOT covered by this license. It is derived
+from a CC BY-SA 3.0 work and carries share-alike terms. See `data/LICENSE`.
 
-Everything under `src/`, `scripts/` and the project configuration is original work
-and is **not** covered by the map's share-alike terms.
-
-No license has been chosen for it yet, which under copyright means all rights are
-reserved by default. If you want others to reuse it, add one (MIT and Apache-2.0 are
-the usual choices for a project like this).
-
-## Trademark
-
-"RISK" is a trademark of Hasbro, and the commercial board's artwork is theirs. Game
-rules are not copyrightable and no Hasbro artwork is used here, but the name and the
-wordmark in the UI are not ours to publish under. Rename before distributing this as
-anything other than a personal project.
+"RISK" is a trademark of Hasbro. Game rules are not copyrightable and no Hasbro
+artwork is used here, but the name and wordmark are not ours to publish under —
+rename before distributing this as anything other than a personal project.

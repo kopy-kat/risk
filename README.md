@@ -179,7 +179,10 @@ Two deliberate simplifications:
 2. Inheriting cards can push a hand above 5 mid-turn; the forced trade happens at the
    start of your next deploy rather than immediately.
 
-## Map attribution
+## Licensing
+
+Code is MIT (`LICENSE`). The map geometry in `data/` is **not** — it's derived from a
+CC BY-SA 3.0 work and keeps share-alike terms; see `data/LICENSE`.
 
 The territory outlines are derived from
 [`Risk_board.svg`](https://commons.wikimedia.org/wiki/File:Risk_board.svg) by
