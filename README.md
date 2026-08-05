@@ -150,11 +150,14 @@ out whether it's actually better, run `npm run bench -- mine easy 300`. See
 way it is — going first is worth ~39 points heads-up, so a comparison without seat
 rotation measures position rather than skill.
 
-The two current bots are intentionally weak. `easy` reinforces its most threatened
-border, attacks only when it already outnumbers the defender, and never plans past the
-current move. Obvious things it does *not* do, and which a good bot would: value
-continents, time its card cash-ins, count how many armies an opponent is about to
-receive, avoid overextending, or look more than one move ahead.
+`Colonel` is the first real tier — it picks an efficient continent, masses for it,
+garrisons what it holds, and uses exact combat odds from `src/engine/combat.ts`. It
+beats the old heuristic bot 67/33. `easy` and `random` are still in the codebase as
+benchmark rungs but are hidden from the seat picker.
+
+What Colonel deliberately does *not* do, and what the higher tiers add: break other
+players' continents, time its card cash-ins, notice who is about to receive a pile of
+armies, or hunt eliminations for the cards. See [`BOTS.md`](BOTS.md).
 
 ## Rules implemented
 

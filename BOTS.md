@@ -155,13 +155,50 @@ results.
 It's also a design input: a bot that knows it's moving last should play differently
 from one that opened.
 
+## Results so far
+
+```
+win rate, row vs column
+           colonel     easy   random
+colonel          —      67%     100%
+easy           33%        —      99%
+random          0%       1%        —
+```
+
+### What tuning Colonel actually taught us
+
+I hand-picked an attack threshold of 0.7 as "what a human would call a reasonable
+attack". Sweeping the parameter against the benchmark disagreed: **0.4 wins 67%
+where 0.7 managed 55%.** Expansion compounds in Risk — territories buy income,
+income buys cards, cards buy armies — so caution costs more than the armies it
+saves. The tier brief already said Colonel is the one that overextends; the data
+just agreed more strongly than expected.
+
+Two bugs the harness caught that would otherwise have been invisible:
+
+- **Unbounded memoisation.** `winProb` memoises every (a, d) pair below the starting
+  one. Colonel masses into a single stack, so late-game it asked for
+  `winProb(30000, 5000)` and blew past V8's Map limit. The bot then fell back to
+  random moves in 205 of 600 games and *looked* merely weak. Large matchups are now
+  scaled into an exactly-computable range. `stepBot` counts fallbacks and the bench
+  reports them, because "the bot is bad" and "the bot is crashing" look identical
+  from the outside.
+- **Turtling after the goal.** `chooseGoal` returned continents already held, so once
+  Colonel owned one, every remaining enemy territory scored as off-plan and ordinary
+  conquests came out *negative* against loss aversion. It won the opening — 27
+  territories to 15 at turn 30 — then sat still and lost. Held continents are now
+  defended, not targeted.
+
 ## Build order
 
 1. **Harness** — done (`scripts/bench.ts`). "Is this better?" is unanswerable without
    it, and the turn-order figure above shows why a naive comparison misleads.
-2. **Combat tables** — `winProb(a, d)` and `expectedSurvivors(a, d)`, precomputed.
-3. **Evaluation function**, tuned against the harness.
-4. **Colonel**, validated as beating the current bots decisively.
+2. **Combat tables** — done (`src/engine/combat.ts`). `winProb`, `expectedSurvivors`,
+   `expectedLoss`, `armiesNeededFor`, `chainOdds`, pinned in tests against the known
+   closed-form values (15/36 for 1v1, 2890/7776 for 3v2).
+3. **Colonel** — done. Beats the old bot 67/33 and random 100/0.
+4. **Evaluation function** — a real position score, rather than Colonel's per-target
+   heuristic. Needed before the higher tiers can search over plans.
 5. **General**, then **Marshal**, each validated against the tier below.
 
 ## Open questions

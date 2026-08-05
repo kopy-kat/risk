@@ -4,6 +4,13 @@
  */
 import { TERRITORY_IDS, ADJACENCY, TERRITORIES_IN, CONTINENT_IDS, CONTINENTS } from '../src/engine/board'
 import { CASH_VALUES, cashValue, isValidSet, findSets } from '../src/engine/cards'
+import {
+  armiesNeededFor,
+  expectedLoss,
+  expectedSurvivors,
+  exchangeOdds,
+  winProb,
+} from '../src/engine/combat'
 import { applyMove, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn } from '../src/engine/game'
 import type { Card, GameState } from '../src/engine/types'
 
@@ -202,6 +209,46 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   let threw = false
   try { applyMove(s3, { type: 'blitz', from: f3, to: t3 }) } catch { threw = true }
   ok(threw, 'blitz from a single army is rejected')
+}
+
+// ── combat maths, pinned to the known closed-form values ──────────
+{
+  const near = (a: number, b: number, tol: number, what: string) => {
+    if (Math.abs(a - b) <= tol) passed++
+    else failures.push(`${what}\n    expected ~${b}\n    got      ${a}`)
+  }
+  // one exchange, 1 die each: attacker wins 15 of 36
+  const e11 = exchangeOdds(1, 1)
+  near(e11.find((e) => e.defenderLoss === 1)!.p, 15 / 36, 1e-12, '1v1 exchange: attacker wins 15/36')
+  // 3 dice vs 2: defender loses both 2890 times in 7776
+  const e32 = exchangeOdds(3, 2)
+  near(e32.find((e) => e.defenderLoss === 2)!.p, 2890 / 7776, 1e-12, '3v2 exchange: defender loses 2, 2890/7776')
+  near(e32.find((e) => e.attackerLoss === 2)!.p, 2275 / 7776, 1e-12, '3v2 exchange: attacker loses 2, 2275/7776')
+  near(e32.reduce((n, e) => n + e.p, 0), 1, 1e-9, '3v2 exchange probabilities sum to 1')
+
+  // full battles
+  near(winProb(2, 1), 15 / 36, 1e-12, 'winProb(2,1) is a single 1v1 roll')
+  ok(winProb(1, 1) === 0, 'one army cannot attack')
+  ok(winProb(5, 0) === 1, 'an empty territory is already taken')
+  ok(winProb(10, 3) > winProb(5, 3), 'more attackers is never worse')
+  ok(winProb(5, 3) > winProb(5, 6), 'more defenders is never better')
+
+  // the attacker's edge grows with scale — the fact that makes stacking work
+  ok(winProb(3, 1) > 0.7 && winProb(3, 1) < 0.8, `winProb(3,1) ≈ 0.75, got ${winProb(3, 1).toFixed(3)}`)
+  ok(winProb(20, 15) > winProb(4, 3), 'a 4:3 fight is safer at scale than in miniature')
+
+  // survivors and losses
+  ok(expectedSurvivors(20, 2) > 15, 'a big stack barely notices two defenders')
+  ok(expectedSurvivors(3, 5) < expectedSurvivors(3, 1), 'tougher targets leave fewer survivors')
+  ok(expectedLoss(10, 5) > expectedLoss(10, 1), 'stronger defence costs more')
+  eq(armiesNeededFor(1, 0.5), 3, 'beating one defender at even odds needs 3 armies')
+  eq(armiesNeededFor(4, 0.5), 6, 'beating four defenders at even odds needs 6')
+
+  // large stacks must not blow up the memo tables (this crashed the first Colonel)
+  const big = winProb(30000, 5000)
+  ok(big > 0.99, `huge favourable stacks resolve, got ${big}`)
+  ok(Number.isFinite(expectedSurvivors(30000, 5000)), 'survivors stay finite at scale')
+  ok(expectedSurvivors(30000, 5000) > 20000, 'survivors scale back up to real army counts')
 }
 
 // ── applyMove is pure: the undo stack depends on this ─────────────
