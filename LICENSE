@@ -1,0 +1,35 @@
+# Licensing
+
+This project has two parts with different terms.
+
+## Map data — CC BY-SA 3.0 (not optional)
+
+`data/territories.json` and `data/sea-routes.json` are derived from
+[`Risk_board.svg`](https://commons.wikimedia.org/wiki/File:Risk_board.svg) by
+**Gr0gmint**, published on Wikimedia Commons under
+[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (and, at the
+author's option, the GFDL).
+
+The territory outlines were extracted from that file and re-baked into JSON, which
+makes them an adaptation. Under share-alike they stay CC BY-SA 3.0: you may copy,
+distribute and modify them provided you keep this attribution and license any
+derivative of them on the same terms.
+
+`data/board.json` (adjacency, continent bonuses, names) is not derived from the SVG —
+it's the standard Risk board topology, which is a fact rather than a creative work.
+
+## Code
+
+Everything under `src/`, `scripts/` and the project configuration is original work
+and is **not** covered by the map's share-alike terms.
+
+No license has been chosen for it yet, which under copyright means all rights are
+reserved by default. If you want others to reuse it, add one (MIT and Apache-2.0 are
+the usual choices for a project like this).
+
+## Trademark
+
+"RISK" is a trademark of Hasbro, and the commercial board's artwork is theirs. Game
+rules are not copyrightable and no Hasbro artwork is used here, but the name and the
+wordmark in the UI are not ours to publish under. Rename before distributing this as
+anything other than a personal project.

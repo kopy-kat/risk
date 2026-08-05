@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+tsconfig.tsbuildinfo
+
+# generated design artefact — rebuild with `npm run build:mock`
+mock/index.html

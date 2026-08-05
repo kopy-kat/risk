@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RISK — design mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* paper atlas */
+  --paper:      #f2eee3;
+  --paper-2:    #ece7d9;
+  --paper-3:    #e4dece;
+  --sea:        #e9e5d9;
+  --grat:       #ddd5c1;
+  --land:       #d3cab4;
+  --border:     #b6ab92;
+  --rule:       #d8d0bd;
+
+  --ink:        #221e18;
+  --ink-2:      #5f584c;
+  --ink-3:      #948b7b;
+  --accent:     #8a5a2b;
+
+  --p1: #b8362c;
+  --p2: #2b7593;
+  --p3: #c07a1e;
+  --p4: #6f52a3;
+  --p5: #3a855c;
+  --p6: #ac4a78;
+
+  --rail: 208px;
+  --topbar: 52px;
+  --ease: cubic-bezier(.22,.61,.36,1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.mono-label {
+  font-size: 9px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ─────────────────────────── shell ─────────────────────────── */
+
+#app { display: grid; grid-template-rows: var(--topbar) 1fr; height: 100%; }
+
+.topbar {
+  display: flex; align-items: center; gap: 20px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-2);
+}
+.wordmark {
+  font-family: 'Instrument Serif', serif;
+  font-size: 25px; letter-spacing: .10em; line-height: 1;
+}
+.wordmark span { color: var(--accent); }
+.topbar .turn { color: var(--ink-3); }
+.topbar .spacer { flex: 1; }
+
+.phases { display: flex; gap: 2px; }
+.phase-pill {
+  padding: 5px 13px; border: 1px solid var(--rule); border-radius: 2px;
+  font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-3); background: transparent;
+  transition: all .25s var(--ease);
+}
+.phase-pill.done { color: var(--ink-2); }
+.phase-pill.active {
+  color: var(--paper); background: var(--ink); border-color: var(--ink); font-weight: 600;
+}
+
+.body { display: grid; grid-template-columns: var(--rail) 1fr; min-height: 0; }
+
+/* ─────────────────────────── rail ─────────────────────────── */
+
+.rail {
+  border-right: 1px solid var(--rule);
+  background: var(--paper-2);
+  display: flex; flex-direction: column; min-height: 0;
+}
+
+.sec { border-bottom: 1px solid var(--rule); padding: 16px 17px; }
+.sec > .mono-label { display: block; margin-bottom: 12px; }
+
+/* whose turn */
+.now { display: flex; flex-direction: column; gap: 9px; }
+.now .who { display: flex; align-items: center; gap: 9px; }
+.now .swatch {
+  width: 11px; height: 11px; border-radius: 50%; background: var(--c);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 20%, transparent);
+}
+.now .nm { font-family: 'Instrument Serif', serif; font-size: 25px; line-height: 1; }
+.now .kind { font-size: 8.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+.now .tally { display: flex; gap: 14px; font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.now .tally i { font-style: normal; color: var(--ink-3); font-size: 9px; }
+
+/* cards */
+.cards { display: flex; gap: 6px; flex-wrap: wrap; }
+.card {
+  width: 36px; height: 53px; border: 1px solid var(--border); border-radius: 2px;
+  background: var(--paper);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  cursor: pointer; transition: all .2s var(--ease);
+  box-shadow: 0 1px 0 rgba(0,0,0,.05);
+}
+.card:hover { transform: translateY(-2px); border-color: var(--ink-2); }
+.card.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--paper)); }
+.card .glyph { font-size: 16px; line-height: 1; color: var(--ink-2); }
+.card.sel .glyph { color: var(--accent); }
+.card .terr { font-size: 6px; letter-spacing: .05em; color: var(--ink-3); text-align: center; padding: 0 2px; text-transform: uppercase; }
+.card.wild .glyph { color: var(--accent); }
+
+.trade {
+  margin-top: 12px; width: 100%; padding: 9px;
+  background: var(--ink); color: var(--paper); border: 0; border-radius: 2px;
+  font-family: inherit; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; font-weight: 600;
+  cursor: pointer; transition: all .2s var(--ease);
+}
+.trade:hover { background: var(--accent); }
+.trade:disabled { background: var(--paper-3); color: var(--ink-3); cursor: not-allowed; }
+
+.setnext { margin-top: 9px; display: flex; justify-content: space-between; font-size: 9.5px; color: var(--ink-3); }
+.setnext b { color: var(--accent); font-weight: 500; }
+
+.rail .spacer { flex: 1; }
+
+/* ─────────────────────────── map ─────────────────────────── */
+
+.stage { position: relative; min-width: 0; background: var(--sea); overflow: hidden; }
+/* paper grain — keeps the ivory from reading as flat #fff */
+.stage::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+svg#map { width: 100%; height: 100%; display: block; }
+
+.grat { stroke: var(--grat); stroke-width: .6; fill: none; }
+
+/* Fills and outlines live in separate layers. If each territory drew its own
+   stroke, the next territory's fill would paint over the shared edge and
+   borders would come out half-missing (Brazil/Peru, most of Europe). */
+.terr {
+  fill: var(--land);
+  stroke: none;
+  cursor: pointer;
+  transition: fill .22s var(--ease), opacity .22s var(--ease);
+}
+.terr.owned { fill: color-mix(in srgb, var(--c) 46%, var(--paper)); }
+.terr:hover { fill: color-mix(in srgb, var(--c, var(--border)) 70%, var(--paper)); }
+.terr.dim { opacity: .35; }
+
+.edge {
+  fill: none;
+  stroke: var(--sea);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: stroke .18s var(--ease), stroke-width .18s var(--ease), opacity .22s var(--ease);
+}
+.edge.dim { opacity: .35; }
+.edge.sel { stroke: var(--ink); stroke-width: 2.2; }
+.edge.target {
+  stroke: var(--ink); stroke-width: 1.6;
+  stroke-dasharray: 4 3;
+  animation: march 9s linear infinite;
+}
+@keyframes march { to { stroke-dashoffset: -70; } }
+
+.cont-label {
+  font-size: 8.5px; letter-spacing: .34em; text-transform: uppercase;
+  fill: var(--ink); opacity: .3; text-anchor: middle;
+  pointer-events: none; font-weight: 500;
+}
+.cont-bonus { font-size: 8px; letter-spacing: .1em; fill: var(--accent); opacity: .5; text-anchor: middle; pointer-events: none; }
+
+.badge { pointer-events: none; transition: opacity .22s var(--ease); }
+.badge.dim { opacity: .3; }
+.badge circle { fill: var(--paper); stroke: var(--c); stroke-width: 1.6; }
+.badge text {
+  fill: var(--ink); font-size: 11px; font-weight: 600; text-anchor: middle;
+  font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
+}
+
+.arc { fill: none; stroke: var(--ink); stroke-width: 1.1; opacity: .45; stroke-dasharray: 3 3; }
+
+/* hover readout */
+.readout { position: absolute; top: 16px; left: 18px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+.readout .t { font-family: 'Instrument Serif', serif; font-size: 27px; line-height: 1; }
+.readout .s { font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+
+/* ─────────────────────────── dock ─────────────────────────── */
+
+.dock {
+  position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 18px;
+  padding: 13px 20px;
+  background: rgba(252,250,245,.94);
+  border: 1px solid var(--border); border-radius: 3px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 14px 34px rgba(80,68,44,.14), 0 2px 6px rgba(80,68,44,.08);
+  animation: rise .5s var(--ease) both;
+}
+@keyframes rise { from { opacity: 0; transform: translate(-50%, 12px); } }
+
+.dock .prompt { display: flex; flex-direction: column; gap: 4px; }
+.dock .prompt .k { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.dock .prompt .v { font-size: 13px; color: var(--ink); white-space: nowrap; }
+.dock .prompt .v b { color: var(--accent); font-weight: 500; }
+
+.dock .div { width: 1px; align-self: stretch; background: var(--rule); }
+
+.counter { font-family: 'Instrument Serif', serif; font-size: 38px; line-height: .85; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.btn {
+  padding: 9px 17px; border: 1px solid var(--border); background: transparent;
+  color: var(--ink); border-radius: 2px;
+  font-family: inherit; font-size: 9px; letter-spacing: .16em; text-transform: uppercase;
+  cursor: pointer; transition: all .2s var(--ease); white-space: nowrap;
+}
+.btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 600; }
+.btn.primary:hover { background: var(--accent); border-color: var(--accent); }
+.btn.ghost { border-color: var(--rule); color: var(--ink-2); }
+.btn.ghost:hover { border-color: var(--ink-2); background: transparent; color: var(--ink); }
+
+/* dice */
+.dice { display: flex; align-items: center; gap: 20px; }
+.dice .side { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.dice .side .mono-label { font-size: 8px; }
+.dice .row { display: flex; gap: 5px; }
+.die {
+  width: 27px; height: 27px; border-radius: 2px;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  border: 1px solid; animation: roll .34s var(--ease) both;
+}
+@keyframes roll { from { opacity: 0; transform: translateY(-7px) rotate(-9deg); } }
+.die.a { border-color: var(--p1); color: var(--p1); background: color-mix(in srgb, var(--p1) 10%, var(--paper)); }
+.die.d { border-color: var(--p2); color: var(--p2); background: color-mix(in srgb, var(--p2) 10%, var(--paper)); }
+.die.lost { opacity: .3; text-decoration: line-through; }
+.dice .verdict { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+
+/* troop slider */
+.slider { display: flex; align-items: center; gap: 13px; }
+.slider input { width: 168px; accent-color: var(--accent); }
+
+/* ─────────────────────────── setup screen ─────────────────────────── */
+
+.setup {
+  position: absolute; inset: 0; z-index: 30;
+  background: var(--paper);
+  display: grid; place-items: center;
+}
+.setup[hidden] { display: none; }
+.setup .panel { width: 560px; animation: rise2 .55s var(--ease) both; }
+@keyframes rise2 { from { opacity: 0; transform: translateY(16px); } }
+.setup h1 {
+  font-family: 'Instrument Serif', serif; font-weight: 400;
+  font-size: 76px; line-height: .95; letter-spacing: .04em; margin-bottom: 6px;
+}
+.setup h1 span { color: var(--accent); }
+.setup .sub { color: var(--ink-3); font-size: 10px; letter-spacing: .28em; text-transform: uppercase; margin-bottom: 44px; }
+
+.setup .field { margin-bottom: 30px; }
+.setup .field > .mono-label { display: block; margin-bottom: 12px; }
+.count { display: flex; gap: 7px; }
+.count button {
+  width: 50px; height: 50px; border: 1px solid var(--border); background: transparent;
+  color: var(--ink-2); font-family: 'Instrument Serif', serif; font-size: 24px;
+  cursor: pointer; border-radius: 2px; transition: all .2s var(--ease);
+}
+.count button:hover { border-color: var(--ink); color: var(--ink); }
+.count button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.seats { display: flex; flex-direction: column; gap: 1px; }
+.seat {
+  display: grid; grid-template-columns: 10px 1fr auto; gap: 14px; align-items: center;
+  padding: 11px 13px; background: var(--paper-2); border: 1px solid transparent;
+  transition: border-color .2s var(--ease);
+}
+.seat:hover { border-color: var(--rule); }
+.seat .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.seat input { background: transparent; border: 0; color: var(--ink); font-family: inherit; font-size: 13px; outline: none; width: 100%; }
+.toggle { display: flex; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
+.toggle button {
+  padding: 6px 13px; background: transparent; border: 0; color: var(--ink-3);
+  font-family: inherit; font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; cursor: pointer;
+  transition: all .18s var(--ease);
+}
+.toggle button.on { background: var(--ink); color: var(--paper); font-weight: 600; }
+
+.setup .go {
+  width: 100%; margin-top: 8px; padding: 16px;
+  background: var(--accent); color: var(--paper); border: 0; border-radius: 2px;
+  font-family: inherit; font-size: 10px; letter-spacing: .28em; text-transform: uppercase; font-weight: 600;
+  cursor: pointer; transition: all .2s var(--ease);
+}
+.setup .go:hover { background: var(--ink); }
+
+/* ─────────────────── mock-only scene switcher ─────────────────── */
+
+.scenes {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+  display: flex; gap: 1px; justify-content: center;
+  background: var(--paper-2); border-top: 1px solid var(--rule);
+}
+.scenes button {
+  padding: 9px 20px; background: transparent; border: 0; color: var(--ink-3);
+  font-family: inherit; font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase; cursor: pointer;
+  transition: all .18s var(--ease);
+}
+.scenes button:hover { color: var(--ink-2); }
+.scenes button.on { color: var(--accent); }
+.scenes .tag { color: var(--ink-3); opacity: .5; padding: 9px 14px; font-size: 8.5px; letter-spacing: .18em; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar">
+    <div class="wordmark">RISK<span>.</span></div>
+    <div class="turn mono-label" id="turnLabel">Turn 07</div>
+    <div class="spacer"></div>
+    <div class="phases" id="phases"></div>
+  </div>
+
+  <div class="body">
+    <aside class="rail">
+      <div class="sec">
+        <span class="mono-label">To act</span>
+        <div class="now" id="now"></div>
+      </div>
+      <div class="sec" id="cardSec">
+        <span class="mono-label">Cards</span>
+        <div class="cards" id="cards"></div>
+        <button class="trade" id="tradeBtn">Trade set · +10</button>
+        <div class="setnext"><span>Sets traded 3</span><span>Next <b>+12</b></span></div>
+      </div>
+      <div class="spacer"></div>
+    </aside>
+
+    <main class="stage" id="stage">
+      <svg id="map" viewBox="10 4 735 548" preserveAspectRatio="xMidYMid meet">
+        <g id="graticule"></g>
+        <g id="lands"></g>
+        <g id="outlines"></g>
+        <g id="contLabels"></g>
+        <g id="arcs"></g>
+        <g id="badges"></g>
+      </svg>
+
+      <div class="readout" id="readout">
+        <div class="t" id="roName">Ukraine</div>
+        <div class="s" id="roSub">Europe · Crimson · 8 armies</div>
+      </div>
+
+      <div class="dock" id="dock"></div>
+    </main>
+  </div>
+</div>
+
+<div class="setup" id="setup" hidden>
+  <div class="panel">
+    <h1>RISK<span>.</span></h1>
+    <div class="sub">World Domination</div>
+
+    <div class="field">
+      <span class="mono-label">Players</span>
+      <div class="count" id="countPick"></div>
+    </div>
+
+    <div class="field">
+      <span class="mono-label">Seats</span>
+      <div class="seats" id="seats"></div>
+    </div>
+
+    <button class="go">Begin Deployment</button>
+  </div>
+</div>
+
+<div class="scenes" id="scenes"><span class="tag">MOCK</span></div>
+
+<script>
+window.TERRITORIES = __TERRITORIES__;
+const TERRITORIES = window.TERRITORIES;
+const CONT_LABELS = __CONT_LABELS__;
+const BOARD = __BOARD__;
+
+const PLAYER_COLORS = ['var(--p1)','var(--p2)','var(--p3)','var(--p4)','var(--p5)','var(--p6)'];
+const PLAYER_NAMES  = ['Crimson','Azure','Amber','Violet','Jade','Rose'];
+
+const players = [
+  { id:0, name:'Crimson', kind:'You',   terr:14, armies:31, cards:4 },
+  { id:1, name:'Azure',   kind:'Bot · aggressive', terr:11, armies:24, cards:2 },
+  { id:2, name:'Amber',   kind:'Bot · balanced',   terr:9,  armies:17, cards:1 },
+  { id:3, name:'Violet',  kind:'Bot · turtle',     terr:8,  armies:15, cards:3 },
+];
+
+let seed = 20260805;
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const owner = {}, troops = {};
+const CONT_BIAS = { northAmerica:0, southAmerica:0, europe:1, africa:2, asia:1, australia:3 };
+for (const t of TERRITORIES) {
+  owner[t.id] = rnd() < 0.62 ? CONT_BIAS[t.continent] : Math.floor(rnd() * 4);
+  troops[t.id] = 1 + Math.floor(rnd() * rnd() * 11);
+}
+for (const t of TERRITORIES) if (t.continent === 'australia') owner[t.id] = 3;
+for (const t of TERRITORIES) if (t.continent === 'southAmerica') owner[t.id] = 0;
+
+const NAMES = BOARD.names, CONTS = BOARD.continents, ADJ = BOARD.adjacency;
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); if (cls) e.setAttribute('class', cls); return e; };
+
+function drawGraticule() {
+  const g = $('graticule');
+  for (let x = 40; x < 745; x += 60) { const l = el('line','grat'); l.setAttribute('x1',x); l.setAttribute('x2',x); l.setAttribute('y1',0); l.setAttribute('y2',560); g.appendChild(l); }
+  for (let y = 30; y < 560; y += 60) { const l = el('line','grat'); l.setAttribute('x1',0); l.setAttribute('x2',760); l.setAttribute('y1',y); l.setAttribute('y2',y); g.appendChild(l); }
+}
+
+function drawMap() {
+  const lands = $('lands'), outlines = $('outlines'), badges = $('badges'), labels = $('contLabels');
+  for (const t of TERRITORIES) {
+    const p = el('path', 'terr owned');
+    p.setAttribute('d', t.d);
+    p.setAttribute('id', 'terr-' + t.id);
+    p.style.setProperty('--c', PLAYER_COLORS[owner[t.id]]);
+    p.addEventListener('mouseenter', () => showReadout(t));
+    lands.appendChild(p);
+
+    const e = el('path', 'edge');
+    e.setAttribute('d', t.d);
+    e.setAttribute('id', 'edge-' + t.id);
+    outlines.appendChild(e);
+
+    const b = el('g', 'badge');
+    b.setAttribute('id', 'badge-' + t.id);
+    b.style.setProperty('--c', PLAYER_COLORS[owner[t.id]]);
+    const c = el('circle'); c.setAttribute('cx', t.cx); c.setAttribute('cy', t.cy); c.setAttribute('r', 10.5);
+    const x = el('text'); x.setAttribute('x', t.cx); x.setAttribute('y', t.cy + 4); x.textContent = troops[t.id];
+    b.append(c, x); badges.appendChild(b);
+  }
+  for (const [key, pos] of Object.entries(CONT_LABELS)) {
+    const a = el('text', 'cont-label');
+    a.setAttribute('x', pos[0]); a.setAttribute('y', pos[1]);
+    a.textContent = CONTS[key].name;
+    const b = el('text', 'cont-bonus');
+    b.setAttribute('x', pos[0]); b.setAttribute('y', pos[1] + 11);
+    b.textContent = '+' + CONTS[key].bonus;
+    labels.append(a, b);
+  }
+}
+
+function showReadout(t) {
+  const n = troops[t.id];
+  $('roName').textContent = NAMES[t.id];
+  $('roSub').textContent = `${CONTS[t.continent].name} · ${players[owner[t.id]].name} · ${n} ${n === 1 ? 'army' : 'armies'}`;
+}
+
+function clearMarks() {
+  document.querySelectorAll('.terr, .edge, .badge').forEach(p => p.classList.remove('sel','target','dim'));
+  $('arcs').innerHTML = '';
+}
+// selection/target styling lives on the outline layer so it can't be painted over
+function mark(id, cls) { $('edge-' + id)?.classList.add(cls); }
+function focusOwner(pid) {
+  for (const t of TERRITORIES) if (owner[t.id] !== pid) {
+    $('terr-' + t.id).classList.add('dim');
+    $('edge-' + t.id).classList.add('dim');
+    $('badge-' + t.id).classList.add('dim');
+  }
+}
+
+function arc(a, b) {
+  const A = TERRITORIES.find(t => t.id === a), B = TERRITORIES.find(t => t.id === b);
+  const mx = (A.cx + B.cx) / 2, my = (A.cy + B.cy) / 2 - Math.abs(A.cx - B.cx) * 0.18 - 14;
+  const p = el('path', 'arc');
+  p.setAttribute('d', `M ${A.cx},${A.cy} Q ${mx},${my} ${B.cx},${B.cy}`);
+  $('arcs').appendChild(p);
+}
+
+function drawNow(pid) {
+  const p = players[pid];
+  $('now').innerHTML = `
+    <div class="who" style="--c:${PLAYER_COLORS[pid]}">
+      <span class="swatch"></span>
+      <span class="nm">${p.name}</span>
+    </div>
+    <span class="kind">${p.kind}</span>
+    <div class="tally"><span><i>Terr</i> ${p.terr}</span><span><i>Armies</i> ${p.armies}</span><span><i>Cards</i> ${p.cards}</span></div>`;
+
+  const suits = ['★','⬟','⬢','★'];
+  const terrs = ['ukraine','brazil','japan','wild'];
+  $('cards').innerHTML = terrs.map((t, i) => `
+    <div class="card ${i < 3 ? 'sel' : ''} ${t === 'wild' ? 'wild' : ''}">
+      <span class="glyph">${t === 'wild' ? '✦' : suits[i]}</span>
+      <span class="terr">${t === 'wild' ? 'Wild' : NAMES[t]}</span>
+    </div>`).join('');
+}
+
+function drawPhases(active) {
+  const ph = ['Deploy', 'Attack', 'Fortify'];
+  $('phases').innerHTML = ph.map((p, i) => `
+    <span class="phase-pill ${i === active ? 'active' : i < active ? 'done' : ''}">${p}</span>`).join('');
+}
+
+const SCENES = {
+  'Setup': () => {
+    $('setup').hidden = false;
+    $('countPick').innerHTML = [2,3,4,5,6].map(n => `<button class="${n===4?'on':''}">${n}</button>`).join('');
+    $('seats').innerHTML = Array.from({length:4}, (_, i) => `
+      <div class="seat" style="--c:${PLAYER_COLORS[i]}">
+        <span class="dot"></span>
+        <input value="${PLAYER_NAMES[i]}">
+        <span class="toggle">
+          <button class="${i===0?'on':''}">Human</button>
+          <button class="${i===0?'':'on'}">Bot</button>
+        </span>
+      </div>`).join('');
+  },
+
+  'Deployment': () => {
+    drawPhases(0); drawNow(1);
+    $('turnLabel').textContent = 'Initial deployment';
+    $('cardSec').hidden = true;
+    clearMarks(); focusOwner(1); mark('ukraine', 'sel');
+    showReadout(TERRITORIES.find(t => t.id === 'ukraine'));
+    $('dock').innerHTML = `
+      <div class="prompt"><span class="k">Azure deploys</span><span class="v">Click a territory you hold · <b>1 army</b> at a time</span></div>
+      <div class="div"></div>
+      <div class="counter">19</div>
+      <div class="prompt"><span class="k">Armies</span><span class="v">remaining</span></div>
+      <div class="div"></div>
+      <button class="btn ghost">Auto-place rest</button>`;
+  },
+
+  'Reinforce': () => {
+    drawPhases(0); drawNow(0);
+    $('turnLabel').textContent = 'Turn 07';
+    $('cardSec').hidden = false;
+    clearMarks(); mark('brazil', 'sel');
+    $('dock').innerHTML = `
+      <div class="prompt"><span class="k">Deploy</span><span class="v">14 territories + South America <b>+2</b> + set <b>+10</b></span></div>
+      <div class="div"></div>
+      <div class="counter">16</div>
+      <div class="div"></div>
+      <div class="slider">
+        <span class="mono-label">Amount</span>
+        <input type="range" min="1" max="16" value="6">
+        <span class="counter" style="font-size:22px">6</span>
+      </div>
+      <div class="div"></div>
+      <button class="btn primary">Place</button>`;
+  },
+
+  'Attack': () => {
+    drawPhases(1); drawNow(0);
+    $('turnLabel').textContent = 'Turn 07';
+    $('cardSec').hidden = false;
+    clearMarks(); mark('ukraine', 'sel');
+    for (const n of ADJ['ukraine']) if (owner[n] !== 0) { mark(n, 'target'); arc('ukraine', n); }
+    $('dock').innerHTML = `
+      <div class="prompt"><span class="k">Attacking</span><span class="v">Ukraine <b>8</b> → Ural <b>3</b></span></div>
+      <div class="div"></div>
+      <div class="dice">
+        <div class="side"><span class="mono-label">Attack</span><div class="row">
+          <span class="die a">6</span><span class="die a">5</span><span class="die a lost">2</span></div></div>
+        <span class="verdict">−1</span>
+        <div class="side"><span class="mono-label">Defend</span><div class="row">
+          <span class="die d lost">3</span><span class="die d">4</span></div></div>
+      </div>
+      <div class="div"></div>
+      <button class="btn primary">Roll again</button>
+      <button class="btn ghost">Blitz</button>
+      <button class="btn ghost">End attack</button>`;
+  },
+
+  'Fortify': () => {
+    drawPhases(2); drawNow(0);
+    $('cardSec').hidden = false;
+    clearMarks(); mark('brazil', 'sel'); mark('north_africa', 'target'); arc('brazil', 'north_africa');
+    $('dock').innerHTML = `
+      <div class="prompt"><span class="k">Fortify</span><span class="v">Brazil → North Africa</span></div>
+      <div class="div"></div>
+      <div class="slider">
+        <span class="mono-label">Move</span>
+        <input type="range" min="1" max="9" value="4">
+        <span class="counter" style="font-size:22px">4</span>
+      </div>
+      <div class="div"></div>
+      <button class="btn primary">Confirm</button>
+      <button class="btn ghost">Skip · end turn</button>`;
+  },
+};
+
+function setScene(name) {
+  $('setup').hidden = true;
+  SCENES[name]();
+  document.querySelectorAll('.scenes button').forEach(b => b.classList.toggle('on', b.textContent === name));
+}
+
+drawGraticule(); drawMap();
+$('scenes').insertAdjacentHTML('beforeend', Object.keys(SCENES).map(n => `<button>${n}</button>`).join(''));
+$('scenes').addEventListener('click', e => { if (e.target.tagName === 'BUTTON') setScene(e.target.textContent); });
+setScene('Setup');
+</script>
+</body>
+</html>
