@@ -150,7 +150,9 @@ out whether it's actually better, run `npm run bench -- mine easy 300`. See
 way it is — going first is worth ~39 points heads-up, so a comparison without seat
 rotation measures position rather than skill.
 
-`General` and `Colonel` are the current tiers, with General the default opponent.
+`Marshal`, `General` and `Colonel` are the tiers, with General the default opponent.
+Marshal's edge is specifically multiplayer — it hunts eliminations for the cards and
+watches who is about to be forced to cash — so heads-up it plays level with General.
 `Colonel` is the first tier — it picks an efficient continent, masses for it,
 garrisons what it holds, and uses exact combat odds from `src/engine/combat.ts`. It
 beats the old heuristic bot 67/33. `General` adds denial, card cycling and the

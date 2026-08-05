@@ -21,7 +21,7 @@ import {
   pressure,
   stagingFor,
 } from './board-sense'
-import { primaryThreat } from './evaluate'
+import { exposure, killableRival, primaryThreat, rivals } from './evaluate'
 import { cashValue } from '../../engine/cards'
 import { CONTINENTS as CONTS } from '../../engine/board'
 import type { Bot } from '../types'
@@ -56,6 +56,16 @@ export interface Doctrine {
    * real armies, up to the point the hand limit forces the issue.
    */
   cardPatience?: boolean
+  /**
+   * Chase eliminations. Taking a player out hands us their whole hand, which with
+   * an escalating cash-in is frequently worth more than the ground.
+   */
+  huntsEliminations?: boolean
+  /**
+   * Watch who is about to be forced to cash, and who has spread themselves thin.
+   * Both are public information; both change where the next blow should land.
+   */
+  readsTable?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
@@ -100,6 +110,24 @@ function targetValue(
 
   if (d.modelsOpponents && threatId !== null && s.owner[t] === threatId) v *= 1.25
 
+  if (d.huntsEliminations) {
+    const prey = killableRival(s, me)
+    // their hand comes with them, and an escalating cash-in makes that the single
+    // biggest swing available
+    if (prey && s.owner[t] === prey.id) v += 4 + prey.cards * (cashValue(s.setsTraded) / 3)
+  }
+
+  if (d.readsTable) {
+    const owner = s.players[s.owner[t]]
+    if (owner && owner.id !== me) {
+      // someone about to be forced to cash is about to get dangerous
+      if (owner.cards.length >= HAND_LIMIT - 1) v *= 1.3
+      // and a sprawling position is the cheapest place to take ground
+      const sprawl = exposure(s, owner.id)
+      if (sprawl > 8) v *= 1.15
+    }
+  }
+
   return v
 }
 
@@ -140,6 +168,8 @@ function shouldTrade(
   const value = cashValue(s.setsTraded)
   // cash when it actually buys something: enough to finish the continent we're on
   if (goal && value >= goal.resistance * 1.3) return true
+  // or when it turns a near-elimination into a certain one
+  if (d.huntsEliminations && killableRival(s, me, 1.4)) return true
   return value >= 15
 }
 
@@ -180,10 +210,21 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           }
 
           const mine = territoriesOf(s, me)
+          // A rival forced to cash next turn arrives with a pile of armies, so the
+          // border facing them is more dangerous than its current troop count says.
+          const surging = doctrine.readsTable
+            ? new Set(rivals(s, me).filter((r) => r.cashingSoon).map((r) => r.id))
+            : new Set<PlayerId>()
+          const risk = (t: TerritoryId) => {
+            const extra = surging.size
+              ? ADJACENCY[t].some((n) => surging.has(s.owner[n]))
+                ? cashValue(s.setsTraded) * 0.5
+                : 0
+              : 0
+            return (pressure(s, me, t) + extra) / Math.max(1, s.troops[t])
+          }
           // defend anything about to fall, before thinking about expansion
-          const atRisk = mine
-            .filter((t) => borderSecurityRatio(s, me, t) > 1.1)
-            .sort((a, b) => borderSecurityRatio(s, me, b) - borderSecurityRatio(s, me, a))
+          const atRisk = mine.filter((t) => risk(t) > 1.1).sort((a, b) => risk(b) - risk(a))
 
           if (doctrine.plans.has('consolidate') && atRisk.length && goal?.held) {
             const t = atRisk[0]
@@ -241,7 +282,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               }
 
               const cost = expectedLoss(a, d) * doctrine.lossAversion
-              const score = value * p - cost
+              let score = value * p - cost
 
               if (score > 0 && (!best || score > best.score)) best = { from, to, score }
             }
