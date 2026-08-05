@@ -19,8 +19,8 @@
  */
 import { createGame } from '../src/engine/game'
 import { rngFrom } from '../src/engine/rng'
-import { BOTS, BOT_BY_KEY } from '../src/bots'
-import { stepBot } from '../src/bots/play'
+import { ALL_BOTS, BOT_BY_KEY } from '../src/bots'
+import { fallbacks, resetFallbacks, stepBot } from '../src/bots/play'
 
 const TURN_CAP = 600
 const Z = 1.96 // 95%
@@ -40,7 +40,7 @@ function playMatch(seatBots: string[], seed: number): MatchResult {
   })
   while (s.phase !== 'gameOver' && s.turn < TURN_CAP) {
     const bot = BOT_BY_KEY[s.players[s.current].bot!]
-    s = stepBot(s, bot, () => rng.next())
+    s = stepBot(s, bot, () => rng.next())   // non-strict: one bad move shouldn't abort a 600-game run
   }
   return { winner: s.winner, turns: s.turn }
 }
@@ -168,11 +168,12 @@ const seeds = Number(positional.find((a) => !Number.isNaN(Number(a)))) || 200
 
 for (const n of names) {
   if (!BOT_BY_KEY[n]) {
-    console.error(`unknown bot "${n}" — registered: ${BOTS.map((b) => b.key).join(', ')}`)
+    console.error(`unknown bot "${n}" — registered: ${ALL_BOTS.map((b) => b.key).join(', ')}`)
     process.exit(1)
   }
 }
 
+resetFallbacks()
 const started = Date.now()
 
 if (names.length >= 2) {
@@ -180,7 +181,7 @@ if (names.length >= 2) {
   report(names, t, Math.max(seatCount, names.length))
 } else {
   // round-robin every registered bot, pairwise
-  const keys = BOTS.map((b) => b.key)
+  const keys = ALL_BOTS.map((b) => b.key)
   if (keys.length < 2) {
     console.error('need at least two registered bots to benchmark')
     process.exit(1)
@@ -205,4 +206,9 @@ if (names.length >= 2) {
     console.log(a.padEnd(w) + keys.map((b) => (a === b ? '—' : table[a][b] ?? '').padStart(w)).join(''))
 }
 
+const bad = Object.entries(fallbacks).filter(([, n]) => n > 0)
+if (bad.length) {
+  console.log('\nILLEGAL MOVES (bot fell back to random — results are not trustworthy):')
+  for (const [k, n] of bad) console.log(`  ${k}: ${n}`)
+}
 console.log(`\ndone in ${((Date.now() - started) / 1000).toFixed(1)}s`)

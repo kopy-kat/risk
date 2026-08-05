@@ -12,7 +12,7 @@ import { TERRITORY_IDS } from '../src/engine/board'
 import { applyMove, createGame, legalMoves, territoriesOf } from '../src/engine/game'
 import type { GameState } from '../src/engine/types'
 import { rngFrom } from '../src/engine/rng'
-import { BOTS, BOT_BY_KEY } from '../src/bots'
+import { ALL_BOTS, BOT_BY_KEY } from '../src/bots'
 import { stepBot } from '../src/bots/play'
 
 const GAMES = Number(process.argv[2] ?? 400)
@@ -55,7 +55,7 @@ for (let g = 0; g < GAMES; g++) {
   const seatCount = 2 + Math.floor(rng.next() * 5) // 2–6
   const seats = Array.from({ length: seatCount }, (_, i) => ({
     name: `P${i}`,
-    bot: FORCE_BOT ?? BOTS[Math.floor(rng.next() * BOTS.length)].key,
+    bot: FORCE_BOT ?? ALL_BOTS[Math.floor(rng.next() * ALL_BOTS.length)].key,
   }))
 
   let s = createGame({ seats, seed: g * 104729 + 7 })
