@@ -14,6 +14,12 @@ import {
 import {
   applyMove, bestTradeIn, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn,
 } from '../src/engine/game'
+import { rngFrom } from '../src/engine/rng'
+import {
+  CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
+  targetsFor, validDestination, validSelection,
+} from '../src/ui/decide'
+import type { TerritoryId } from '../src/engine/board'
 import type { Card, GameState } from '../src/engine/types'
 
 let passed = 0
@@ -358,6 +364,141 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   const reach = connectedOwn(s, 0, mine[0])
   ok(![...reach].some((t) => s.owner[t] !== 0), 'connected set contains only your own territories')
   ok(!reach.has(mine[0]), 'connected set excludes the origin')
+}
+
+// ── the UI's decisions, which the engine tests above can't see ────
+//
+// src/ui/decide.ts holds every "what can the player do right now" answer as a
+// pure function. The engine can be perfectly correct while the UI offers a move
+// it would reject, or draws a preview the move wouldn't produce — so these are
+// checked as properties over real game states rather than as hand-picked cases.
+{
+  // stale selections: the case that motivated deriving `sel` instead of clearing it
+  let s = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 101 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+  s = { ...s, phase: 'attack', toDeploy: 0 }
+
+  const from = territoriesOf(s, s.current).find((t) => ADJACENCY[t].some((n) => s.owner[n] !== s.current))!
+  const enemy = ADJACENCY[from].find((n) => s.owner[n] !== s.current)!
+  eq(validSelection(s, null), null, 'nothing selected stays nothing')
+  eq(validSelection(s, enemy), null, "you can't select a territory you don't own")
+  eq(validSelection({ ...s, troops: { ...s.troops, [from]: 10 } }, from), from, 'a stacked border territory is selectable')
+  eq(
+    validSelection({ ...s, troops: { ...s.troops, [from]: 1 } }, from),
+    null,
+    'a territory spent down to one army stops being selectable',
+  )
+  // this is the blitz case: nothing about phase or player changed, so no effect would fire
+  const botTurn = { ...s, players: s.players.map((p) => (p.id === s.current ? { ...p, bot: 'easy' } : p)) }
+  eq(validSelection(botTurn, from), null, "a bot's turn has no human selection")
+
+  // fortify: spending the one fortify invalidates the selection without a phase change
+  let f = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 102 })
+  while (f.phase === 'setup') f = applyMove(f, legalMoves(f)[0])
+  f = { ...f, phase: 'fortify', toDeploy: 0, canFortify: true }
+  const src = territoriesOf(f, f.current).find((t) => connectedOwn(f, f.current, t).size > 0)!
+  f = { ...f, troops: { ...f.troops, [src]: 5 } }
+  eq(validSelection(f, src), src, 'a connected stack is selectable while the fortify is unspent')
+  eq(validSelection({ ...f, canFortify: false }, src), null, 'spending the fortify invalidates the selection')
+
+  // a destination only counts while it's still in the target set
+  const reach = targetsFor(f, src)
+  const reachable = [...reach][0]
+  const unreachable = TERRITORY_IDS.find((t) => t !== src && !reach.has(t))!
+  eq(validDestination(src, reachable, reach), reachable, 'a reachable destination stands')
+  eq(validDestination(src, unreachable, reach), null, 'an unreachable destination is dropped')
+  eq(validDestination(null, reachable, reach), null, 'no source means no destination')
+}
+
+{
+  // Property sweep. Play out whole games as two humans, and at every single state
+  // ask the UI what it would offer — then make the engine judge the answer.
+  let primaries = 0
+  let previews = 0
+  let clicks = 0
+  const bad: string[] = []
+
+  for (let g = 0; g < 12; g++) {
+    let s = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 500 + g })
+    const rng = rngFrom(g * 7919 + 13)
+    let guard = 0
+
+    while (s.phase !== 'gameOver' && guard++ < 1200) {
+      const amounts = [0, 1, 3, 999]   // including out-of-range values the clamps must absorb
+
+      // 1. whatever the dark button offers, the engine must accept
+      for (const amount of amounts) {
+        const selected = territoriesOf(s, s.current).find((t) => validSelection(s, t) !== null) ?? null
+        const sel = validSelection(s, selected)
+        const dest = validDestination(sel, [...targetsFor(s, sel)][0] ?? null, targetsFor(s, sel))
+        const p = primaryFor(s, amount, sel, dest)
+        if (!p || p.kind !== 'move' || !p.move) continue
+        primaries++
+        try {
+          const after = applyMove(s, p.move)
+
+          // 2. and if it drew a preview, the move must produce exactly those numbers
+          const pv = previewFor(s, amount, sel, dest)
+          if (pv) {
+            previews++
+            for (const [t, n] of Object.entries(pv) as [TerritoryId, number][])
+              if (after.troops[t] !== n)
+                bad.push(`preview promised ${t}=${n}, move produced ${after.troops[t]} (${p.move.type}, amount ${amount})`)
+          }
+        } catch (e) {
+          bad.push(`primary offered an illegal move: ${JSON.stringify(p.move)} — ${(e as Error).message}`)
+        }
+      }
+
+      // 3. every clickable territory must produce a move the engine accepts
+      const sel = validSelection(s, territoriesOf(s, s.current).find((t) => validSelection(s, t) !== null) ?? null)
+      for (const t of clickableFor(s, targetsFor(s, sel))) {
+        for (const shift of [false, true]) {
+          const move = moveForClick(s, t, shift, 2, sel)
+          if (!move) continue
+          clicks++
+          try { applyMove(s, move) } catch (e) {
+            bad.push(`clickable ${t} produced an illegal move: ${JSON.stringify(move)} — ${(e as Error).message}`)
+          }
+        }
+      }
+
+      const moves = legalMoves(s)
+      s = applyMove(s, moves[Math.floor(rng.next() * moves.length)])
+    }
+  }
+
+  ok(primaries > 200, `the sweep actually exercised the primary action (${primaries} offers)`)
+  ok(previews > 20, `the sweep actually exercised previews (${previews} drawn)`)
+  ok(clicks > 200, `the sweep actually exercised clicks (${clicks} made)`)
+  ok(bad.length === 0, `UI never offers what the engine rejects\n    ${bad.slice(0, 5).join('\n    ')}`)
+}
+
+{
+  // The bot's turn belongs to Skip, and nothing else.
+  let s = createGame({ seats: [{ name: 'A', bot: 'easy' }, { name: 'B', bot: null }], seed: 103 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+  eq(isHumanTurn(s), false, "the bot's seat is not a human turn")
+  eq(primaryFor(s, 1, null, null)?.kind, 'skipBots', "a bot's turn offers Skip")
+  eq(primaryFor(s, 1, null, null)?.label, 'Skip to B', 'Skip names the next human')
+  eq(clickableFor(s, new Set()).size, 0, "nothing is clickable on a bot's turn")
+  eq(previewFor(s, 1, null, null), null, "no preview on a bot's turn")
+
+  // with no humans left there is nobody to skip to
+  const allBots = { ...s, players: s.players.map((p) => ({ ...p, bot: 'easy' })) }
+  eq(primaryFor(allBots, 1, null, null)?.label, 'Skip to end', 'with no humans, Skip runs to the end')
+
+  // a finished game has no primary action at all
+  eq(primaryFor({ ...s, phase: 'gameOver' }, 1, null, null), null, 'game over offers nothing')
+}
+
+{
+  // Undo covers the deterministic moves and nothing else — rewinding past a roll
+  // would be save-scumming, and ending a turn draws a card.
+  for (const t of ['deploy', 'tradeCards', 'fortify', 'endAttack'] as const)
+    ok(UNDOABLE.has(t) && !CLEARS_UNDO.has(t), `${t} is undoable`)
+  for (const t of ['attack', 'blitz', 'endTurn'] as const)
+    ok(CLEARS_UNDO.has(t) && !UNDOABLE.has(t), `${t} closes the undo window`)
 }
 
 console.log(`\n${passed} assertions passed`)
