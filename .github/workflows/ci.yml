@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch makes the in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint / typecheck / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The rules the engine is easy to get quietly wrong on.
+      - name: Unit tests
+        run: npm test
+
+      # 300 seeded bot-vs-bot games, asserting board invariants after every move.
+      # Catches "the game is broken" in a way unit tests can't.
+      - name: Soak test
+        run: npm run sim -- 300
+
+      - name: Build
+        run: npm run build

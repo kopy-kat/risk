@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    // Real bug class in this codebase's UI — keep it blocking.
+    "react-hooks/rules-of-hooks": "error",
+    // Advisory: it has false positives, and a stale dep is rarely how the game breaks.
+    "react-hooks/exhaustive-deps": "warn"
+  },
+  "ignorePatterns": ["dist", "node_modules", "mock"]
+}

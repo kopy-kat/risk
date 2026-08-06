@@ -86,7 +86,7 @@ export function MapView({
           complete: held === members.length,
         }
       }),
-    [state.owner, state.players.length],
+    [state.owner],
   )
 
   const dimmed = (t: TerritoryId) => focus !== null && state.owner[t] !== focus

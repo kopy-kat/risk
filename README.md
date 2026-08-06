@@ -17,7 +17,12 @@ Other scripts:
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
 | `npm run sim -- 2000 easy` | 2000 games where every seat is the `easy` bot |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | `oxlint` over `src` and `scripts` |
 | `npm run build:mock` | rebuilds `mock/index.html`, the static design mock |
+
+CI runs `lint`, `typecheck`, `test`, `sim -- 300` and `build` on every pull request
+(`.github/workflows/ci.yml`). Running those five locally is the whole gate — there is
+nothing CI checks that you can't reproduce.
 
 ## How it's put together
 
