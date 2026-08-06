@@ -16,6 +16,8 @@ Other scripts:
 | `npm run sim` | soak test: hundreds of bot-vs-bot games, invariants checked after **every move** |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
 | `npm run sim -- 2000 easy` | 2000 games where every seat is the `easy` bot |
+| `npm run review-check` | checks the game reviewer measures skill, not noise |
+| `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build` first) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `oxlint` over `src` and `scripts` |
 | `npm run build:mock` | rebuilds `mock/index.html`, the static design mock |
@@ -50,8 +52,15 @@ src/bots/
   play.ts                stepBot — runs one bot decision, falls back to a random
                          legal move if a bot misbehaves
   index.ts               registry; add to BOTS and it appears in the seat picker
+  strategy/lookahead.ts  what a move is worth *before* the dice — expected value
+                         from the exact combat tables, never a simulated roll
 
-src/ui/                  React: App, MapView, Dock, Setup, theme.css
+src/review/
+  store.ts               saved games in localStorage: seed + move list, nothing else
+  replay.ts              seed + moves -> every board the game ever had
+  review.ts              grades each of your decisions, and splits luck out of it
+
+src/ui/                  React: App, MapView, Dock, Setup, Review, theme.css
 scripts/                 tests, simulator, mock builder, geometry solvers
 ```
 
@@ -114,6 +123,61 @@ directly, since undo silently depends on it.
 can be pasted into the setup screen to replay a game exactly — the deal, the dice and
 the bots all derive from it. That's the difference between "the bot did something
 stupid once" and a case you can re-run while fixing it.
+
+## Reviewing your games
+
+Finished games are kept locally and can be played back with the bot's opinion of every
+move you made — the chess-style post-mortem, adjusted for the fact that Risk rolls dice.
+
+Games are stored as **a seed and a list of moves**, never as boards. `applyMove` is pure
+and the generator state lives inside `GameState`, so those two things reconstruct every
+position exactly, dice included; a 300-move game is about 20 kB. The move list lives in
+`GameState` rather than beside it, which is what makes undo correct for free — undo
+restores an earlier state, and that state carries the earlier list.
+
+**Skill and luck are reported separately, and that's the whole design.** Chess review
+works by scoring the position after your move, because that position is a fact. Here it
+isn't: attack at 75%, lose the roll, and a naive reviewer calls it a blunder. It wasn't.
+So a move is priced *before* the dice, by integrating over the outcome distribution with
+the exact tables in `src/engine/combat.ts` — never by rolling it:
+
+```
+EV(attack) = P(win) · score(board if it lands) + P(lose) · score(board if it doesn't)
+```
+
+That yields two numbers per decision that never contaminate each other: **loss** (how
+much worse your move was than the best available, in armies) and **luck** (what the dice
+then did about it, relative to expectation). The summary reads *"1.4 armies given up per
+decision; the dice were worth +10"* — a split chess review structurally cannot make, and
+the reason the right model here is backgammon's, not chess's.
+
+Armies are the unit throughout, which beats centipawns for being checkable against
+experience: a turn's reinforcement is 3–15 armies, so the grade bands sit at 1 / 4 / 10 /
+25 — roughly *noise*, *a fraction of a turn*, *a wasted turn*, *a wasted couple*.
+
+**The reviewer's judgement is Marshal's, and Marshal is not an oracle.** Advice is worded
+as "General would have played X" rather than "you blundered", and the bands are
+deliberately generous at the bottom, because flagging a decision the evaluator cannot
+really tell apart from the best one is how a review feature loses your trust.
+
+`npm run review-check` is what keeps it honest. There's no ground truth for "was that
+move bad", but there is a known ordering — the benchmark says Marshal beats General beats
+Colonel beats easy beats random — so the reviewer must reproduce it when pointed at each
+tier's own play. It does, measured per decision rather than by win rate:
+
+```
+marshal 2.11  <  general 2.71  <  colonel 4.39  <  easy 5.25  <  random 6.29
+                    mean armies given up per decision
+```
+
+It also checks that luck averages to nothing (pooled: −0.005 armies per attack). A
+persistent bias there would mean the expectation model and the dice disagree, and would
+reach you as "the dice hate me", in every game, forever.
+
+Stored games carry a fingerprint of the rules they were played under. Retune
+`CASH_VALUES` and old move lists stop applying part way through — which would otherwise
+surface as a replay quietly showing a board that never existed — so they're quarantined
+in the list instead of replayed.
 
 When control returns to you — including after Skip — a transient panel lists what the
 bots did: every reinforcement, assault, capture and elimination since your last move,

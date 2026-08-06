@@ -12,11 +12,13 @@ import { MapView } from './MapView'
 import { Dock } from './Dock'
 import type { PrimaryAction } from './Dock'
 import { Setup } from './Setup'
+import { Review } from './Review'
 import { playerColor } from './colors'
 import {
   CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
   targetsFor, validDestination, validSelection,
 } from './decide'
+import { newGameId, saveGame } from '../review/store'
 
 const BOT_DELAY = { setup: 60, move: 260 }
 /** backstop so a misbehaving bot can't spin the skip button forever */
@@ -46,17 +48,35 @@ export function App() {
   /** whether the last state we saw was bot-controlled, so we know when control returns */
   const wasBot = useRef(false)
   const rng = useRef(rngFrom(12345))
+  /** which stored game this is, so repeated saves overwrite one entry */
+  const recordId = useRef('')
+  const botSeed = useRef(0)
+  /**
+   * Moves the app played on a human's behalf — "auto-place rest". Reviewing
+   * someone for a placement they didn't choose would be worse than not reviewing
+   * it at all. Setup has no undo, so a plain ref stays in step with the move list.
+   */
+  const assisted = useRef<number[]>([])
+  /** last turn written to storage, so the save runs once a turn rather than once a move */
+  const savedTurn = useRef(-1)
+  /** the game being reviewed, or null while playing */
+  const [reviewing, setReviewing] = useState<string | null>(null)
 
   const start = useCallback((seats: SeatConfig[], chosenSeed?: number) => {
     const s = chosenSeed ?? Math.floor(Math.random() * 1e9)
     // one number reproduces the whole game: the deal, the dice, and the bots
-    rng.current = rngFrom(s ^ 0x9e3779b9)
+    botSeed.current = s ^ 0x9e3779b9
+    rng.current = rngFrom(botSeed.current)
+    recordId.current = newGameId(s)
+    assisted.current = []
+    savedTurn.current = -1
     setSeed(s)
     setGame(createGame({ seats, seed: s }))
     setSelected(null)
     setFortifyTo(null)
     setAutoSetup(false)
     setRecap(null)
+    setReviewing(null)
     logMark.current = 0
     wasBot.current = false
   }, [])
@@ -116,9 +136,40 @@ export function App() {
     const delay = game.phase === 'setup' ? BOT_DELAY.setup : BOT_DELAY.move
     // the effect re-runs on every game change, so reading it from the closure is
     // correct — and keeps the RNG out of a state updater
-    const id = setTimeout(() => setGame(stepBot(game, driving, () => rng.current.next())), delay)
+    const id = setTimeout(() => {
+      // a bot filling in for a human seat: note the index so the review skips it
+      if (!me.bot) assisted.current.push(game.moves.length)
+      setGame(stepBot(game, driving, () => rng.current.next()))
+    }, delay)
     return () => clearTimeout(id)
   }, [game, autoSetup])
+
+  /**
+   * Persist the game as seed + move list.
+   *
+   * Once per turn rather than once per move: the record is rewritten whole, and
+   * doing that four hundred times a game is real work for the sake of the handful
+   * of moves you'd lose by walking away mid-turn.
+   */
+  useEffect(() => {
+    if (!game || !recordId.current || !game.moves.length) return
+    // an all-bot game has nobody to review
+    if (!game.players.some((p) => !p.bot)) return
+    const over = game.phase === 'gameOver'
+    if (!over && game.turn === savedTurn.current) return
+    savedTurn.current = game.turn
+    saveGame({
+      id: recordId.current,
+      seed,
+      botSeed: botSeed.current,
+      seats: game.players.map((p) => ({ name: p.name, bot: p.bot })),
+      moves: game.moves,
+      assisted: assisted.current,
+      winner: game.winner,
+      turns: game.turn,
+      finished: over,
+    })
+  }, [game, seed])
 
   // Selection and amounts are per-phase, so wipe them whenever the phase turns over.
   // canFortify is in here too: spending the one fortify doesn't change phase or
@@ -282,7 +333,8 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [game, primary, cancel, showSettings, undo, isHuman])
 
-  if (!game) return <Setup onStart={start} />
+  if (reviewing) return <Review id={reviewing} onExit={() => setReviewing(null)} />
+  if (!game) return <Setup onStart={start} onReview={setReviewing} />
 
   const phaseIndex = { deploy: 0, attack: 1, occupy: 1, fortify: 2, setup: 0, gameOver: 2 }[game.phase]
   // Only dim during initial placement. Once the game is running you need to read
@@ -390,7 +442,14 @@ export function App() {
               takes the world in {game.turn} turns ·{' '}
               {territoriesOf(game, game.winner).length}/{TERRITORY_IDS.length} territories
             </div>
-            <button className="go" onClick={() => setGame(null)}>New game</button>
+            <div className="endgame-actions">
+              {game.players.some((p) => !p.bot) && (
+                <button className="btn ghost" onClick={() => setReviewing(recordId.current)}>
+                  Review this game
+                </button>
+              )}
+              <button className="go" onClick={() => setGame(null)}>New game</button>
+            </div>
           </div>
         </div>
       )}
