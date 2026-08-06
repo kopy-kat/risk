@@ -161,18 +161,34 @@ deliberately generous at the bottom, because flagging a decision the evaluator c
 really tell apart from the best one is how a review feature loses your trust.
 
 `npm run review-check` is what keeps it honest. There's no ground truth for "was that
-move bad", but there is a known ordering — the benchmark says Marshal beats General beats
-Colonel beats easy beats random — so the reviewer must reproduce it when pointed at each
-tier's own play. It does, measured per decision rather than by win rate:
+move bad", but there is a known ladder — `npm run bench` says Marshal beats General beats
+Colonel beats easy beats random — so the reviewer, pointed at each tier's own play, must
+not *contradict* it. Measured per decision rather than by win rate:
 
 ```
-marshal 2.11  <  general 2.71  <  colonel 4.39  <  easy 5.25  <  random 6.29
-                    mean armies given up per decision
+marshal 1.65 ±.10  ≈  general 1.55 ±.08  <  colonel 4.19 ±.19  <  easy 4.81 ±.20  <  random 6.87 ±.10
+                             mean armies given up per decision
 ```
 
-It also checks that luck averages to nothing (pooled: −0.005 armies per attack). A
+Marshal and General come out **tied**, and that's the honest answer rather than a failure.
+Marshal's edge is elimination hunting and table reading — strategy that pays off across
+turns — while this measures single decisions. A per-move metric shouldn't be expected to
+see it, and claiming a 0.1-army difference over 3,000 long-tailed samples would be a claim
+the data can't support. Which is why the check is stated as "nothing contradicts the
+ladder" and carries standard errors, the same reason `bench.ts` reports Wilson intervals.
+
+It also checks that luck averages to nothing (pooled: −0.025 armies per attack). A
 persistent bias there would mean the expectation model and the dice disagree, and would
 reach you as "the dice hate me", in every game, forever.
+
+One thing the reviewer needs that the bots don't: **exposure has to be bounded.** `assess`
+leaves it unbounded, which is fine for play — agents only compare small local changes,
+where the unbounded part cancels — but a reviewer compares whole alternatives, and a
+border facing a 180-army stack scores a shortfall of a hundred on its own. Left alone it
+made Colonel's fortifies average a 14.8-army "loss" against Marshal's 0.9, purely because
+Colonel's stacks are bigger, and ranked the tiers wrongly as a result. Capped per territory
+at 12 in `src/review/price.ts` — not in `assess`, so the bots keep exactly the evaluation
+they were benchmarked against.
 
 Stored games carry a fingerprint of the rules they were played under. Retune
 `CASH_VALUES` and old move lists stop applying part way through — which would otherwise

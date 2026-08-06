@@ -93,12 +93,20 @@ async function open(withHistory) {
   await page.getByRole('button', { name: 'Begin deployment' }).click()
   await page.getByRole('button', { name: /Auto-place rest/ }).click()
 
+  // Driving a live game races the bots' own timers: a territory can stop being a
+  // legal target, or the game can end, between reading the board and clicking it.
+  // These clicks are only here to *generate* a game, so a stale one is skipped
+  // rather than failed — every actual assertion is below, against the result.
+  const nudge = (locator, opts) =>
+    locator.first().click({ timeout: 1000, ...opts }).then(() => true, () => false)
+
   for (let i = 0; i < 220; i++) {
     if (await page.locator('.overlay .winner').count()) break
     const phase = await page.locator('.phase-pill.active').first().textContent().catch(() => null)
     const clickable = page.locator('.terr.clickable')
-    if (phase === 'Deploy' && (await clickable.count())) await clickable.first().click({ modifiers: ['Shift'] })
-    else if (phase === 'Attack' && (await clickable.count()) && i % 3 === 0) await clickable.first().click()
+    const n = await clickable.count()
+    if (phase === 'Deploy' && n) await nudge(clickable, { modifiers: ['Shift'] })
+    else if (phase === 'Attack' && n && i % 3 === 0) await nudge(clickable)
     else await page.keyboard.press(' ')
     await page.waitForTimeout(8)
   }

@@ -29,7 +29,7 @@ import {
   pressureAfter,
   rivalCount,
   settle,
-} from '../bots/strategy/lookahead'
+} from './price'
 import { breaksContinent, completesContinent, isBorder } from '../bots/strategy/board-sense'
 import { replay } from './replay'
 import type { Replay } from './replay'

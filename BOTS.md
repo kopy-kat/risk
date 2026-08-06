@@ -393,6 +393,29 @@ And it is entirely downstream of the evaluation fix above. Built on the old
 `assess`, the reviewer would have told people that 58% of their good attacks were
 mistakes.
 
+**Judging whole alternatives needs exposure bounded; playing doesn't.** `assess`
+leaves exposure unbounded and `EXPOSURE_WEIGHT` sets its influence, which is right
+for agents: they compare small local changes, and the unbounded part largely
+cancels. A reviewer compares *whole* alternatives, and there a border facing a
+180-army stack contributes a shortfall of a hundred on its own. Unbounded, Colonel's
+fortifies scored a mean 14.8-army loss against Marshal's 0.9 — entirely because
+Colonel's stacks are bigger, not because its fortifies are worse — and the reviewer
+ranked Colonel below `easy` as a result. Bounded per territory at 12 (`garrisonFor`'s
+ceiling) inside `src/review/price.ts`, deliberately not in `assess`, so nothing that
+plays is touched.
+
+`npm run review-check` measures the result against the ladder:
+
+```
+marshal 1.65 ±.10  ≈  general 1.55 ±.08  <  colonel 4.19 ±.19  <  easy 4.81 ±.20  <  random 6.87 ±.10
+```
+
+**Marshal and General tie, and that's the honest answer.** Both of Marshal's
+additions — elimination hunting and table reading — pay off across turns rather than
+within one decision, so a per-move metric has no way to see them. The same fact the
+ablation table above reports as "multiplayer specialist" shows up here as a tie. It
+is a limit of per-decision review, not a defect in the tiers.
+
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Still open** — search *over* plans (as opposed to choosing one greedily),
    personality/posture variation so two Marshals don't play identically, and a

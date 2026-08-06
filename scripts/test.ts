@@ -621,12 +621,12 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     expectedDefendersLeft(2, 8) > expectedDefendersLeft(8, 8),
     'a bigger attacker leaves fewer defenders standing even in defeat',
   )
-  // The three outcomes have to account for the whole battle: either the defender
-  // is wiped out, or they aren't and someone is left holding the ground.
+  // Both branches have to account for the whole battle: on a win no defenders are
+  // left at all, so the unconditional expectation is just the losing branch's
+  // share — and it has to land strictly between "none" and "all of them".
   for (const [a, d] of [[5, 3], [8, 5], [4, 4], [12, 8]] as const) {
-    const p = winProb(a, d)
-    const total = p * 0 + (1 - p) * expectedDefendersLeft(a, d)
-    ok(total > 0 && total < d, `defenders left for ${a}v${d} is within bounds, got ${total}`)
+    const expected = (1 - winProb(a, d)) * expectedDefendersLeft(a, d)
+    ok(expected > 0 && expected < d, `defenders left for ${a}v${d} is in range, got ${expected}`)
   }
 }
 

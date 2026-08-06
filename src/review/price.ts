@@ -38,10 +38,10 @@ import {
   expectedSurvivors,
   winProb,
 } from '../engine/combat'
-import { applyMove, legalMoves } from '../engine/game'
+import { applyMove, legalMoves, territoriesOf } from '../engine/game'
 import type { GameState, Move, PlayerId } from '../engine/types'
-import { garrisonFor } from '../bots/strategy/board-sense'
-import { assess } from '../bots/strategy/evaluate'
+import { garrisonFor, isBorder, pressure } from '../bots/strategy/board-sense'
+import { EXPOSURE_WEIGHT, assess } from '../bots/strategy/evaluate'
 
 /** Winning dwarfs any positional consideration, but stays finite so deltas work. */
 const WIN_SCORE = 500
@@ -76,7 +76,7 @@ export function objective(s: GameState, me: PlayerId, divisor: number): number {
   if (!s.players[me].alive) return -WIN_SCORE
   let rivals = 0
   for (const p of s.players) {
-    if (p.alive && p.id !== me) rivals += assess(s, p.id).score
+    if (p.alive && p.id !== me) rivals += scoreOf(s, p.id)
   }
   // Armies still in hand are armies. `assess` only counts what's on the board,
   // which is right for sizing up a rival — you can't see their reinforcement —
@@ -87,7 +87,45 @@ export function objective(s: GameState, me: PlayerId, divisor: number): number {
   // continent is shared with everyone still standing. That the benchmark already
   // found this scaling empirically (BOTS.md, denial at 2 vs 4 seats) is a good sign
   // it's the right shape.
-  return assess(s, me).score + inHand - rivals / divisor
+  return scoreOf(s, me) + inHand - rivals / divisor
+}
+
+/**
+ * The most one territory may contribute to exposure, for review purposes.
+ *
+ * `assess` leaves exposure unbounded, which is right for the bots: they only ever
+ * compare small local changes, where the unbounded part largely cancels, and
+ * `EXPOSURE_WEIGHT` already sets its influence on play. A reviewer compares *whole*
+ * alternatives, and there the tail runs away — a border facing a 180-army stack
+ * scores a shortfall of a hundred-odd on its own.
+ *
+ * Measured: without this, Colonel's fortifies averaged a 14.8-army "loss" against
+ * Marshal's 0.9, purely because Colonel's big stacks make the differences between
+ * fortify targets enormous. It ranked the tiers wrongly as a result.
+ *
+ * 12 is the ceiling `garrisonFor` puts on a garrison, for the same reason: past
+ * that you aren't reinforcing a border, you're writing it off. A territory can only
+ * be lost once, so its contribution has to be bounded by what losing it costs.
+ */
+const MAX_SHORTFALL = 12
+
+/**
+ * `assess`'s score with exposure bounded per territory.
+ *
+ * Done here rather than in `assess` so the bots keep exactly the evaluation they
+ * were tuned and benchmarked against — this is a property the *reviewer* needs,
+ * not a correction to how anything plays.
+ */
+function scoreOf(s: GameState, p: PlayerId): number {
+  const a = assess(s, p)
+  let capped = 0
+  for (const t of territoriesOf(s, p)) {
+    if (!isBorder(s, p, t)) continue
+    const want = pressure(s, p, t) * 0.6
+    if (want > s.troops[t]) capped += Math.min(want - s.troops[t], MAX_SHORTFALL)
+  }
+  // add back the share of exposure we refuse to count
+  return a.score + (a.exposure - capped) * EXPOSURE_WEIGHT
 }
 
 /**
