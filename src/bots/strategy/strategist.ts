@@ -23,6 +23,8 @@ import {
   stagingFor,
 } from './board-sense'
 import { exposure, killableRival, primaryThreat, rivals } from './evaluate'
+import { selectIntent } from './plans'
+import type { Intent } from './plans'
 import { cashValue } from '../../engine/cards'
 import { CONTINENTS as CONTS } from '../../engine/board'
 import type { Bot } from '../types'
@@ -73,9 +75,26 @@ export interface Doctrine {
    * forces to our border and is likeliest to come again.
    */
   retaliates?: boolean
+  /**
+   * Commit to one objective per turn and spend the turn on it, instead of scoring
+   * every target independently and drifting across three continents. See plans.ts.
+   */
+  usesPlans?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
+
+/**
+ * Commit to a plan only when there is a single opponent left to out-plan.
+ *
+ * Measured: planning is worth +10 points heads-up and costs ~12 at four seats. A
+ * plan is a claim about several turns, and at a full table the board is rearranged
+ * by three other people before your next one — so the claim expires before it pays.
+ * In a duel it survives, which is exactly when the tiers needed the help.
+ */
+function planApplies(s: GameState, me: PlayerId, d: Doctrine): boolean {
+  return !!d.usesPlans && liveOpponents(s, me) <= 1
+}
 
 /** How many players are still in the game besides us. Never below 1. */
 const liveOpponents = (s: GameState, me: PlayerId): number =>
@@ -96,6 +115,7 @@ function targetValue(
   d: Doctrine,
   threatId: PlayerId | null,
   grudges: Map<PlayerId, number>,
+  intent: Intent | null,
 ): number {
   let v = 1.5
   const completed = completesContinent(s, me, t)
@@ -120,6 +140,9 @@ function targetValue(
 
   const grudge = grudges.get(s.owner[t])
   if (grudge) v *= 1 + Math.min(0.3, grudge * 0.12)
+
+  // the turn's objective outranks whatever else happens to look tempting
+  if (intent && intent.targets.has(t)) v += 4
 
   if (d.huntsEliminations) {
     const prey = killableRival(s, me)
@@ -244,6 +267,12 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           }
 
           // otherwise mass for the push: one stack takes continents, many don't
+          const plan = planApplies(s, me, doctrine) ? selectIntent(s, me, doctrine.plans) : null
+          if (plan && plan.staging.length) {
+            const door = plan.staging.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
+            // everything goes to the objective, on the strongest door into it
+            return { type: 'deploy', territory: door, count: s.toDeploy }
+          }
           const wanted = goal && !goal.held ? goal.missing : []
           const staging = [...stagingFor(s, me, wanted)]
           if (doctrine.plans.has('expand') && staging.length) {
@@ -263,6 +292,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           const grudges = doctrine.retaliates
             ? aggressorsAgainst(s, me)
             : new Map<PlayerId, number>()
+          const intent = planApplies(s, me, doctrine) ? selectIntent(s, me, doctrine.plans) : null
 
           for (const from of territoriesOf(s, me)) {
             const a = s.troops[from]
@@ -281,7 +311,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const leftBehind = survivors - 1
               if (isBorder(s, me, from) && leftBehind < keep * 0.5) continue
 
-              let value = targetValue(s, me, to, goalId, doctrine, threatId, grudges)
+              let value = targetValue(s, me, to, goalId, doctrine, threatId, grudges, intent)
 
               // Discipline: don't take what the neighbours will simply take back.
               // Scaled by table size for the mirror-image reason denial isn't —
