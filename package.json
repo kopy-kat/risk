@@ -12,7 +12,9 @@
     "sim": "tsx scripts/simulate.ts",
     "build:mock": "node scripts/build-mock.mjs",
     "test": "tsx scripts/test.ts",
-    "bench": "tsx scripts/bench.ts"
+    "bench": "tsx scripts/bench.ts",
+    "review-check": "tsx scripts/review-check.ts",
+    "smoke": "tsx scripts/smoke.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

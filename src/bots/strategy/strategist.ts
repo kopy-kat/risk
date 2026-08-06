@@ -18,6 +18,7 @@ import {
   breaksContinent,
   chooseGoal,
   completesContinent,
+  garrisonFor,
   isBorder,
   pressure,
   stagingFor,
@@ -178,13 +179,6 @@ function postCapturePressure(s: GameState, me: PlayerId, from: TerritoryId, to: 
 // avoid importing CONTINENT_OF twice; small helper keeps targetValue readable
 import { CONTINENT_OF, CONTINENTS } from '../../engine/board'
 const goalContains = (t: TerritoryId, goal: string) => CONTINENT_OF[t] === goal
-
-/** Garrison a territory should keep, given what's pointed at it. */
-function garrisonFor(s: GameState, me: PlayerId, t: TerritoryId): number {
-  if (!isBorder(s, me, t)) return 1
-  const threat = pressure(s, me, t)
-  return clamp(Math.ceil(threat * 0.55), 2, 12)
-}
 
 /**
  * Whether to cash a set now. Impatient bots trade on sight; patient ones wait,

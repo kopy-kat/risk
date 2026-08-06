@@ -438,3 +438,158 @@ kbd {
 .keyrow dt { text-align: right; }
 .keyrow dt kbd { margin-left: 0; opacity: .85; color: var(--ink-2); }
 .keyrow dd { font-size: 10.5px; color: var(--ink-2); }
+
+/* ─────────────────────────── review ─────────────────────────── */
+
+/* Grades are a scale, so they read as one: muted through amber to crimson. The
+   two good bands are deliberately quiet — a review that shouts about every
+   competent move teaches nothing. */
+.review {
+  --g-best:       var(--ink-3);
+  --g-good:       var(--p5);
+  --g-inaccuracy: var(--p3);
+  --g-mistake:    var(--accent);
+  --g-blunder:    var(--p1);
+}
+
+.seatpick { display: flex; align-items: center; gap: 9px; }
+.review .verdict { display: flex; gap: 18px; align-items: center; }
+.review .stat { display: flex; flex-direction: column; gap: 1px; align-items: flex-end; }
+.review .stat .k { font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.review .stat .v {
+  font-family: 'Instrument Serif', serif; font-size: 22px; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.review .stat .v.up { color: var(--p5); }
+.review .stat .v.down { color: var(--p1); }
+.review .stat .u { font-size: 8px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+
+.rev-empty {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--ink-3); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+}
+
+.replay-warn {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  padding: 7px 12px; border: 1px solid var(--p1); border-radius: 2px;
+  background: rgba(252,250,245,.95); color: var(--p1); z-index: 6;
+}
+
+/* the verdict panel, in the same spot the live game puts the bot recap */
+.rev-panel {
+  position: absolute; top: 16px; right: 18px; z-index: 5;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 316px; padding: 14px 16px;
+  background: rgba(252,250,245,.94); border: 1px solid var(--border); border-radius: 3px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px rgba(80,68,44,.12);
+}
+.rev-panel .grade {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 9px; letter-spacing: .18em; text-transform: uppercase; font-weight: 600;
+}
+.rev-panel .grade em {
+  font-style: normal; font-family: 'Instrument Serif', serif;
+  font-size: 21px; letter-spacing: 0; font-weight: 400; font-variant-numeric: tabular-nums;
+}
+.rev-panel .grade.best       { color: var(--g-best); }
+.rev-panel .grade.good       { color: var(--g-good); }
+.rev-panel .grade.inaccuracy { color: var(--g-inaccuracy); }
+.rev-panel .grade.mistake    { color: var(--g-mistake); }
+.rev-panel .grade.blunder    { color: var(--g-blunder); }
+
+/* Both rows are buttons: clicking one paints that move on the map. Seeing the
+   alternative on the board is the whole point — a sentence naming two
+   territories is a puzzle, the map is an answer. */
+.rev-panel .line {
+  display: grid; grid-template-columns: 52px 1fr; gap: 9px; align-items: baseline;
+  padding: 7px 8px; margin: 0 -8px;
+  background: transparent; border: 1px solid transparent; border-radius: 2px;
+  text-align: left; cursor: pointer; font-family: inherit;
+  transition: all .16s var(--ease);
+}
+.rev-panel .line:hover { background: var(--paper-2); }
+.rev-panel .line.on { border-color: var(--border); background: var(--paper-2); }
+.rev-panel .line .k {
+  font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3);
+}
+.rev-panel .line .v { font-size: 12px; color: var(--ink); line-height: 1.35; }
+.rev-panel .line.better .v { color: var(--accent); }
+
+.rev-panel .note { font-size: 10.5px; line-height: 1.5; color: var(--ink-2); }
+.rev-panel .note.idle { color: var(--ink-3); }
+.rev-panel .luck {
+  font-size: 10px; line-height: 1.45; padding-top: 7px; border-top: 1px solid var(--rule);
+}
+.rev-panel .luck.up { color: var(--p5); }
+.rev-panel .luck.down { color: var(--ink-2); }
+
+/* the scrubber, where the dock sits in the live game */
+.rev-bar {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: rgba(252,250,245,.95);
+  border: 1px solid var(--border); border-radius: 3px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 14px 34px rgba(80,68,44,.14);
+  width: max-content; max-width: calc(100% - 32px);
+}
+.rev-bar .div { width: 1px; align-self: stretch; background: var(--rule); }
+.rev-bar .nav {
+  width: 28px; height: 28px; border: 1px solid var(--border); background: transparent;
+  color: var(--ink-2); border-radius: 2px; cursor: pointer; font-size: 13px;
+  transition: all .18s var(--ease);
+}
+.rev-bar .nav:hover { border-color: var(--ink); color: var(--ink); }
+
+/* Every decision you made, in order, coloured by grade. It's the scrubber and
+   the shape of the game at once — a run of red through the middle turns says
+   more than any summary line could. */
+.rev-bar .tape {
+  display: flex; gap: 2px; align-items: flex-end;
+  max-width: 46vw; overflow-x: auto; padding: 3px 0;
+}
+.rev-bar .tick {
+  width: 7px; flex-shrink: 0;
+  border: 0; border-radius: 1px; cursor: pointer; padding: 0;
+  opacity: .5; transition: opacity .16s var(--ease);
+}
+.rev-bar .tick:hover { opacity: 1; }
+.rev-bar .tick.on { opacity: 1; outline: 1px solid var(--ink); outline-offset: 1px; }
+.rev-bar .tick.best       { background: var(--g-best);       height: 9px; }
+.rev-bar .tick.good       { background: var(--g-good);       height: 11px; }
+.rev-bar .tick.inaccuracy { background: var(--g-inaccuracy); height: 14px; }
+.rev-bar .tick.mistake    { background: var(--g-mistake);    height: 18px; }
+.rev-bar .tick.blunder    { background: var(--g-blunder);    height: 22px; }
+
+/* ── past games, on the setup screen ── */
+
+.pastgames { margin-top: 34px; margin-bottom: 0; }
+.games { display: flex; flex-direction: column; gap: 1px; max-height: 232px; overflow-y: auto; }
+.game { display: flex; align-items: stretch; background: var(--paper-2); }
+.game .open {
+  flex: 1; min-width: 0;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+  padding: 10px 13px; background: transparent; border: 0;
+  text-align: left; cursor: pointer; font-family: inherit;
+  transition: background .18s var(--ease);
+}
+.game .open:hover:not(:disabled) { background: var(--paper-3); }
+.game .open:disabled { cursor: not-allowed; opacity: .45; }
+.game .dots { display: flex; gap: 3px; }
+/* a hollow dot is a bot seat, a solid one is you — the same distinction the seat
+   picker makes, so the list reads without needing a legend */
+.game .dots .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.game .dots .dot.bot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+.game .what { font-size: 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game .when { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.game.stale .what { color: var(--ink-3); font-style: italic; }
+.game .del {
+  padding: 0 12px; background: transparent; border: 0; color: var(--ink-3);
+  font-size: 15px; cursor: pointer; transition: color .18s var(--ease);
+}
+.game .del:hover { color: var(--p1); }
+
+.endgame-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.endgame-actions .go { margin-top: 0; }

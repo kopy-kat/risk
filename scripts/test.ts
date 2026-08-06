@@ -6,6 +6,7 @@ import { TERRITORY_IDS, ADJACENCY, TERRITORIES_IN, CONTINENT_IDS, CONTINENTS } f
 import { CASH_VALUES, cashValue, isValidSet, findSets } from '../src/engine/cards'
 import {
   armiesNeededFor,
+  expectedDefendersLeft,
   expectedLoss,
   expectedSurvivors,
   exchangeOdds,
@@ -13,6 +14,7 @@ import {
 } from '../src/engine/combat'
 import {
   applyMove, bestTradeIn, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn,
+  RULES_VERSION,
 } from '../src/engine/game'
 import { rngFrom } from '../src/engine/rng'
 import {
@@ -20,6 +22,10 @@ import {
   targetsFor, validDestination, validSelection,
 } from '../src/ui/decide'
 import type { TerritoryId } from '../src/engine/board'
+import { reviewGame } from '../src/review/review'
+import { BOT_BY_KEY } from '../src/bots'
+import { stepBot } from '../src/bots/play'
+import { evalMove, rivalCount } from '../src/review/price'
 import type { Card, GameState } from '../src/engine/types'
 
 let passed = 0
@@ -499,6 +505,129 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     ok(UNDOABLE.has(t) && !CLEARS_UNDO.has(t), `${t} is undoable`)
   for (const t of ['attack', 'blitz', 'endTurn'] as const)
     ok(CLEARS_UNDO.has(t) && !UNDOABLE.has(t), `${t} closes the undo window`)
+}
+
+// ── a game is its seed plus its move list ─────────────────────────
+// This is the property the whole review feature rests on: replaying the recorded
+// moves against a fresh game must reproduce the original exactly, dice included.
+// If it ever stops holding, saved games silently render boards that never existed.
+{
+  const seats = [
+    { name: 'A', bot: 'colonel' },
+    { name: 'B', bot: 'general' },
+    { name: 'C', bot: 'marshal' },
+  ]
+  const rng = rngFrom(4242)
+  let s = createGame({ seats, seed: 777 })
+  while (s.phase !== 'gameOver' && s.turn < 60) {
+    s = stepBot(s, BOT_BY_KEY[s.players[s.current].bot!], () => rng.next())
+  }
+  ok(s.moves.length > 100, `a played game records its moves, got ${s.moves.length}`)
+
+  let r = createGame({ seats, seed: 777 })
+  for (const m of s.moves) r = applyMove(r, m)
+  eq(r.owner, s.owner, 'replay reproduces every territory owner')
+  eq(r.troops, s.troops, 'replay reproduces every troop count')
+  eq(r.rngState, s.rngState, 'replay lands on the same generator state — the dice matched')
+  eq(r.winner, s.winner, 'replay reproduces the result')
+  eq(r.turn, s.turn, 'replay reproduces the turn count')
+  eq(
+    r.players.map((p) => p.cards.map((c) => c.id)),
+    s.players.map((p) => p.cards.map((c) => c.id)),
+    'replay reproduces every hand, so the deck was dealt identically',
+  )
+
+  // the move list is per-state, not shared — this is what makes undo correct
+  const before = s.moves.length
+  const mid = createGame({ seats, seed: 777 })
+  const after = applyMove(mid, s.moves[0])
+  eq(mid.moves.length, 0, 'applying a move leaves the original move list alone')
+  eq(after.moves.length, 1, 'the new state carries the move')
+  eq(s.moves.length, before, 'and the finished game is untouched by any of it')
+}
+
+// ── the reviewer prices moves without rolling them ────────────────
+{
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: 'general' }]
+  let s = createGame({ seats, seed: 51 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+
+  // Same position, same price, every time. A reviewer that sampled dice would
+  // grade the same decision differently on each viewing.
+  const move = legalMoves(s)[0]
+  const a = evalMove(s, move, s.current, rivalCount(s, s.current))
+  const b = evalMove(s, move, s.current, rivalCount(s, s.current))
+  eq(a, b, 'evaluating a move twice gives the same number')
+
+  // and it must not consume the generator, or "analysing" would change the game
+  const rngBefore = s.rngState
+  for (const m of legalMoves(s).slice(0, 20)) evalMove(s, m, s.current, 2)
+  eq(s.rngState, rngBefore, 'pricing moves never touches the dice')
+}
+
+// ── the reviewer judges the right seats, and only them ────────────
+{
+  const seats = [
+    { name: 'You', bot: null },
+    { name: 'Bot', bot: 'general' },
+  ]
+  const rng = rngFrom(31337)
+  let s = createGame({ seats, seed: 2024 })
+  while (s.phase !== 'gameOver' && s.turn < 25) {
+    s = stepBot(s, BOT_BY_KEY[s.players[s.current].bot ?? 'colonel'], () => rng.next())
+  }
+  const base = {
+    id: 't', schema: 1, rules: RULES_VERSION, seed: 2024, botSeed: 0, seats,
+    moves: s.moves, assisted: [] as number[], winner: s.winner, turns: s.turn,
+    finished: s.phase === 'gameOver', savedAt: 0,
+  }
+
+  const all = reviewGame(base)
+  ok(all.judgements.length > 0, 'a played game produces judgements')
+  ok(!all.error, `the recorded game replays cleanly: ${all.error}`)
+  ok(
+    all.judgements.every((j) => j.player === 0),
+    'only the human seat is judged — the bot is not being graded',
+  )
+  ok(all.judgements.every((j) => j.loss >= 0), 'no decision scores better than the best available')
+
+  // Moves the app played on your behalf must not be held against you.
+  const skipped = all.judgements.map((j) => j.index).slice(0, 3)
+  const partial = reviewGame({ ...base, assisted: skipped })
+  ok(
+    skipped.every((i) => !partial.judgements.some((j) => j.index === i)),
+    'auto-placed moves are excluded from the review',
+  )
+  eq(
+    partial.judgements.length,
+    all.judgements.length - skipped.length,
+    'and excluding them removes exactly those decisions',
+  )
+
+  // Reviewing is read-only: it must not disturb the record it was handed.
+  eq(base.moves.length, s.moves.length, 'reviewing leaves the stored move list alone')
+}
+
+// ── expected defenders left, against the closed form ──────────────
+{
+  // With one attacker army the attack is already spent, so every defender stands.
+  eq(expectedDefendersLeft(1, 5), 5, 'a spent attack leaves the defence intact')
+  eq(expectedDefendersLeft(5, 0), 0, 'nothing to defend with')
+  ok(
+    expectedDefendersLeft(10, 8) < 8,
+    'a big attack that still fails has thinned the defence',
+  )
+  ok(
+    expectedDefendersLeft(2, 8) > expectedDefendersLeft(8, 8),
+    'a bigger attacker leaves fewer defenders standing even in defeat',
+  )
+  // Both branches have to account for the whole battle: on a win no defenders are
+  // left at all, so the unconditional expectation is just the losing branch's
+  // share — and it has to land strictly between "none" and "all of them".
+  for (const [a, d] of [[5, 3], [8, 5], [4, 4], [12, 8]] as const) {
+    const expected = (1 - winProb(a, d)) * expectedDefendersLeft(a, d)
+    ok(expected > 0 && expected < d, `defenders left for ${a}v${d} is in range, got ${expected}`)
+  }
 }
 
 console.log(`\n${passed} assertions passed`)

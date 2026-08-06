@@ -361,6 +361,61 @@ Win-rate neutral, and kept anyway. It's on the human-likeness list, not the stre
 list, and an attacker has already committed forces to our border so it isn't
 *unsound* either.
 
+### One ply is fine for judging, and wrong for playing
+
+The game reviewer (`src/review/price.ts`) scores candidate moves by the position
+they lead to — which is, structurally, the thing that just failed three times. It's
+worth being explicit about why that isn't a fourth attempt.
+
+The objection that killed the lookahead was depth: the position after our capture
+says little about the position after three replies. That is an objection to
+*predicting* a game still being played. A review predicts nothing — the game is
+over, the replies are already in the record, and the only question is what the
+alternatives were worth at the moment of choice. One ply isn't an approximation of
+that answer, it's the whole of it. No bot imports the module, and the tiers are
+unchanged.
+
+Its objective is own score minus the **sum** of rival scores over a divisor fixed
+at the decision point. Both halves avoid a specific failure:
+
+- Not attempt 1's *strongest rival*, which is negative by construction.
+- Not the **mean** of live rivals either, which looks equivalent and isn't:
+  eliminating the weakest player raises the mean of those left, so a mean-based
+  objective scores the single biggest swing in Risk as a *loss*. A sum over a fixed
+  divisor makes an elimination remove that rival's score outright.
+
+It needed one new combat table, `expectedDefendersLeft` — the mirror of
+`expectedSurvivors`, giving the losing branch of an attack. Without it that branch
+has to be guessed, and a guess there biases every attack judgement the same way.
+Both are pinned against Monte Carlo in `scripts/test.ts`.
+
+And it is entirely downstream of the evaluation fix above. Built on the old
+`assess`, the reviewer would have told people that 58% of their good attacks were
+mistakes.
+
+**Judging whole alternatives needs exposure bounded; playing doesn't.** `assess`
+leaves exposure unbounded and `EXPOSURE_WEIGHT` sets its influence, which is right
+for agents: they compare small local changes, and the unbounded part largely
+cancels. A reviewer compares *whole* alternatives, and there a border facing a
+180-army stack contributes a shortfall of a hundred on its own. Unbounded, Colonel's
+fortifies scored a mean 14.8-army loss against Marshal's 0.9 — entirely because
+Colonel's stacks are bigger, not because its fortifies are worse — and the reviewer
+ranked Colonel below `easy` as a result. Bounded per territory at 12 (`garrisonFor`'s
+ceiling) inside `src/review/price.ts`, deliberately not in `assess`, so nothing that
+plays is touched.
+
+`npm run review-check` measures the result against the ladder:
+
+```
+marshal 1.65 ±.10  ≈  general 1.55 ±.08  <  colonel 4.19 ±.19  <  easy 4.81 ±.20  <  random 6.87 ±.10
+```
+
+**Marshal and General tie, and that's the honest answer.** Both of Marshal's
+additions — elimination hunting and table reading — pay off across turns rather than
+within one decision, so a per-move metric has no way to see them. The same fact the
+ablation table above reports as "multiplayer specialist" shows up here as a tie. It
+is a limit of per-decision review, not a defect in the tiers.
+
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Still open** — search *over* plans (as opposed to choosing one greedily),
    personality/posture variation so two Marshals don't play identically, and a

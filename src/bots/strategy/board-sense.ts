@@ -48,6 +48,22 @@ export const pressure = (s: GameState, me: PlayerId, t: TerritoryId): number =>
 export const borderSecurityRatio = (s: GameState, me: PlayerId, t: TerritoryId): number =>
   pressure(s, me, t) / Math.max(1, s.troops[t])
 
+const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
+
+/**
+ * Garrison a territory should keep, given what's pointed at it. Interior ground
+ * needs one army; a border needs enough that taking it costs more than it's worth.
+ *
+ * Shared rather than private to the bot because the review's evaluator has to
+ * model the same choice — if the two disagreed about how many armies advance
+ * after a capture, the reviewer would price its own recommendations differently
+ * from the way the bot would actually play them.
+ */
+export function garrisonFor(s: GameState, me: PlayerId, t: TerritoryId): number {
+  if (!isBorder(s, me, t)) return 1
+  return clamp(Math.ceil(pressure(s, me, t) * 0.55), 2, 12)
+}
+
 export interface ContinentStanding {
   id: ContinentId
   size: number
