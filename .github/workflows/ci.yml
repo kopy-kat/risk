@@ -44,3 +44,27 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Separate job so it runs alongside the one above rather than after it, and so a
+  # miscalibrated reviewer reads as its own failure rather than "tests broke".
+  reviewer:
+    name: reviewer calibration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The reviewer grades human moves against `assess`, so retuning the
+      # evaluation silently recalibrates it — and a reviewer that has drifted
+      # tells people their good moves were mistakes, which is worse than not
+      # shipping one. This is the only thing that catches that, and `assess` has
+      # already moved twice. Eight games per tier keeps it under a minute; run
+      # `npm run review-check 40` locally before changing any weights.
+      - name: Reviewer calibration
+        run: npm run review-check -- 8

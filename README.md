@@ -166,16 +166,24 @@ Colonel beats easy beats random — so the reviewer, pointed at each tier's own 
 not *contradict* it. Measured per decision rather than by win rate:
 
 ```
-marshal 1.65 ±.10  ≈  general 1.55 ±.08  <  colonel 4.19 ±.19  <  easy 4.81 ±.20  <  random 6.87 ±.10
-                             mean armies given up per decision
+                      mean armies given up per decision, and the paired per-seed gap
+marshal 1.65  ≈  general 1.55      +0.02 ± 0.37   tied
+general 1.55  <  colonel 4.19      −1.12 ± 0.90   separated
+colonel 4.19  <  easy    4.81      −0.87 ± 1.59   tied
+easy    4.81  <  random  6.87      −2.52 ± 1.65   separated
 ```
 
-Marshal and General come out **tied**, and that's the honest answer rather than a failure.
-Marshal's edge is elimination hunting and table reading — strategy that pays off across
-turns — while this measures single decisions. A per-move metric shouldn't be expected to
-see it, and claiming a 0.1-army difference over 3,000 long-tailed samples would be a claim
-the data can't support. Which is why the check is stated as "nothing contradicts the
-ladder" and carries standard errors, the same reason `bench.ts` reports Wilson intervals.
+Two comparisons separate and two don't, and that's the honest result rather than a
+failure. Marshal's edge over General is elimination hunting and table reading — strategy
+paying off across turns — while this measures single decisions, so a per-move metric has
+no way to see it. Colonel and easy simply need more games than a CI run can afford.
+
+Games are compared **paired by seed**, for the reason `bench.ts` pairs: every tier plays
+the same seed set, so differencing within a seed cancels map luck. Pairing also fixes a
+subtler trap — decisions are *not* independent samples. A bad position produces a whole
+run of bad decisions, so treating four thousand clustered decisions as four thousand
+observations understates the error by about 4× — enough to flip this check between sample
+sizes, which is exactly how the bug was found. The unit of independence is the game.
 
 It also checks that luck averages to nothing (pooled: −0.025 armies per attack). A
 persistent bias there would mean the expectation model and the dice disagree, and would

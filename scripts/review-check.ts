@@ -72,7 +72,7 @@ const started = Date.now()
 const rows: Array<{
   tier: string
   n: number
-  se: number
+  perGame: number[]
   mean: number
   p50: number
   p90: number
@@ -82,35 +82,40 @@ const rows: Array<{
   grades: Record<Grade, number>
 }> = []
 
+const seedFor = (g: number) => g * 104729 + 7
+
 for (const tier of TIERS) {
   if (!ALL_BOTS.some((b) => b.key === tier)) continue
   const losses: number[] = []
+  /** mean loss per game, so games can be compared seed by seed below */
+  const perGame: number[] = []
   const grades = Object.fromEntries(GRADES.map((g) => [g, 0])) as Record<Grade, number>
   let luck = 0
   let attacks = 0
   for (let g = 0; g < GAMES; g++) {
-    const record = play(tier, g * 104729 + 7)
+    const record = play(tier, seedFor(g))
     // Seat 0 only. Reviewing every seat would quadruple the work for the same
     // answer, since all four play the same tier.
     const review = reviewGame(record, { players: [0] })
     if (review.error) throw new Error(`${tier} game ${g}: ${review.error}`)
+    let sum = 0
     for (const j of review.judgements) {
       losses.push(j.loss)
+      sum += j.loss
       grades[j.grade]++
       if (j.luck !== null) {
         luck += j.luck
         attacks++
       }
     }
+    perGame.push(review.judgements.length ? sum / review.judgements.length : 0)
   }
   losses.sort((a, b) => a - b)
   const mean = losses.reduce((n, x) => n + x, 0) / Math.max(1, losses.length)
-  const variance =
-    losses.reduce((n, x) => n + (x - mean) ** 2, 0) / Math.max(1, losses.length - 1)
   rows.push({
     tier,
     n: losses.length,
-    se: Math.sqrt(variance / Math.max(1, losses.length)),
+    perGame,
     mean,
     p50: quantile(losses, 0.5),
     p90: quantile(losses, 0.9),
@@ -150,24 +155,32 @@ console.log(`\n${GAMES} games per tier, ${SEATS} seats, in ${((Date.now() - star
 // agreeing with `npm run bench` about which bots are better, measured a completely
 // different way — per decision rather than by win rate.
 //
-// Stated as "not significantly worse" rather than "strictly ordered" because the
-// loss distribution has a long tail, so the mean carries real error. Claiming a
-// 0.1-army difference over ~3,000 noisy decisions is a claim the data can't
-// support — the same reason `bench.ts` reports Wilson intervals instead of raw
-// win counts.
+// Compared **paired by seed**, for the reason `bench.ts` already pairs: every tier
+// plays the same seed set, so differencing within a seed cancels map luck instead
+// of adding it. It also fixes a subtler error — decisions are not independent
+// samples. A bad position produces a whole run of bad decisions, so treating four
+// thousand clustered decisions as four thousand observations understates the error
+// badly enough to flip this check between sample sizes. The unit of independence
+// is the game, so that is what gets averaged and differenced.
 console.log('\nordering (mean armies given up per decision, weakest last):')
 let ok = true
 for (let i = 1; i < rows.length; i++) {
   const prev = rows[i - 1]
   const cur = rows[i]
-  // 95% interval on the *difference* of two independent means
-  const margin = 2 * Math.hypot(prev.se, cur.se)
-  const inverted = prev.mean - cur.mean > margin
+  // paired per-seed differences: positive means the weaker tier played better
+  const diffs = prev.perGame.map((x, g) => x - cur.perGame[g])
+  const mean = diffs.reduce((n, x) => n + x, 0) / diffs.length
+  const variance =
+    diffs.length > 1
+      ? diffs.reduce((n, x) => n + (x - mean) ** 2, 0) / (diffs.length - 1)
+      : 0
+  const se = Math.sqrt(variance / diffs.length)
+  const inverted = mean > 2 * se
   if (inverted) ok = false
-  const rel = inverted ? '≫ (!)' : cur.mean >= prev.mean ? '<' : '≈'
+  const rel = inverted ? '≫ (!)' : mean < 0 ? '<' : '≈'
   console.log(
-    `  ${prev.tier} ${prev.mean.toFixed(2)}±${prev.se.toFixed(2)} ${rel} ` +
-      `${cur.tier} ${cur.mean.toFixed(2)}±${cur.se.toFixed(2)}`,
+    `  ${prev.tier.padEnd(8)} ${prev.mean.toFixed(2)} ${rel} ${cur.tier.padEnd(8)} ${cur.mean.toFixed(2)}` +
+      `   (paired diff ${mean >= 0 ? '+' : ''}${mean.toFixed(2)} ± ${(2 * se).toFixed(2)})`,
   )
 }
 console.log(
