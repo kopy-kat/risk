@@ -166,10 +166,10 @@ from one that opened.
 ```
 heads-up, win rate, row vs column
            marshal  general  colonel     easy   random
-marshal          —      49%      57%      68%     100%
-general        51%        —      57%      68%     100%
-colonel        43%      43%        —      67%     100%
-easy           32%      32%      33%        —      99%
+marshal          —      61%      67%      77%     100%
+general        40%        —      58%      69%     100%
+colonel        33%      42%        —      67%     100%
+easy           23%      31%      33%        —      99%
 random          0%       0%       0%       1%        —
 ```
 
@@ -179,7 +179,33 @@ Mixed games (random seat counts, 150 games): marshal 42% · general 32% · colon
 At four seats: General beats Colonel 64/36, Marshal beats General 59/41 and Colonel
 70/30.
 
-### Marshal ties General heads-up, and that is the correct answer
+### The plan layer
+
+Everything before it scored targets one at a time, which lets a bot drift — a
+territory in Africa, then one in Asia, then reinforcing Europe, ending the turn
+having advanced nothing. People don't play that way: they decide *"I'm taking
+Australia this turn"* and spend the turn doing it.
+
+`plans.ts` picks one intent per turn — expand, deny, decapitate, cycle or
+consolidate — rates them all in armies-per-army-spent so different kinds are
+comparable, and everything else serves the winner. It's recomputed from the
+position each call rather than stored, so agents stay pure functions of state.
+
+**Worth +10 points heads-up, and about −12 at four seats**, so it is gated to
+duels. A plan is a claim about the next several turns; at a full table three other
+people rearrange the board before your next one, so the claim expires before it
+pays. In a duel it survives — which is exactly where the top tier needed help.
+
+Two failed attempts at hedging it are worth recording. Splitting the reinforcement
+pool between objective and threatened border did nothing, because the engine
+re-enters `decide` for the remainder and it lands at the same door. Defending first
+at a full table was actively worse (−17). Commitment is either right or it isn't;
+half-commitment is neither.
+
+That closed the last gap in the ladder: Marshal went from level with General
+heads-up to **62.7%**.
+
+### Marshal used to tie General heads-up, and that was the correct answer
 
 Both of Marshal's tools are inherently multi-player. "Eliminate a rival for their
 cards" and "win the game" are the same sentence when there is one opponent, and
@@ -191,9 +217,9 @@ there is no table to read. The ablation is unambiguous:
 | table reading | +0.3 | **+4.3** |
 | pressing an advantage | +0.2 | −1.7 |
 
-So Marshal is a multiplayer specialist, not a uniformly stronger bot. Giving it a
-heads-up edge needs genuine multi-turn planning, not another heuristic — that is
-the honest next piece of work rather than something to paper over.
+That made Marshal a multiplayer specialist. The prediction at the time was that a
+heads-up edge would need genuine multi-turn planning rather than another heuristic,
+and that turned out to be right: the plan layer above supplied it.
 
 Pressing an advantage was **removed**: it measured mildly *harmful*, which is not
 what anyone would guess about "take longer odds when you're clearly winning".
@@ -335,8 +361,10 @@ Win-rate neutral, and kept anyway. It's on the human-likeness list, not the stre
 list, and an attacker has already committed forces to our border so it isn't
 *unsound* either.
 
-7. **Still open** — plan-level search, personality/posture variation, and a heads-up
-   edge for the top tier.
+7. **Plan layer** — done (`plans.ts`), gated to duels.
+8. **Still open** — search *over* plans (as opposed to choosing one greedily),
+   personality/posture variation so two Marshals don't play identically, and a
+   plan layer that survives a full table.
 
 ## The search layer
 
