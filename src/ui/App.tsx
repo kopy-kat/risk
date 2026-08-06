@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ADJACENCY, TERRITORY_IDS } from '../engine/board'
+import { TERRITORY_IDS } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
-import {
-  attackableFrom, bestTradeIn, connectedOwn, createGame, applyMove, territoriesOf, HAND_LIMIT,
-} from '../engine/game'
+import { bestTradeIn, createGame, applyMove, territoriesOf } from '../engine/game'
 import type { SeatConfig } from '../engine/game'
-import { findSets } from '../engine/cards'
 import { rngFrom } from '../engine/rng'
 import type { GameState, LogEntry, Move } from '../engine/types'
 import { BOT_BY_KEY } from '../bots'
@@ -16,15 +13,14 @@ import { Dock } from './Dock'
 import type { PrimaryAction } from './Dock'
 import { Setup } from './Setup'
 import { playerColor } from './colors'
+import {
+  CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
+  targetsFor, validDestination, validSelection,
+} from './decide'
 
 const BOT_DELAY = { setup: 60, move: 260 }
 /** backstop so a misbehaving bot can't spin the skip button forever */
 const SKIP_MOVE_CAP = 100_000
-
-/** Deterministic moves — safe to rewind past. */
-const UNDOABLE = new Set<Move['type']>(['deploy', 'tradeCards', 'fortify', 'endAttack'])
-/** Rolling dice or ending the turn (which draws a card) closes the undo window. */
-const CLEARS_UNDO = new Set<Move['type']>(['attack', 'blitz', 'endTurn'])
 
 export function App() {
   const [game, setGame] = useState<GameState | null>(null)
@@ -167,113 +163,51 @@ export function App() {
   }, [game])
 
   const me = game ? game.players[game.current] : null
-  const isHuman = !!me && !me.bot
+  const isHuman = !!game && isHumanTurn(game)
 
-  const mustTrade =
-    !!game && !!me && game.phase === 'deploy' && me.cards.length >= HAND_LIMIT && findSets(me.cards).length > 0
+  const sel = useMemo<TerritoryId | null>(
+    () => (game ? validSelection(game, selected) : null),
+    [game, selected],
+  )
 
-  /**
-   * A selection is only real if the current state still permits acting on it.
-   * Deriving this instead of relying on effects to clear `selected` is what stops
-   * stale selections: a blitz can spend the attacker down to one army, and a
-   * fortify can be used up, and neither changes phase or player — so nothing
-   * dependency-based would fire.
-   */
-  const sel = useMemo<TerritoryId | null>(() => {
-    if (!game || !selected || !isHuman || !me) return null
-    if (game.owner[selected] !== me.id) return null
-    if (game.troops[selected] < 2) return null
-    if (game.phase === 'attack') return attackableFrom(game, selected).length ? selected : null
-    if (game.phase === 'fortify') return game.canFortify && connectedOwn(game, me.id, selected).size ? selected : null
-    return null
-  }, [game, selected, isHuman, me])
+  const targets = useMemo<Set<TerritoryId>>(
+    () => (game ? targetsFor(game, sel) : new Set()),
+    [game, sel],
+  )
 
-  const targets = useMemo<Set<TerritoryId>>(() => {
-    if (!game || !sel) return new Set()
-    if (game.phase === 'attack') return new Set(attackableFrom(game, sel))
-    if (game.phase === 'fortify') return connectedOwn(game, game.current, sel)
-    return new Set()
-  }, [game, sel])
+  const dest = validDestination(sel, fortifyTo, targets)
 
-  /** likewise: a fortify destination only counts while it's still reachable */
-  const dest = sel && fortifyTo && targets.has(fortifyTo) ? fortifyTo : null
+  const preview = useMemo<Record<TerritoryId, number> | null>(
+    () => (game ? previewFor(game, amount, sel, dest) : null),
+    [game, amount, sel, dest],
+  )
 
-  /**
-   * What the badges would read if you confirmed — for the two moves where you pick
-   * an amount and the result is certain. An attack has no honest preview: the dice
-   * decide, so the map keeps showing what's actually there.
-   *
-   * The amounts are clamped exactly as the primary action clamps them, so the map
-   * can never promise a number the move wouldn't produce.
-   */
-  const preview = useMemo<Record<TerritoryId, number> | null>(() => {
-    if (!game || !isHuman) return null
-    if (game.phase === 'occupy' && game.pendingOccupation) {
-      const occ = game.pendingOccupation
-      const n = Math.min(Math.max(amount, occ.min), occ.max)
-      return { [occ.from]: game.troops[occ.from] - n, [occ.to]: game.troops[occ.to] + n }
-    }
-    if (game.phase === 'fortify' && sel && dest) {
-      const n = Math.min(Math.max(amount, 1), game.troops[sel] - 1)
-      return { [sel]: game.troops[sel] - n, [dest]: game.troops[dest] + n }
-    }
-    return null
-  }, [game, isHuman, amount, sel, dest])
-
-  const clickable = useMemo<Set<TerritoryId>>(() => {
-    const out = new Set<TerritoryId>()
-    if (!game || !isHuman || !me) return out
-    const mine = territoriesOf(game, me.id)
-    switch (game.phase) {
-      case 'setup':
-        if (me.reserve > 0 && !autoSetup) mine.forEach((t) => out.add(t))
-        break
-      case 'deploy':
-        if (game.toDeploy > 0 && !mustTrade) mine.forEach((t) => out.add(t))
-        break
-      case 'attack':
-        mine.forEach((t) => { if (attackableFrom(game, t).length) out.add(t) })
-        targets.forEach((t) => out.add(t))
-        break
-      case 'fortify':
-        if (game.canFortify) {
-          mine.forEach((t) => { if (game.troops[t] > 1 && connectedOwn(game, me.id, t).size) out.add(t) })
-          targets.forEach((t) => out.add(t))
-        }
-        break
-    }
-    return out
-  }, [game, isHuman, me, targets, mustTrade, autoSetup])
+  const clickable = useMemo<Set<TerritoryId>>(
+    () => (game ? clickableFor(game, targets, autoSetup) : new Set()),
+    [game, targets, autoSetup],
+  )
 
   const pick = useCallback(
     (t: TerritoryId, shift: boolean) => {
       if (!game || !me) return
-      switch (game.phase) {
-        case 'setup':
-          play({ type: 'placeInitial', territory: t })
-          break
-        case 'deploy': {
-          // click places the current amount; shift means "all of it"
-          const count = shift ? game.toDeploy : Math.min(Math.max(1, amount), game.toDeploy)
-          play({ type: 'deploy', territory: t, count })
-          break
+      // Clicks that play a move are decided in `decide`; the ones left here are
+      // the two that only move UI state around.
+      const move = moveForClick(game, t, shift, amount, sel)
+      if (move) {
+        // one click, one battle: a blitz rolls until the territory falls or the
+        // attack runs dry. Rolling a single round at a time was only ceremony.
+        play(move)
+        return
+      }
+      if (game.phase === 'attack' && game.owner[t] === me.id) setSelected(t)
+      else if (game.phase === 'fortify') {
+        if (sel && targets.has(t)) {
+          setFortifyTo(t)
+          setAmount(game.troops[sel] - 1)   // default to sending the stack; Min is one click away
+        } else if (game.owner[t] === me.id && game.troops[t] > 1) {
+          setSelected(t)
+          setFortifyTo(null)
         }
-        case 'attack':
-          if (game.owner[t] === me.id) setSelected(t)
-          // one click, one battle: roll until the territory falls or the attack
-          // runs dry. Rolling a single round at a time was only ever ceremony.
-          else if (sel && ADJACENCY[sel].includes(t)) play({ type: 'blitz', from: sel, to: t })
-          break
-        case 'fortify':
-          if (sel && targets.has(t)) {
-            setFortifyTo(t)
-            setAmount(game.troops[sel] - 1)   // default to sending the stack; Min is one click away
-          }
-          else if (game.owner[t] === me.id && game.troops[t] > 1) {
-            setSelected(t)
-            setFortifyTo(null)
-          }
-          break
       }
     },
     [game, me, amount, sel, targets, play],
@@ -297,36 +231,14 @@ export function App() {
    * value means the label always tells the truth about the key.
    */
   const primary = useMemo<PrimaryAction | null>(() => {
-    if (!game || game.phase === 'gameOver') return null
-    const cur = game.players[game.current]
-    if (cur.bot) {
-      const nextHuman = game.players.find((p) => p.alive && !p.bot)
-      return { label: nextHuman ? `Skip to ${nextHuman.name}` : 'Skip to end', run: skipBots }
-    }
-    switch (game.phase) {
-      case 'setup':
-        return { label: 'Auto-place rest', run: () => setAutoSetup(true) }
-      case 'attack':
-        return { label: 'End attack', run: () => play({ type: 'endAttack' }) }
-      case 'occupy': {
-        const occ = game.pendingOccupation!
-        const extra = Math.min(Math.max(amount, occ.min), occ.max)
-        return { label: 'Confirm', run: () => play({ type: 'occupy', count: extra }) }
-      }
-      case 'fortify':
-        // never offer a fortify once it's been spent, whatever the selection says
-        if (sel && dest) {
-          const max = game.troops[sel] - 1
-          const n = Math.min(Math.max(amount, 1), max)
-          return {
-            label: 'Confirm · end turn',
-            run: () => play({ type: 'fortify', from: sel, to: dest, count: n }),
-          }
-        }
-        return { label: 'End turn', run: () => play({ type: 'endTurn' }) }
-      default:
-        return null
-    }
+    if (!game) return null
+    const p = primaryFor(game, amount, sel, dest)
+    if (!p) return null
+    const run =
+      p.kind === 'skipBots' ? skipBots
+        : p.kind === 'autoSetup' ? () => setAutoSetup(true)
+          : () => play(p.move!)
+    return { label: p.label, run }
   }, [game, amount, sel, dest, play, skipBots])
 
   // ── keyboard ──────────────────────────────────────────────────
