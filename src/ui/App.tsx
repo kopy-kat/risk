@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ADJACENCY, TERRITORY_IDS } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
-import { attackableFrom, connectedOwn, createGame, applyMove, territoriesOf, HAND_LIMIT } from '../engine/game'
+import {
+  attackableFrom, bestTradeIn, connectedOwn, createGame, applyMove, territoriesOf, HAND_LIMIT,
+} from '../engine/game'
 import type { SeatConfig } from '../engine/game'
 import { findSets } from '../engine/cards'
 import { rngFrom } from '../engine/rng'
@@ -11,7 +13,7 @@ import { easyBot } from '../bots/easy'
 import { stepBot } from '../bots/play'
 import { MapView } from './MapView'
 import { Dock } from './Dock'
-import type { PrimaryAction, RollMode } from './Dock'
+import type { PrimaryAction } from './Dock'
 import { Setup } from './Setup'
 import { playerColor } from './colors'
 
@@ -28,11 +30,9 @@ export function App() {
   const [game, setGame] = useState<GameState | null>(null)
   const [selected, setSelected] = useState<TerritoryId | null>(null)
   const [fortifyTo, setFortifyTo] = useState<TerritoryId | null>(null)
-  const [selectedCards, setSelectedCards] = useState<number[]>([])
   const [amount, setAmount] = useState(1)
   const [hover, setHover] = useState<TerritoryId | null>(null)
   const [autoSetup, setAutoSetup] = useState(false)
-  const [rollMode, setRollMode] = useState<RollMode>('blitz')
   const [showSettings, setShowSettings] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /**
@@ -45,10 +45,11 @@ export function App() {
   const [seed, setSeed] = useState(0)
   /** what the bots did while you weren't looking */
   const [recap, setRecap] = useState<LogEntry[] | null>(null)
+  /** how much of the log you've already seen — moves while it's your turn */
   const logMark = useRef(0)
+  /** whether the last state we saw was bot-controlled, so we know when control returns */
+  const wasBot = useRef(false)
   const rng = useRef(rngFrom(12345))
-  /** in-flight typed digits, so multi-digit amounts work without a focusable field */
-  const digits = useRef({ buf: '', at: 0 })
 
   const start = useCallback((seats: SeatConfig[], chosenSeed?: number) => {
     const s = chosenSeed ?? Math.floor(Math.random() * 1e9)
@@ -58,10 +59,10 @@ export function App() {
     setGame(createGame({ seats, seed: s }))
     setSelected(null)
     setFortifyTo(null)
-    setSelectedCards([])
     setAutoSetup(false)
     setRecap(null)
     logMark.current = 0
+    wasBot.current = false
   }, [])
 
   // State updaters must stay side-effect free: React double-invokes them in dev to
@@ -90,7 +91,6 @@ export function App() {
     setHistory((h) => h.slice(0, -1))
     setSelected(null)
     setFortifyTo(null)
-    setSelectedCards([])
     setError(null)
   }, [history])
 
@@ -134,7 +134,6 @@ export function App() {
   useEffect(() => {
     setSelected(null)
     setFortifyTo(null)
-    setSelectedCards([])
     if (phase === 'occupy' && game?.pendingOccupation) setAmount(game.pendingOccupation.max)
     else setAmount(1)
     if (phase !== 'setup') setAutoSetup(false)
@@ -149,18 +148,23 @@ export function App() {
    * What happened while you weren't acting. Deliberately transient rather than a
    * permanent log panel: it appears when control returns to you (which is also
    * what Skip does) and clears on your next move.
+   *
+   * The mark tracks along with your own moves and then freezes for the whole bot
+   * stretch — watching for the change of *player* instead would reset it at every
+   * bot handover, and you'd only ever see the last bot's turn.
    */
   useEffect(() => {
     if (!game) return
-    if (game.players[game.current].bot) {
-      logMark.current = game.log.length          // your turn just ended; start recording
-      return
+    const botNow = !!game.players[game.current].bot
+    if (!botNow) {
+      // your own turn-start line is the last thing logged before control comes
+      // back — it isn't news, so it doesn't belong under "while you were away"
+      const since = game.log.slice(logMark.current).filter((e) => e.player !== game.current)
+      logMark.current = game.log.length
+      if (wasBot.current) setRecap(since.length ? since : null)
     }
-    const since = game.log.slice(logMark.current)
-    logMark.current = game.log.length
-    setRecap(since.length ? since : null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current])
+    wasBot.current = botNow
+  }, [game])
 
   const me = game ? game.players[game.current] : null
   const isHuman = !!me && !me.bot
@@ -194,15 +198,27 @@ export function App() {
   /** likewise: a fortify destination only counts while it's still reachable */
   const dest = sel && fortifyTo && targets.has(fortifyTo) ? fortifyTo : null
 
-  /** Bounds of whichever amount the bar is currently asking for, or null. */
-  const amountRange = useMemo<{ min: number; max: number } | null>(() => {
+  /**
+   * What the badges would read if you confirmed — for the two moves where you pick
+   * an amount and the result is certain. An attack has no honest preview: the dice
+   * decide, so the map keeps showing what's actually there.
+   *
+   * The amounts are clamped exactly as the primary action clamps them, so the map
+   * can never promise a number the move wouldn't produce.
+   */
+  const preview = useMemo<Record<TerritoryId, number> | null>(() => {
     if (!game || !isHuman) return null
-    if (game.phase === 'deploy' && game.toDeploy > 0) return { min: 1, max: game.toDeploy }
-    if (game.phase === 'occupy' && game.pendingOccupation)
-      return { min: game.pendingOccupation.min, max: game.pendingOccupation.max }
-    if (game.phase === 'fortify' && sel && dest) return { min: 1, max: game.troops[sel] - 1 }
+    if (game.phase === 'occupy' && game.pendingOccupation) {
+      const occ = game.pendingOccupation
+      const n = Math.min(Math.max(amount, occ.min), occ.max)
+      return { [occ.from]: game.troops[occ.from] - n, [occ.to]: game.troops[occ.to] + n }
+    }
+    if (game.phase === 'fortify' && sel && dest) {
+      const n = Math.min(Math.max(amount, 1), game.troops[sel] - 1)
+      return { [sel]: game.troops[sel] - n, [dest]: game.troops[dest] + n }
+    }
     return null
-  }, [game, isHuman, sel, dest])
+  }, [game, isHuman, amount, sel, dest])
 
   const clickable = useMemo<Set<TerritoryId>>(() => {
     const out = new Set<TerritoryId>()
@@ -244,15 +260,9 @@ export function App() {
         }
         case 'attack':
           if (game.owner[t] === me.id) setSelected(t)
-          else if (sel && ADJACENCY[sel].includes(t)) {
-            // shift inverts the current roll mode for this one attack
-            const blitz = shift ? rollMode !== 'blitz' : rollMode === 'blitz'
-            play(
-              blitz
-                ? { type: 'blitz', from: sel, to: t }
-                : { type: 'attack', from: sel, to: t, dice: Math.min(3, game.troops[sel] - 1) },
-            )
-          }
+          // one click, one battle: roll until the territory falls or the attack
+          // runs dry. Rolling a single round at a time was only ever ceremony.
+          else if (sel && ADJACENCY[sel].includes(t)) play({ type: 'blitz', from: sel, to: t })
           break
         case 'fortify':
           if (sel && targets.has(t)) {
@@ -266,7 +276,7 @@ export function App() {
           break
       }
     },
-    [game, me, amount, sel, targets, play, rollMode],
+    [game, me, amount, sel, targets, play],
   )
 
   // After a capture resolves, keep the spearhead selected so you can push on.
@@ -343,7 +353,10 @@ export function App() {
       }
       if (showSettings || !game || game.phase === 'gameOver') return
 
-      if (e.key === ' ' || e.key === 'Enter') {
+      // Space is the whole keyboard surface for acting: it presses whatever the
+      // bar's dark button says. Enter used to do the same thing, which only made
+      // the label's ␣ hint a half-truth.
+      if (e.key === ' ') {
         e.preventDefault()
         primary?.run()
         return
@@ -351,43 +364,11 @@ export function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault()
         if (isHuman) undo()
-        return
-      }
-
-      // Digits type into whichever amount the bar is asking for. Worth keeping
-      // where E / S / B / arrows weren't: there's nothing to learn, and it's what
-      // gives the amount control precision without a focusable field.
-      if (!amountRange) return
-      const { min, max } = amountRange
-      const clamp = (n: number) => Math.min(Math.max(n, min), max)
-
-      if (/^[0-9]$/.test(e.key)) {
-        e.preventDefault()
-        const now = Date.now()
-        // a fresh keystroke after a pause starts a new number; quick successive
-        // digits build one up, so 40-army moves are typeable
-        const fresh = now - digits.current.at > 900
-        if (e.key === '0' && (fresh || !digits.current.buf)) {
-          digits.current = { buf: '', at: now }
-          setAmount(max)                       // 0 still means "all of it"
-          return
-        }
-        const buf = (fresh ? '' : digits.current.buf) + e.key
-        digits.current = { buf, at: now }
-        setAmount(clamp(Number(buf)))
-        return
-      }
-      if (e.key === 'Backspace') {
-        e.preventDefault()
-        const buf = digits.current.buf.slice(0, -1)
-        digits.current = { buf, at: Date.now() }
-        setAmount(buf ? clamp(Number(buf)) : min)
-        return
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [game, primary, cancel, showSettings, undo, isHuman, amountRange])
+  }, [game, primary, cancel, showSettings, undo, isHuman])
 
   if (!game) return <Setup onStart={start} />
 
@@ -438,6 +419,7 @@ export function App() {
           clickable={clickable}
           focus={focus}
           flash={game.pendingOccupation?.to ?? null}
+          preview={preview}
           hover={hover}
           onPick={pick}
           onHover={setHover}
@@ -445,16 +427,22 @@ export function App() {
         {recap && (
           <div className="recap" onClick={() => setRecap(null)}>
             <span className="mono-label">While you were away</span>
-            {recap.slice(-7).map((e, i) => (
-              <div
-                className="line"
-                key={i}
-                style={{ ['--c' as string]: e.player === null ? 'var(--ink-3)' : playerColor(game.players[e.player].color) }}
-              >
-                <span className="who">{e.player === null ? '·' : game.players[e.player].name}</span>
-                <span className="what">{e.text}</span>
-              </div>
-            ))}
+            <div className="lines">
+              {/* every move, not a tail of them — the run of lines under one name
+                  is that player's whole turn */}
+              {recap.map((e, i) => (
+                <div
+                  className="line"
+                  key={i}
+                  style={{ ['--c' as string]: e.player === null ? 'var(--ink-3)' : playerColor(game.players[e.player].color) }}
+                >
+                  <span className="who">
+                    {e.player === recap[i - 1]?.player ? '' : e.player === null ? '·' : game.players[e.player].name}
+                  </span>
+                  <span className="what">{e.text}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -463,23 +451,15 @@ export function App() {
           selected={sel}
           fortifyTo={dest}
           amount={amount}
-          selectedCards={selectedCards}
-          rollMode={rollMode}
           primary={primary}
           setAmount={setAmount}
-          onToggleCard={(id) =>
-            setSelectedCards((prev) =>
-              prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 3 ? prev : [...prev, id],
-            )
-          }
           onTrade={() => {
-            play({ type: 'tradeCards', cards: selectedCards })
-            setSelectedCards([])
+            const set = bestTradeIn(game, game.current)
+            if (set) play({ type: 'tradeCards', cards: set.cards })
           }}
           onCancel={cancel}
           onShowSettings={() => setShowSettings((v) => !v)}
           settingsOpen={showSettings}
-          onSetRollMode={setRollMode}
           seed={seed}
           onCloseSettings={() => setShowSettings(false)}
           onUndo={undo}
