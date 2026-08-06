@@ -22,6 +22,8 @@ interface Props {
   /** dim every territory not owned by this player */
   focus: PlayerId | null
   flash: TerritoryId | null
+  /** troop counts the pending move would produce, keyed by territory */
+  preview: Record<TerritoryId, number> | null
   hover: TerritoryId | null
   onPick(t: TerritoryId, shift: boolean): void
   onHover(t: TerritoryId | null): void
@@ -43,7 +45,9 @@ function seaPath(pa: [number, number], pb: [number, number]) {
   return `M ${x1},${y1} Q ${mx},${my} ${x2},${y2}`
 }
 
-export function MapView({ state, selected, targets, clickable, focus, flash, hover, onPick, onHover }: Props) {
+export function MapView({
+  state, selected, targets, clickable, focus, flash, preview, hover, onPick, onHover,
+}: Props) {
   const graticule = useMemo(() => {
     const lines: JSX.Element[] = []
     for (let x = 40; x < 745; x += 60) lines.push(<line key={`v${x}`} className="grat" x1={x} x2={x} y1={0} y2={560} />)
@@ -166,17 +170,28 @@ export function MapView({ state, selected, targets, clickable, focus, flash, hov
 
         <g>{arcs.map((d, i) => <path key={i} className="arc" d={d} />)}</g>
 
+        {/* Troop badges. Under a pending move these read as the count you'd end up
+            with, plus the swing that gets you there — the number you're deciding
+            about is the number on the map, not one you have to do sums for. */}
         <g>
-          {GEOMETRY.map((t) => (
-            <g
-              key={t.id}
-              className={`badge ${dimmed(t.id) ? 'dim' : ''}`}
-              style={{ ['--c' as string]: playerColor(state.owner[t.id]) }}
-            >
-              <circle cx={t.cx} cy={t.cy} r={10.5} />
-              <text x={t.cx} y={t.cy + 4}>{state.troops[t.id]}</text>
-            </g>
-          ))}
+          {GEOMETRY.map((t) => {
+            const now = state.troops[t.id]
+            const after = preview?.[t.id]
+            const delta = after === undefined ? 0 : after - now
+            return (
+              <g
+                key={t.id}
+                className={`badge ${dimmed(t.id) ? 'dim' : ''} ${delta ? 'preview' : ''}`}
+                style={{ ['--c' as string]: playerColor(state.owner[t.id]) }}
+              >
+                <circle cx={t.cx} cy={t.cy} r={10.5} />
+                <text x={t.cx} y={t.cy + 4}>{after ?? now}</text>
+                {!!delta && (
+                  <text className="delta" x={t.cx} y={t.cy + 20}>{delta > 0 ? `+${delta}` : delta}</text>
+                )}
+              </g>
+            )
+          })}
         </g>
       </svg>
 

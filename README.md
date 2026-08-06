@@ -63,28 +63,38 @@ button label carries its own key hint, so nothing has to be memorised or looked 
 
 | key | does |
 | --- | --- |
-| `Space` / `Enter` | press the highlighted button |
+| `Space` | press the highlighted button |
 | `Esc` | deselect / close |
 | `⌘Z` | undo |
-| `0`–`9` | type an amount (digits build up); `0` means all |
-| `Shift`+click | invert: place all, or roll once |
+| `Shift`+click | deploy everything at once |
 
 That's the whole list, and it's short deliberately. Earlier versions also bound `E`
-(end turn), `S` (skip bots), `B` (blitz) and the arrow keys; each was cut because it
-only duplicated Space or a button sitting right next to it — `S` was outright
-redundant, since the primary button during a bot turn *is* "Skip". The full list lives
-in the ⚙ popover rather than a separate cheat sheet.
+(end turn), `S` (skip bots), `B` (blitz), `Enter`, the arrow keys and `0`–`9` for
+typing amounts; each was cut because it only duplicated Space or a button sitting
+right next to it — `S` was outright redundant, since the primary button during a bot
+turn *is* "Skip", and `Enter` made the `␣` printed on that button a half-truth. The
+full list lives in the ⚙ popover rather than a separate cheat sheet.
 
-**Blitz is the default**, matching RISK: Global Domination — clicking a target rolls
-repeatedly at best odds until you take the territory or spend down to one army, so a
-grind that used to be eight clicks is now one. `B` or shift-click gets you a single
-roll when you want to nurse a stack.
+**Every attack is a blitz**, matching RISK: Global Domination — clicking a target
+rolls repeatedly at best odds until you take the territory or spend down to one army,
+so a grind that used to be eight clicks is one. There's no single-roll mode: rolling
+one round at a time changes nothing about the odds, it just makes you click more.
 
 Every "how many armies?" question — deploy, occupy, fortify — uses the same control:
-**Min / − / value / + / All**, with digits typed straight into it. It's deliberately
-not a text input, because a focusable field would own the Space key that belongs to
-Confirm. Occupy and fortify default to moving the whole stack, so the common case is
-capture → Space.
+**Min / − / value / + / All**. It's deliberately not a text input, because a focusable
+field would own the Space key that belongs to Confirm. Occupy and fortify default to
+moving the whole stack, so the common case is capture → Space.
+
+While you're sizing one of those moves, **both territories preview the count they'd
+end on** — dashed badge, accent ink, and the swing (`+3` / `−3`) underneath. The number
+you're deciding about is the number on the map, rather than something to work out from
+a sentence in the bar. Only the two deterministic moves get this: an attack is dice, so
+the map keeps showing what's actually there rather than a number it can't promise.
+
+**Cards trade themselves.** Which three you hand in has exactly one good answer — take
+the +2 territory bonus when it's available, spend wilds last — so the bar highlights
+the set it's about to cash and the button shows what it pays. Choosing the combination
+by hand was busywork dressed up as a decision.
 
 **Undo** covers deploys, card trades and fortifies. The window closes the moment you
 roll dice or end your turn — rewinding past a roll and trying again would be
@@ -101,12 +111,18 @@ the bots all derive from it. That's the difference between "the bot did somethin
 stupid once" and a case you can re-run while fixing it.
 
 When control returns to you — including after Skip — a transient panel lists what the
-bots did. It clears on your next move; it's a recap, not a log panel.
+bots did: every reinforcement, assault, capture and elimination since your last move,
+grouped by player, not a trimmed tail of them. Repeated rolls against one territory
+collapse into a single line (`attacked Ural from China · 3× · −2/−2`), which is what
+keeps "everything" readable. It clears on your next move; it's a recap, not a log
+panel.
 
 Continent labels on the map double as a progress readout — `AUSTRALIA 3/4 +2`, tinted
 by whoever leads and solid once someone holds it outright. Being one territory off a
 continent bonus is the most decision-relevant fact on the board, so it belongs on the
-map rather than in a panel.
+map rather than in a panel. All six sit in open water: `scripts/solve-label-anchors.mjs`
+tests the whole box each label will occupy, inflated by a margin, against the real
+paths — anchor-point-only checks are how the long ones ended up printed across Canada.
 
 Two bits of map rendering worth knowing about, because both are easy to
 reintroduce as bugs:

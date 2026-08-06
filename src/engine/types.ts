@@ -72,6 +72,13 @@ export interface LogEntry {
   turn: number
   player: PlayerId | null
   text: string
+  /**
+   * Consecutive entries sharing a key collapse into one line — six rolls against
+   * the same territory read as one assault, not six.
+   */
+  key?: string
+  /** running totals behind a collapsed line, so it can be rewritten as it grows */
+  tally?: { rounds: number; attackerLoss: number; defenderLoss: number }
 }
 
 export interface GameState {

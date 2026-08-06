@@ -1,7 +1,7 @@
-import { CONTINENTS, TERRITORY_NAMES } from '../engine/board'
+import { TERRITORY_NAMES } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
-import { cashValue, isValidSet } from '../engine/cards'
-import { HAND_LIMIT, continentsHeldBy, territoriesOf } from '../engine/game'
+import { cashValue } from '../engine/cards'
+import { HAND_LIMIT, bestTradeIn } from '../engine/game'
 import type { GameState } from '../engine/types'
 import { SUIT_GLYPH, playerColor } from './colors'
 import { Settings } from './Settings'
@@ -12,24 +12,18 @@ export interface PrimaryAction {
   run(): void
 }
 
-export type RollMode = 'blitz' | 'single'
-
 export interface DockProps {
   state: GameState
   selected: TerritoryId | null
   /** chosen fortify destination, awaiting an amount */
   fortifyTo: TerritoryId | null
   amount: number
-  selectedCards: number[]
-  rollMode: RollMode
   primary: PrimaryAction | null
   setAmount(n: number): void
-  onToggleCard(id: number): void
   onTrade(): void
   onCancel(): void
   onShowSettings(): void
   settingsOpen: boolean
-  onSetRollMode(m: RollMode): void
   onCloseSettings(): void
   seed: number
   onUndo(): void
@@ -62,14 +56,13 @@ function Amount({
       <span className="n">{v}</span>
       <button className="nudge" disabled={disabled || v >= max} onClick={() => onChange(v + 1)}>+</button>
       <button className="preset" disabled={disabled || v >= max} onClick={() => onChange(max)}>All</button>
-      <span className="mono-label hint"><kbd>0–9</kbd></span>
     </div>
   )
 }
 
 export function Dock(props: DockProps) {
   const { state, primary, onShowSettings, onUndo, canUndo } = props
-  const { settingsOpen, rollMode, onSetRollMode, onCloseSettings, seed } = props
+  const { settingsOpen, onCloseSettings, seed } = props
   const me = state.players[state.current]
   const showUndo = !me.bot && state.phase !== 'setup'
 
@@ -124,31 +117,24 @@ export function Dock(props: DockProps) {
         aria-label="Settings"
       >⚙</button>
 
-      {settingsOpen && (
-        <Settings
-          rollMode={rollMode}
-          onSetRollMode={onSetRollMode}
-          seed={seed}
-          onClose={onCloseSettings}
-        />
-      )}
+      {settingsOpen && <Settings seed={seed} onClose={onCloseSettings} />}
     </div>
   )
 }
 
+/**
+ * Just whose turn it is. The territory and army totals that used to hang off the
+ * name are in the scoreboard for every player, which is where you'd compare them
+ * anyway; the only thing not shown up there is which bot is on the clock.
+ */
 function Identity({ state }: { state: GameState }) {
   const me = state.players[state.current]
-  const owned = territoriesOf(state, me.id)
-  const armies = owned.reduce((n, t) => n + state.troops[t], 0)
   return (
     <div className="ident" style={{ ['--c' as string]: playerColor(me.color) }}>
       <span className="swatch" />
       <div className="who">
         <span className="nm">{me.name}</span>
-        <span className="meta">
-          {me.bot ? `Bot · ${me.bot}` : 'You'} · {owned.length}t · {armies}a
-          {state.phase === 'setup' && ` · ${me.reserve} left`}
-        </span>
+        {me.bot && <span className="meta">Bot · {me.bot}</span>}
       </div>
     </div>
   )
@@ -165,12 +151,17 @@ function describeBotPhase(s: GameState) {
   }
 }
 
-function Cards({ state, selectedCards, onToggleCard, onTrade }: DockProps) {
+/**
+ * The hand, plus one button that cashes it. Picking the three cards by hand was
+ * busywork — there's one best set (see bestTradeIn), so the bar just highlights
+ * the cards it's about to spend and hands you the payout.
+ */
+function Cards({ state, onTrade }: DockProps) {
   const me = state.players[state.current]
   if (!me.cards.length) return null
 
-  const chosen = me.cards.filter((c) => selectedCards.includes(c.id))
-  const canTrade = chosen.length === 3 && isValidSet(chosen) && state.phase === 'deploy'
+  const set = state.phase === 'deploy' ? bestTradeIn(state, me.id) : null
+  const going = new Set(set?.cards ?? [])
   const mustTrade = state.phase === 'deploy' && me.cards.length >= HAND_LIMIT
 
   return (
@@ -179,18 +170,19 @@ function Cards({ state, selectedCards, onToggleCard, onTrade }: DockProps) {
         <span className="mono-label">{mustTrade ? 'Must trade' : 'Cards'}</span>
         <div className="chips">
           {me.cards.map((c) => (
-            <button
+            <span
               key={c.id}
-              className={`chip ${selectedCards.includes(c.id) ? 'sel' : ''} ${c.suit === 'wild' ? 'wild' : ''}`}
-              onClick={() => onToggleCard(c.id)}
+              className={`chip ${going.has(c.id) ? 'sel' : ''} ${c.suit === 'wild' ? 'wild' : ''}`}
               title={c.territory ? TERRITORY_NAMES[c.territory] : 'Wild'}
             >
               {SUIT_GLYPH[c.suit]}
-            </button>
+            </span>
           ))}
         </div>
-        <button className="btn trade" disabled={!canTrade} onClick={onTrade}>
-          +{cashValue(state.setsTraded)}
+        {/* with no set in hand the button still names the next cash-in, so the
+            escalating value is visible while you decide whether to hold */}
+        <button className="btn trade" disabled={!set} onClick={onTrade} title="Cash the highlighted set">
+          Trade +{set?.value ?? cashValue(state.setsTraded)}
         </button>
       </div>
       <div className="div" />
@@ -209,6 +201,10 @@ function PhaseControls(props: DockProps) {
   }
 }
 
+/**
+ * The phase pills in the top bar already name the phase, so these prompts only
+ * carry the k line when it says something the pills don't ("Took Peru").
+ */
 function SetupControls({ state }: DockProps) {
   return (
     <>
@@ -223,7 +219,6 @@ function SetupControls({ state }: DockProps) {
 
 function DeployControls({ state, amount, setAmount }: DockProps) {
   const me = state.players[state.current]
-  const held = continentsHeldBy(state, me.id)
   const capped = Math.min(Math.max(1, amount), Math.max(1, state.toDeploy))
   const blocked = me.cards.length >= HAND_LIMIT
 
@@ -231,9 +226,6 @@ function DeployControls({ state, amount, setAmount }: DockProps) {
     <>
       <div className="counter">{state.toDeploy}</div>
       <div className="prompt">
-        <span className="k">
-          Deploy{held.length ? ` · ${held.map((c) => `${CONTINENTS[c].name} +${CONTINENTS[c].bonus}`).join(', ')}` : ''}
-        </span>
         <span className="v">
           {blocked ? 'Trade a set to continue' : <>Click a territory to place <b>{capped}</b> · shift-click for all</>}
         </span>
@@ -255,7 +247,6 @@ function AttackControls({ state, selected, onCancel }: DockProps) {
   return (
     <>
       <div className="prompt">
-        <span className="k">Attack</span>
         <span className="v">
           {selected
             ? <>From {nm(selected)} · <b>{state.troops[selected]}</b> · click an outlined target</>
@@ -273,9 +264,11 @@ function OccupyControls({ state, amount, setAmount }: DockProps) {
   const extra = Math.min(Math.max(amount, occ.min), occ.max)
   return (
     <>
+      {/* the map badges carry the arithmetic now — both sides of the move show the
+          count they'd end on, so spelling it out here would just be a second copy */}
       <div className="prompt">
         <span className="k">Took {nm(occ.to)}</span>
-        <span className="v"><b>{occ.moved}</b> advanced · leaves {state.troops[occ.from] - extra} in {nm(occ.from)}</span>
+        <span className="v"><b>{occ.moved}</b> advanced with the win · send more from {nm(occ.from)}?</span>
       </div>
       <div className="div" />
       <Amount label="Move" value={extra} min={occ.min} max={occ.max} onChange={setAmount} disabled={occ.max === 0} />
@@ -290,7 +283,6 @@ function FortifyControls({ state, selected, fortifyTo, amount, setAmount, onCanc
     return (
       <>
         <div className="prompt">
-          <span className="k">Fortify</span>
           <span className="v">{nm(selected)} → {nm(fortifyTo)}</span>
         </div>
         <div className="div" />
@@ -303,7 +295,6 @@ function FortifyControls({ state, selected, fortifyTo, amount, setAmount, onCanc
   return (
     <>
       <div className="prompt">
-        <span className="k">Fortify</span>
         <span className="v">
           {!state.canFortify
             ? 'Already fortified this turn'

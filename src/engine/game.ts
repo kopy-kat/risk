@@ -2,7 +2,7 @@ import { ADJACENCY, CONTINENT_IDS, CONTINENTS, TERRITORIES_IN, TERRITORY_IDS, TE
 import type { TerritoryId } from './board'
 import { buildDeck, cashValue, findSets, isValidSet } from './cards'
 import { rngFrom, rollDie, shuffle } from './rng'
-import type { Card, GameState, Move, Player, PlayerId } from './types'
+import type { Card, GameState, LogEntry, Move, Player, PlayerId } from './types'
 
 /** Classic starting-army counts by player count. */
 const START_ARMIES: Record<number, number> = { 2: 40, 3: 35, 4: 30, 5: 25, 6: 20 }
@@ -34,6 +34,27 @@ export function reinforcementFor(s: GameState, p: PlayerId): number {
   const base = Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
   const bonus = continentsHeldBy(s, p).reduce((sum, c) => sum + CONTINENTS[c].bonus, 0)
   return base + bonus
+}
+
+/**
+ * The set worth cashing, and what it pays. Which three cards you hand in is a
+ * decision with exactly one good answer — take the +2 territory bonus if it's
+ * there, and spend wilds last — so the UI picks for you rather than making you
+ * hunt for the combination.
+ */
+export function bestTradeIn(s: GameState, p: PlayerId): { cards: number[]; value: number } | null {
+  const hand = s.players[p].cards
+  const byId = new Map(hand.map((c) => [c.id, c]))
+  let best: { cards: number[]; value: number; wilds: number } | null = null
+  for (const ids of findSets(hand)) {
+    const cards = ids.map((id) => byId.get(id) as Card)
+    const matched = cards.some((c) => c.territory && s.owner[c.territory] === p)
+    const wilds = cards.filter((c) => c.suit === 'wild').length
+    const value = cashValue(s.setsTraded) + (matched ? 2 : 0)
+    if (!best || value > best.value || (value === best.value && wilds < best.wilds))
+      best = { cards: ids, value, wilds }
+  }
+  return best && { cards: best.cards, value: best.value }
 }
 
 /** Territories reachable from `from` travelling only through `p`'s own territories. */
@@ -203,9 +224,49 @@ function clone(s: GameState): GameState {
 
 const name = (t: TerritoryId) => TERRITORY_NAMES[t]
 
+function push(s: GameState, entry: LogEntry) {
+  s.log.push(entry)
+  if (s.log.length > 2000) s.log.shift()
+}
+
 function log(s: GameState, player: PlayerId | null, text: string) {
-  s.log.push({ turn: s.turn, player, text })
-  if (s.log.length > 400) s.log.shift()
+  push(s, { turn: s.turn, player, text })
+}
+
+/**
+ * An attack that didn't take the territory. Repeated rolls against the same
+ * target fold into the previous line rather than filling the recap with a dozen
+ * near-identical entries. The entry is *replaced*, never mutated: clone() copies
+ * the log array but not its entries, so an earlier state would see the edit too.
+ */
+function logAssault(
+  s: GameState,
+  p: PlayerId,
+  from: TerritoryId,
+  to: TerritoryId,
+  rounds: number,
+  attackerLoss: number,
+  defenderLoss: number,
+) {
+  const key = `assault:${p}:${from}>${to}`
+  const last = s.log[s.log.length - 1]
+  const prev = last && last.key === key ? last.tally : null
+  const tally = prev
+    ? {
+        rounds: prev.rounds + rounds,
+        attackerLoss: prev.attackerLoss + attackerLoss,
+        defenderLoss: prev.defenderLoss + defenderLoss,
+      }
+    : { rounds, attackerLoss, defenderLoss }
+  const entry: LogEntry = {
+    turn: s.turn,
+    player: p,
+    key,
+    tally,
+    text: `attacked ${name(to)} from ${name(from)} · ${tally.rounds}× · −${tally.attackerLoss}/−${tally.defenderLoss}`,
+  }
+  if (prev) s.log[s.log.length - 1] = entry
+  else push(s, entry)
 }
 
 export function applyMove(state: GameState, move: Move): GameState {
@@ -272,6 +333,10 @@ export function applyMove(state: GameState, move: Move): GameState {
       s.lastBlitz = null
       const captured = battle(s, rng, move.from, move.to, move.dice)
       if (captured) claim(s, move.from, move.to, move.dice)
+      else {
+        const b = s.lastBattle!
+        logAssault(s, p, move.from, move.to, 1, b.attackerLoss, b.defenderLoss)
+      }
       break
     }
 
@@ -293,6 +358,7 @@ export function applyMove(state: GameState, move: Move): GameState {
         defenderLoss += before.d - s.troops[to]
         if (captured) claim(s, from, to, dice)
       }
+      if (!captured) logAssault(s, p, from, to, rounds, attackerLoss, defenderLoss)
       s.lastBlitz = { from, to, rounds, attackerLoss, defenderLoss, captured }
       break
     }
@@ -406,6 +472,10 @@ function beginTurn(s: GameState, p: PlayerId) {
   s.conqueredThisTurn = false
   s.canFortify = true
   s.pendingOccupation = null
+  // One line per turn instead of one per placement: where the armies went is on
+  // the map, and the recap only needs to say how big the turn was.
+  const held = continentsHeldBy(s, p)
+  log(s, p, `+${s.toDeploy}${held.length ? ` · holds ${held.map((c) => CONTINENTS[c].name).join(', ')}` : ''}`)
 }
 
 function endTurn(s: GameState, rng: ReturnType<typeof rngFrom>) {

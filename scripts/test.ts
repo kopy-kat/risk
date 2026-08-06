@@ -11,7 +11,9 @@ import {
   exchangeOdds,
   winProb,
 } from '../src/engine/combat'
-import { applyMove, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn } from '../src/engine/game'
+import {
+  applyMove, bestTradeIn, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn,
+} from '../src/engine/game'
 import type { Card, GameState } from '../src/engine/types'
 
 let passed = 0
@@ -99,6 +101,66 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   const before2 = s.toDeploy
   s = applyMove(s, { type: 'tradeCards', cards: [93, 94, 95] })
   eq(s.toDeploy - before2, 8, 'second set pays 6 plus the +2 territory bonus')
+}
+
+// ── the set the UI cashes for you ────────────────────────────────
+{
+  let s = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: 'easy' }], seed: 5 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+  const p = s.current
+  const mine = territoriesOf(s, p)[0]
+  const notMine = TERRITORY_IDS.find((t) => s.owner[t] !== p)!
+
+  eq(bestTradeIn(s, p), null, 'nothing to cash with an empty hand')
+
+  // two sets available: three-of-a-kind on foreign ground, or a mixed one that
+  // includes a territory this player holds. The +2 bonus wins.
+  s.players[p].cards = [
+    { id: 90, suit: 'infantry', territory: notMine },
+    { id: 91, suit: 'infantry', territory: notMine },
+    { id: 92, suit: 'infantry', territory: notMine },
+    { id: 93, suit: 'cavalry', territory: mine },
+    { id: 94, suit: 'artillery', territory: notMine },
+  ]
+  eq(bestTradeIn(s, p), { cards: [90, 93, 94], value: 6 }, 'takes the set carrying the +2 territory bonus')
+
+  // same payout either way — then the wild is the one to keep
+  s.players[p].cards = [
+    { id: 90, suit: 'infantry', territory: notMine },
+    { id: 91, suit: 'infantry', territory: notMine },
+    { id: 92, suit: 'infantry', territory: notMine },
+    { id: 93, suit: 'wild', territory: null },
+  ]
+  eq(bestTradeIn(s, p), { cards: [90, 91, 92], value: 4 }, 'spends wilds last')
+}
+
+// ── the recap's log: repeated rolls collapse, earlier states don't move ──
+{
+  let s = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 5 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+  while (s.phase === 'deploy')
+    s = applyMove(s, { type: 'deploy', territory: territoriesOf(s, s.current)[0], count: s.toDeploy })
+
+  // two big stacks, so neither round can end the fight
+  const from = territoriesOf(s, s.current).find((t) => ADJACENCY[t].some((n) => s.owner[n] !== s.current))!
+  const to = ADJACENCY[from].find((n) => s.owner[n] !== s.current)!
+  s = { ...s, troops: { ...s.troops, [from]: 30, [to]: 30 } }
+
+  const first = applyMove(s, { type: 'attack', from, to, dice: 3 })
+  eq(first.log.length - s.log.length, 1, 'a failed attack writes one line')
+  const snapshot = JSON.stringify(first)
+  const second = applyMove(first, { type: 'attack', from, to, dice: 3 })
+  eq(second.log.length, first.log.length, 'the second roll folds into the same line')
+  eq(second.log[second.log.length - 1].tally?.rounds, 2, 'and the line counts both rounds')
+  eq(JSON.stringify(first), snapshot, 'collapsing replaces the entry rather than editing history')
+
+  // a different target starts a fresh line
+  const other = ADJACENCY[from].find((n) => s.owner[n] !== s.current && n !== to)
+  if (other) {
+    const third = applyMove({ ...second, troops: { ...second.troops, [from]: 30, [other]: 30 } },
+      { type: 'attack', from, to: other, dice: 3 })
+    eq(third.log.length - second.log.length, 1, 'a different target gets its own line')
+  }
 }
 
 // ── reinforcement maths ──────────────────────────────────────────

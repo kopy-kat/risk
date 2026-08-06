@@ -9,15 +9,16 @@ const geo = JSON.parse(readFileSync(join(root, 'data/territories.json'), 'utf8')
 const board = JSON.parse(readFileSync(join(root, 'data/board.json'), 'utf8'))
 
 // Continent label anchors, in open ocean on the side that reads as "belonging to"
-// the landmass. Solved offline against the real paths with isPointInFill —
-// see scripts/solve-label-anchors.mjs if the geometry ever changes.
+// the landmass. Solved offline against the real paths with isPointInFill — see
+// scripts/solve-label-anchors.mjs if the geometry ever changes. Mirrors
+// CONTINENT_LABEL_POS in src/engine/board.ts; keep the two in step.
 const labels = {
-  northAmerica: [137, 46],
-  europe: [333, 73],
-  asia: [643, 28],
-  southAmerica: [141, 372],
-  africa: [341, 399],
-  australia: [582, 413],
+  northAmerica: [113, 32],
+  europe: [338, 67],
+  asia: [606, 18],
+  southAmerica: [114, 377],
+  africa: [344, 404],
+  australia: [572, 422],
 }
 
 const html = readFileSync(join(root, 'mock/index.template.html'), 'utf8')
