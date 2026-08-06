@@ -79,6 +79,8 @@ export interface LogEntry {
   key?: string
   /** running totals behind a collapsed line, so it can be rewritten as it grows */
   tally?: { rounds: number; attackerLoss: number; defenderLoss: number }
+  /** who lost ground here — lets an agent remember who hit it, without parsing text */
+  victim?: PlayerId
 }
 
 export interface GameState {

@@ -27,6 +27,7 @@ export const marshalBot = makeStrategist({
   holdDiscipline: 1,
   modelsOpponents: true,
   cardPatience: true,
+  retaliates: true,
   huntsEliminations: true,
   readsTable: true,
 })

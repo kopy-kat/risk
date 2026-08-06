@@ -138,6 +138,24 @@ export function breaksContinent(s: GameState, t: TerritoryId): ContinentId | nul
   return TERRITORIES_IN[c].every((x) => s.owner[x] === owner) ? c : null
 }
 
+/**
+ * Who has taken ground from us lately, and how much.
+ *
+ * Grudges are human, and in Risk they're also sound: a player who attacked you
+ * once has committed forces to your border and is the one most likely to do it
+ * again. Read from the log rather than kept as bot state, so agents stay pure
+ * functions of the position.
+ */
+export function aggressorsAgainst(s: GameState, me: PlayerId, sinceTurns = 2): Map<PlayerId, number> {
+  const out = new Map<PlayerId, number>()
+  for (const e of s.log) {
+    if (e.victim !== me || e.player === null || e.player === me) continue
+    if (s.turn - e.turn > sinceTurns) continue
+    out.set(e.player, (out.get(e.player) ?? 0) + 1)
+  }
+  return out
+}
+
 /** Income a player is collecting right now — territories plus continent bonuses. */
 export function incomeOf(s: GameState, p: PlayerId): number {
   const base = Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
