@@ -229,8 +229,8 @@ function push(s: GameState, entry: LogEntry) {
   if (s.log.length > 2000) s.log.shift()
 }
 
-function log(s: GameState, player: PlayerId | null, text: string) {
-  push(s, { turn: s.turn, player, text })
+function log(s: GameState, player: PlayerId | null, text: string, victim?: PlayerId) {
+  push(s, { turn: s.turn, player, text, victim })
 }
 
 /**
@@ -454,7 +454,7 @@ function claim(s: GameState, from: TerritoryId, to: TerritoryId, moved: number) 
   s.conqueredThisTurn = true
   s.troops[from] -= moved
   s.troops[to] = moved
-  log(s, p, `took ${name(to)} from ${s.players[loser].name}`)
+  log(s, p, `took ${name(to)} from ${s.players[loser].name}`, loser)
   s.pendingOccupation = { from, to, moved, min: 0, max: s.troops[from] - 1 }
   s.phase = 'occupy'
   maybeEliminate(s, loser, p)

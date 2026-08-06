@@ -264,23 +264,70 @@ Two bugs the harness caught that would otherwise have been invisible:
 6. **Marshal** — done, with a caveat. Elimination hunting and table reading both pay
    at four seats and do nothing heads-up.
 
-### The lookahead that didn't work
+### The evaluation was quietly broken
 
-Searching over positions with the evaluation function was the plan, and it failed in
-an instructive way. Scoring each candidate attack by `relativeStanding` after the
-capture made Marshal *worse*: 37.7% at four seats against 59.2% without it, with
-games ballooning to 205 turns and 164 of 600 stalling out.
+Diagnosing the lookahead turned up a real modelling bug. Sampling 2,309 clearly
+favourable captures (≥ 70% win probability) and scoring each with `assess`:
 
-The cause is structural, not a bad weight — scaling it down by table size barely
-helped. `relativeStanding` measures you against the **strongest** rival, so attacking
-anyone else always scores negative: you spend armies, the leader doesn't. At a full
-table that talks the bot out of attacking almost entirely.
+```
+                          before fix   after fix
+mean delta to our score       +1.61       +2.70
+captures scoring NEGATIVE       58%         11%
+```
 
-A working version needs an objective that doesn't punish aggression against
-non-leaders — own-score delta plus damage dealt, or a proper multi-player
-maximin — plus a real notion of the opponent's reply. That is the next serious piece
-of work, and it is what the tier table's "lookahead: opponents' replies" row still
-owes.
+**58% of attacks a good player makes without thinking scored as losses.** Two causes:
+
+- **Income was a step function.** Real income is `floor(territories / 3)`, so two
+  captures in three change it by exactly nothing. As an optimisation target that is
+  hopeless. Scoring now uses unfloored territory income — the *marginal* value of a
+  territory really is a third of an army per turn.
+- **Armies were weighted as an end.** Counting them 1:1 against income made every
+  trade of armies for ground look like a loss. They're a means; they're now weighted
+  0.5, and exposure 0.25, since a fresh conquest always creates an under-garrisoned
+  border.
+
+This is a correctness fix rather than a win-rate one — the ladder is unchanged — but
+anything that scores positions was building on sand.
+
+### The lookahead that didn't work — three times
+
+Scoring candidate attacks by the position they lead to is the obvious next step and
+it has now failed three times. Recording all three, because the failure is more
+useful than the feature would have been.
+
+| attempt | 2 seats | 4 seats |
+| --- | --- | --- |
+| 1. objective = score minus the **strongest rival** | +3 | −22 |
+| 2. objective = own gain + **damage dealt**, discounted by table size | +2 | −23 |
+| 3. as (2), with the evaluation fixed, weight scaled by table size | +4 | −10 |
+
+Attempt 1 failed because measuring against the leader makes attacking anyone else
+negative by construction: you spend armies, the leader doesn't. Attempt 2 fixed the
+objective and barely moved, which is what exposed the evaluation bug above. Attempt 3
+fixed the evaluation, finally produced a genuine heads-up gain — and still cost 10
+points at four seats, tripling stalled games.
+
+The remaining cause looks structural rather than tuneable: the scaling is by *live*
+opponents, so late in a four-player game the weight ramps to full strength exactly
+when the game should be closing out, and a bot that values position over tempo stops
+finishing. More fundamentally, one ply is the wrong depth — the position after our
+capture says little about the position after three replies.
+
+A working version needs the opponent's reply modelled, not just our own move, and
+should search **plans** rather than captures, which is what the architecture said
+from the start. The one-ply shortcut is a dead end and the code has been removed
+rather than left switched off.
+
+### Retaliation
+
+Bots now bear grudges: an opponent who took ground from us in the last two turns is
+weighted up as a target. Read from the game log — `LogEntry.victim` carries who lost
+the territory — so agents stay pure functions of the position rather than
+accumulating state.
+
+Win-rate neutral, and kept anyway. It's on the human-likeness list, not the strength
+list, and an attacker has already committed forces to our border so it isn't
+*unsound* either.
 
 7. **Still open** — plan-level search, personality/posture variation, and a heads-up
    edge for the top tier.

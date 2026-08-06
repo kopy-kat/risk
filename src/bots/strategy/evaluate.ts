@@ -20,6 +20,34 @@ import { incomeOf, isBorder, pressure } from './board-sense'
  */
 export const INCOME_HORIZON = 6
 
+/**
+ * Weights on the non-income terms.
+ *
+ * Armies are a *means*, not an end: counting them 1:1 against income made the
+ * evaluation treat every trade of armies for ground as a loss. Measured on 2,309
+ * clearly-favourable captures (>= 70% win probability), 58% scored *negative* —
+ * which is why both attempts at a position lookahead talked the bot out of
+ * attacking. Exposure had the same problem from the other side, since every
+ * capture creates a fresh under-garrisoned border.
+ */
+export const ARMY_WEIGHT = 0.5
+export const EXPOSURE_WEIGHT = 0.25
+
+/**
+ * Territory income *without* the floor, for scoring only.
+ *
+ * Real income is `floor(territories / 3)`, which means two captures in three
+ * change it by nothing at all. As an optimisation target that step function is
+ * hopeless — most individual captures look worthless, so anything scoring moves by
+ * position learns not to attack. The marginal value of a territory is a third of an
+ * army per turn, and that is what a smooth objective should see.
+ */
+function smoothIncome(s: GameState, p: PlayerId): number {
+  const base = territoriesOf(s, p).length / 3
+  const bonus = incomeOf(s, p) - Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
+  return base + bonus
+}
+
 /** Expected armies sitting in a hand, including partial progress toward a set. */
 export function handValue(s: GameState, p: PlayerId): number {
   const cards = s.players[p].cards
@@ -66,7 +94,10 @@ export function assess(s: GameState, p: PlayerId): Assessment {
     exposure: exposure(s, p),
     // exposure is discounted: defending every border is never actually correct
     score:
-      incomeOf(s, p) * INCOME_HORIZON + armies + handValue(s, p) - exposure(s, p) * 0.5,
+      smoothIncome(s, p) * INCOME_HORIZON +
+      armies * ARMY_WEIGHT +
+      handValue(s, p) -
+      exposure(s, p) * EXPOSURE_WEIGHT,
   }
 }
 

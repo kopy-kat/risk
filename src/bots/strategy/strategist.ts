@@ -13,6 +13,7 @@ import { expectedLoss, expectedSurvivors, winProb } from '../../engine/combat'
 import { HAND_LIMIT, attackableFrom, connectedOwn, legalMoves, territoriesOf } from '../../engine/game'
 import type { GameState, Move, PlayerId } from '../../engine/types'
 import {
+  aggressorsAgainst,
   borderSecurityRatio,
   breaksContinent,
   chooseGoal,
@@ -66,6 +67,12 @@ export interface Doctrine {
    * Both are public information; both change where the next blow should land.
    */
   readsTable?: boolean
+  /**
+   * Hit back at whoever hit us. A named human-likeness guardrail: people bear
+   * grudges, and it happens to be sound — an attacker has already committed
+   * forces to our border and is likeliest to come again.
+   */
+  retaliates?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
@@ -88,6 +95,7 @@ function targetValue(
   goal: string | null,
   d: Doctrine,
   threatId: PlayerId | null,
+  grudges: Map<PlayerId, number>,
 ): number {
   let v = 1.5
   const completed = completesContinent(s, me, t)
@@ -109,6 +117,9 @@ function targetValue(
   if (d.plans.has('cycle') && !s.conqueredThisTurn) v += cashValue(s.setsTraded) / 3
 
   if (d.modelsOpponents && threatId !== null && s.owner[t] === threatId) v *= 1.25
+
+  const grudge = grudges.get(s.owner[t])
+  if (grudge) v *= 1 + Math.min(0.3, grudge * 0.12)
 
   if (d.huntsEliminations) {
     const prey = killableRival(s, me)
@@ -249,6 +260,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           let best: { from: TerritoryId; to: TerritoryId; score: number } | null = null
           const threat = doctrine.modelsOpponents ? primaryThreat(s, me) : null
           const threatId = threat?.id ?? null
+          const grudges = doctrine.retaliates
+            ? aggressorsAgainst(s, me)
+            : new Map<PlayerId, number>()
 
           for (const from of territoriesOf(s, me)) {
             const a = s.troops[from]
@@ -267,7 +281,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const leftBehind = survivors - 1
               if (isBorder(s, me, from) && leftBehind < keep * 0.5) continue
 
-              let value = targetValue(s, me, to, goalId, doctrine, threatId)
+              let value = targetValue(s, me, to, goalId, doctrine, threatId, grudges)
 
               // Discipline: don't take what the neighbours will simply take back.
               // Scaled by table size for the mirror-image reason denial isn't —
@@ -282,7 +296,8 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               }
 
               const cost = expectedLoss(a, d) * doctrine.lossAversion
-              let score = value * p - cost
+              const score = value * p - cost
+
 
               if (score > 0 && (!best || score > best.score)) best = { from, to, score }
             }
