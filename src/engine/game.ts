@@ -1,6 +1,6 @@
 import { ADJACENCY, CONTINENT_IDS, CONTINENTS, TERRITORIES_IN, TERRITORY_IDS, TERRITORY_NAMES } from './board'
 import type { TerritoryId } from './board'
-import { buildDeck, cashValue, findSets, isValidSet } from './cards'
+import { CASH_VALUES, buildDeck, cashValue, findSets, isValidSet } from './cards'
 import { rngFrom, rollDie, shuffle } from './rng'
 import type { Card, GameState, LogEntry, Move, Player, PlayerId } from './types'
 
@@ -9,6 +9,23 @@ const START_ARMIES: Record<number, number> = { 2: 40, 3: 35, 4: 30, 5: 25, 6: 20
 
 /** A player must trade once their hand reaches this size. */
 export const HAND_LIMIT = 5
+
+/**
+ * Fingerprint of the rules a recorded game was played under.
+ *
+ * A saved game is a move list, not a board — it only means anything replayed
+ * against the same rules. Retune `CASH_VALUES` (which `cards.ts` explicitly
+ * invites) or the starting armies and yesterday's move lists stop applying part
+ * way through, which would otherwise surface as a replay quietly showing the
+ * wrong board rather than as an error. Stored games carry this string and are
+ * quarantined rather than replayed when it no longer matches.
+ */
+export const RULES_VERSION = [
+  `t${TERRITORY_IDS.length}`,
+  `h${HAND_LIMIT}`,
+  `s${Object.entries(START_ARMIES).map(([n, a]) => `${n}:${a}`).join(',')}`,
+  `c${CASH_VALUES.join(',')}`,
+].join('|')
 
 export interface SeatConfig {
   name: string
@@ -133,6 +150,7 @@ export function createGame({ seats, seed = 1 }: NewGameOptions): GameState {
     lastBattle: null,
     lastBlitz: null,
     log: [],
+    moves: [],
     rngState: rng.state,
     winner: null,
   }
@@ -216,6 +234,7 @@ function clone(s: GameState): GameState {
     deck: s.deck.slice(),
     discard: s.discard.slice(),
     log: s.log.slice(),
+    moves: s.moves.slice(),
     pendingOccupation: s.pendingOccupation ? { ...s.pendingOccupation } : null,
     lastBattle: s.lastBattle ? { ...s.lastBattle } : null,
     lastBlitz: s.lastBlitz ? { ...s.lastBlitz } : null,
@@ -404,6 +423,10 @@ export function applyMove(state: GameState, move: Move): GameState {
       break
   }
 
+  // Recorded only once the move has validated — every `expect` above throws before
+  // reaching here, so the list never contains a move the engine rejected. That's
+  // what lets a replay assume the whole list applies cleanly.
+  s.moves.push(move)
   s.rngState = rng.state
   return s
 }

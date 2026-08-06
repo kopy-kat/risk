@@ -67,6 +67,7 @@ export const defenderDice = (armies: number) => Math.min(2, armies)
 
 const winMemo = new Map<number, number>()
 const survMemo = new Map<number, number>()
+const leftMemo = new Map<number, number>()
 const key = (a: number, d: number) => a * 4096 + d
 
 /**
@@ -142,6 +143,43 @@ export function expectedSurvivors(a: number, d: number): number {
   }
   const out = acc / pWin
   survMemo.set(k, out)
+  return out
+}
+
+/**
+ * Expected defenders still standing *given the attack fails*.
+ *
+ * The mirror of `expectedSurvivors`, and needed for the same reason: to price an
+ * attack before rolling it you need both branches of the outcome, not just the
+ * one where it works. Without this the losing branch has to be guessed, and a
+ * guess there biases every attack judgement in the same direction.
+ */
+export function expectedDefendersLeft(a: number, d: number): number {
+  if (d <= 0) return 0
+  if (a <= 1) return d // the attack is already spent; everything defending remains
+  if (a > EXACT_CAP || d > EXACT_CAP) {
+    const s = inRange(a, d)
+    return expectedDefendersLeft(s.a, s.d) * s.k // a count, so scale back up
+  }
+  const k = key(a, d)
+  const hit = leftMemo.get(k)
+  if (hit !== undefined) return hit
+  const pLose = 1 - winProb(a, d)
+  if (pLose <= 0) {
+    leftMemo.set(k, 0)
+    return 0
+  }
+  // E[defenders · 1{lose}] accumulated, then divided by P(lose)
+  let acc = 0
+  for (const e of exchangeOdds(attackerDice(a), defenderDice(d))) {
+    const a2 = a - e.attackerLoss
+    const d2 = d - e.defenderLoss
+    if (d2 <= 0) continue // that's the winning branch
+    if (a2 <= 1) acc += e.p * d2
+    else acc += e.p * (1 - winProb(a2, d2)) * expectedDefendersLeft(a2, d2)
+  }
+  const out = acc / pLose
+  leftMemo.set(k, out)
   return out
 }
 

@@ -361,6 +361,38 @@ Win-rate neutral, and kept anyway. It's on the human-likeness list, not the stre
 list, and an attacker has already committed forces to our border so it isn't
 *unsound* either.
 
+### One ply is fine for judging, and wrong for playing
+
+The game reviewer (`src/review/price.ts`) scores candidate moves by the position
+they lead to — which is, structurally, the thing that just failed three times. It's
+worth being explicit about why that isn't a fourth attempt.
+
+The objection that killed the lookahead was depth: the position after our capture
+says little about the position after three replies. That is an objection to
+*predicting* a game still being played. A review predicts nothing — the game is
+over, the replies are already in the record, and the only question is what the
+alternatives were worth at the moment of choice. One ply isn't an approximation of
+that answer, it's the whole of it. No bot imports the module, and the tiers are
+unchanged.
+
+Its objective is own score minus the **sum** of rival scores over a divisor fixed
+at the decision point. Both halves avoid a specific failure:
+
+- Not attempt 1's *strongest rival*, which is negative by construction.
+- Not the **mean** of live rivals either, which looks equivalent and isn't:
+  eliminating the weakest player raises the mean of those left, so a mean-based
+  objective scores the single biggest swing in Risk as a *loss*. A sum over a fixed
+  divisor makes an elimination remove that rival's score outright.
+
+It needed one new combat table, `expectedDefendersLeft` — the mirror of
+`expectedSurvivors`, giving the losing branch of an attack. Without it that branch
+has to be guessed, and a guess there biases every attack judgement the same way.
+Both are pinned against Monte Carlo in `scripts/test.ts`.
+
+And it is entirely downstream of the evaluation fix above. Built on the old
+`assess`, the reviewer would have told people that 58% of their good attacks were
+mistakes.
+
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Still open** — search *over* plans (as opposed to choosing one greedily),
    personality/posture variation so two Marshals don't play identically, and a

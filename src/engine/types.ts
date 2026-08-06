@@ -104,6 +104,22 @@ export interface GameState {
   /** set alongside lastBattle when the attack was a blitz, cleared otherwise */
   lastBlitz: BlitzResult | null
   log: LogEntry[]
+  /**
+   * Every move applied so far, in order. Together with the seed this *is* the
+   * game: `createGame` plus this list replays it exactly, dice included, because
+   * the generator state lives in here too.
+   *
+   * It lives in the state rather than beside it so undo stays correct for free —
+   * undo restores an earlier state, which carries the earlier move list. A list
+   * held next to the state would have to be rewound in lockstep, and wouldn't be.
+   *
+   * `clone` copies it, so `applyMove` is O(moves so far). Measured: 9.3 µs per
+   * move on an empty list against 21.8 µs at eight thousand moves, which is
+   * nothing across a real game (a long one is ~700 moves) and shows up only in
+   * the soak test's stalled outliers. Worth it for a record that can't drift out
+   * of step with the undo stack.
+   */
+  moves: Move[]
   rngState: number
   winner: PlayerId | null
 }
