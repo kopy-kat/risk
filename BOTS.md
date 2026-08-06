@@ -97,11 +97,17 @@ The plan layer is what the existing bots lack, and it's what makes play legible 
 human: people think "I'm taking Australia this turn" or "I need to break their
 Africa", not "maximise a weighted sum".
 
-**Search is over plans, deliberately.** Raw-move MCTS is the obvious trap: Risk's
-branching factor is astronomical (every source × every target × every army split) and
-dice make playouts noisy, so a sampled search burns enormous effort to arrive at
-mediocre moves. Searching five intents with expected-value combat is tractable and
-produces better play.
+**Search is over plans, deliberately.** Raw-move MCTS looks like the obvious trap:
+Risk's branching factor is astronomical (every source × every target × every army
+split) and dice make playouts noisy, so a sampled search burns enormous effort to
+arrive at mediocre moves. Searching five intents with expected-value combat is
+tractable and produces better play.
+
+Two thirds of that has since been measured and does not hold for *this* engine — the
+move space is already collapsed, and combat resolves by expectation rather than
+sampling. See "The search layer" below. The conclusion survives anyway: plans are
+the right unit because they're what makes play legible as human, not because raw
+moves are computationally out of reach.
 
 ## How the tiers differ
 
@@ -331,6 +337,88 @@ list, and an attacker has already committed forces to our border so it isn't
 
 7. **Still open** — plan-level search, personality/posture variation, and a heads-up
    edge for the top tier.
+
+## The search layer
+
+Three lookahead attempts have failed, and all three were one ply deep. The tier
+table's "lookahead: opponents' replies" row is still owed. This is the plan for
+paying it, and the measurements that shape it.
+
+### Search is far cheaper here than the architecture note assumed
+
+Branching factor, over five Marshal-vs-Marshal games, counted on the moves
+`legalMoves` actually emits:
+
+```
+overall   mean 34.2   max 1756
+
+setup     mean  21.0   max   21
+deploy    mean  38.5   max   82
+attack    mean  23.5   max   67
+occupy    mean   8.8   max  102
+fortify   mean 148.6   max 1756
+```
+
+Comparable to chess in the mean, and the whole tail is fortify — one move per turn,
+where most candidates are near-equivalent and a search can restrict them freely.
+Nothing about this is astronomical, because the engine already collapses the
+combinatorics: `deploy` offers `{1, all}` rather than every split, `spread()` gives
+fortify three amounts, and `blitz` folds an entire battle into one action.
+
+Cost per operation, mid-game, four seats:
+
+```
+applyMove           1.54us
+legalMoves          0.88us
+assess (1 player)   9.85us
+relativeStanding   31.27us     <- 60% of a simulation
+```
+
+A simulation at depth 8 costs ~51us, so **400 simulations is ~20ms** — affordable
+in the browser at thousands. Self-play runs 69 games/second at ~260 decisions per
+game, which is enough to benchmark a search change the same day it's written.
+
+The evaluation is the bottleneck, not the engine. `assess` walks all 42 territories
+five or six times per call (`territoriesOf` inside `smoothIncome`, `incomeOf`, and
+`exposure` each rescan). Caching that is the first optimisation if search ever
+becomes evaluation-bound.
+
+### Stages
+
+Each stands alone and is measurable on the existing bench. Do not start one before
+the previous is confirmed.
+
+**A — max-n search over the existing move space.** Every player maximises *their
+own* score rather than one player maximising a margin against the leader. That is
+the structural version of what attempts 1 and 2 tried to patch with weights, and
+unlike a weight it does not need switching off at a full table. Chance nodes
+resolve by *expectation* through `winProb` / `expectedSurvivors` rather than
+sampling — the exact tables in `combat.ts` remove the dice-noise objection to
+search entirely. Tier by simulation budget *on top of* tier by plan set, so Colonel
+still differs from Marshal in what it considers, not only in how long it thinks.
+
+Acceptance: beats current Marshal at both 2 and 4 seats, outside the Wilson
+interval, with no rise in stalled games. The four-seat number is where the previous
+three attempts died, so it is the one that matters.
+
+**B — learned leaf evaluation.** Replace hand-picked weights with weights fitted to
+outcomes: harvest `(position, eventual winner)` from self-play, regress, ship as
+JSON. **Zero dependencies** — plain least squares first, a small MLP only if linear
+clearly underfits. The data half pays off before the model half, because fitting
+weights independently adjudicates the hand-calibration above: if `ARMY_WEIGHT`
+comes back near 0.5 that confirms it, and if it comes back near 0.15 that is a
+finding.
+
+**C — AlphaZero is deliberately not staged.** The compute is affordable; the
+objections are design ones. Tiering breaks, because a net has one strength and
+"Colonel doesn't think about denial" is what makes the tiers read as different
+kinds of player rather than different amounts of one. The human-likeness guardrails
+are anti-optimal by construction, so a net's output would need hand-filtering,
+which reintroduces the heuristics. And stock AlphaZero mismatches this game three
+ways: dice need chance nodes, 3–6 seats need max-n rather than minimax, and hidden
+hands mean a net reading full `GameState` would train as a cheater. Revisit only if
+A and B both land and plateau; A is a prerequisite for C regardless, so taking them
+in order wastes nothing.
 
 ## Open questions
 
