@@ -404,10 +404,14 @@ ranked Colonel below `easy` as a result. Bounded per territory at 12 (`garrisonF
 ceiling) inside `src/review/price.ts`, deliberately not in `assess`, so nothing that
 plays is touched.
 
-`npm run review-check` measures the result against the ladder:
+`npm run review-check` measures the result against the ladder, paired by seed the
+way `bench.ts` pairs, over 20 games per tier:
 
 ```
-marshal 1.65 ±.10  ≈  general 1.55 ±.08  <  colonel 4.19 ±.19  <  easy 4.81 ±.20  <  random 6.87 ±.10
+marshal 1.65  ≈  general 1.55      paired gap +0.02 ± 0.37   tied
+general 1.55  <  colonel 4.19                 −1.12 ± 0.90   separated
+colonel 4.19  <  easy    4.81                 −0.87 ± 1.59   tied
+easy    4.81  <  random  6.87                 −2.52 ± 1.65   separated
 ```
 
 **Marshal and General tie, and that's the honest answer.** Both of Marshal's
@@ -415,6 +419,19 @@ additions — elimination hunting and table reading — pay off across turns rat
 within one decision, so a per-move metric has no way to see them. The same fact the
 ablation table above reports as "multiplayer specialist" shows up here as a tie. It
 is a limit of per-decision review, not a defect in the tiers.
+
+**Pairing is not optional here, and getting it wrong nearly shipped a bad number.**
+The first version treated every decision as an independent sample. Decisions inside
+one game are heavily correlated — a losing position produces a run of bad decisions —
+so four thousand clustered decisions are nowhere near four thousand observations. The
+error bars came out roughly 4× too tight, tight enough that the check passed at 20
+games per tier and failed at 8 on the *same seeds*. Averaging within a game and
+differencing across seeds fixes both the clustering and the map luck at once.
+
+The consequence worth stating plainly: this check confirms the reviewer separates the
+strong tiers from Colonel and separates `easy` from `random`. It does **not** resolve
+Marshal vs General or Colonel vs `easy` at these sample sizes. It is a guard against
+gross miscalibration, which is what it is there for — not a fine-grained ranking.
 
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Still open** — search *over* plans (as opposed to choosing one greedily),
