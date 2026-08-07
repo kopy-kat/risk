@@ -552,6 +552,10 @@ kbd {
 }
 .rev-bar .tick:hover { opacity: 1; }
 .rev-bar .tick.on { opacity: 1; outline: 1px solid var(--ink); outline-offset: 1px; }
+/* between decisions — the cursor is on someone else's move, so the nearest tick
+   is marked hollow rather than solid: the bar still says where you are without
+   claiming you're on a decision of yours. */
+.rev-bar .tick.near { opacity: .8; outline: 1px dashed var(--ink-3); outline-offset: 1px; }
 .rev-bar .tick.best       { background: var(--g-best);       height: 9px; }
 .rev-bar .tick.good       { background: var(--g-good);       height: 11px; }
 .rev-bar .tick.inaccuracy { background: var(--g-inaccuracy); height: 14px; }
