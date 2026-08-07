@@ -15,8 +15,8 @@ import { Setup } from './Setup'
 import { Review } from './Review'
 import { playerColor } from './colors'
 import {
-  CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
-  targetsFor, validDestination, validSelection,
+  CLEARS_UNDO, UNDOABLE, amountRange, clickableFor, isHumanTurn, moveForClick, previewFor,
+  primaryFor, targetsFor, validDestination, validSelection,
 } from './decide'
 import { describeRow, recapBetween } from './recap'
 import type { RecapRow } from './recap'
@@ -25,6 +25,8 @@ import { newGameId, saveGame } from '../review/store'
 const BOT_DELAY = { setup: 60, move: 260 }
 /** backstop so a misbehaving bot can't spin the skip button forever */
 const SKIP_MOVE_CAP = 100_000
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
 
 export function App() {
   const [game, setGame] = useState<GameState | null>(null)
@@ -266,10 +268,14 @@ export function App() {
     [game, amount, sel, dest],
   )
 
+  const range = useMemo(() => (game ? amountRange(game, sel, dest) : null), [game, sel, dest])
+
   const clickable = useMemo<Set<TerritoryId>>(
     () => (game ? clickableFor(game, targets, autoSetup) : new Set()),
     [game, targets, autoSetup],
   )
+
+  const cancel = useCallback(() => { setSelected(null); setFortifyTo(null) }, [])
 
   const pick = useCallback(
     (t: TerritoryId, shift: boolean) => {
@@ -283,6 +289,9 @@ export function App() {
         play(move)
         return
       }
+      // clicking what's already selected drops it — the mouse's own way out,
+      // matching Esc, so a selection is never a state you can only leave by key
+      if (t === sel) { cancel(); return }
       if (game.phase === 'attack' && game.owner[t] === me.id) setSelected(t)
       else if (game.phase === 'fortify') {
         if (sel && targets.has(t)) {
@@ -294,21 +303,25 @@ export function App() {
         }
       }
     },
-    [game, me, amount, sel, targets, play],
+    [game, me, amount, sel, targets, play, cancel],
   )
 
-  // After a capture resolves, keep the spearhead selected so you can push on.
-  // Dropping a *stale* selection is handled by deriving `sel`, not here.
+  /**
+   * After a capture resolves, keep the spearhead selected so you can push on.
+   *
+   * Once per move, keyed on the move count — `applyMove` clones `lastBattle`
+   * forward, so there's no object identity to watch, and firing whenever
+   * `selected` is empty would undo a deselect the instant you asked for it.
+   * Dropping a *stale* selection is handled by deriving `sel`, not here.
+   */
+  const spearheadAt = useRef(-1)
   useEffect(() => {
-    if (!game || game.phase !== 'attack' || selected) return
-    if (game.lastBattle?.captured) {
-      const to = game.lastBattle.to
-      if (game.owner[to] === game.current && game.troops[to] > 1) setSelected(to)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.phase, game?.lastBattle, selected])
-
-  const cancel = useCallback(() => { setSelected(null); setFortifyTo(null) }, [])
+    if (!game || game.phase !== 'attack') return
+    if (game.moves.length === spearheadAt.current) return
+    spearheadAt.current = game.moves.length
+    const b = game.lastBattle
+    if (b?.captured && game.owner[b.to] === game.current && game.troops[b.to] > 1) setSelected(b.to)
+  }, [game])
 
   /**
    * The single dark button in the bar, and what Space does. Keeping them the same
@@ -360,11 +373,25 @@ export function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault()
         if (isHuman) undo()
+        return
+      }
+      if (!range) return
+
+      // The amount, without touching the mouse. It can't be a text field — that
+      // would own Space, which belongs to the primary button.
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        const up = e.key === 'ArrowRight'
+        setAmount((a) =>
+          e.shiftKey
+            ? (up ? range.max : range.min)
+            : clamp(clamp(a, range.min, range.max) + (up ? 1 : -1), range.min, range.max),
+        )
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [game, primary, cancel, showSettings, undo, isHuman])
+  }, [game, primary, cancel, showSettings, undo, isHuman, range])
 
   if (reviewing) return <Review id={reviewing} onExit={() => setReviewing(null)} />
   if (!game) return <Setup onStart={start} onReview={setReviewing} />
@@ -459,13 +486,10 @@ export function App() {
             const set = bestTradeIn(game, game.current)
             if (set) play({ type: 'tradeCards', cards: set.cards })
           }}
-          onCancel={cancel}
           onShowSettings={() => setShowSettings((v) => !v)}
           settingsOpen={showSettings}
           seed={seed}
           onCloseSettings={() => setShowSettings(false)}
-          onUndo={undo}
-          canUndo={history.length > 0}
         />
       </main>
 
