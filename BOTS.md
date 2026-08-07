@@ -402,7 +402,16 @@ having no idea what the turn was for. `evalLine` prices a deploy by applying it 
 letting Marshal finish the turn behind it, which also gives the recommendation
 something to say: *deploy 1 to Ural, then take Afghanistan*.
 
-Three things make that safe to look at:
+The candidate list has to be widened to match. `legalMoves` offers one army or the
+whole pool on each territory, which bounds a bot's branching factor and makes for
+useless advice — the reviewer could recommend committing nothing or committing
+everything, and a player who split their reinforcement sensibly was compared against
+neither. `candidateMoves` adds a third and a half of the pool on each border, and
+about one deploy recommendation in five is now one of them. Borders only: splitting an
+interior deploy is two bad ideas where there was one, and it turns out every split
+worth recommending was on a border anyway.
+
+Three things make the rollout safe to look at:
 
 - **No dice.** The continuation's attacks resolve to their likely board — above even
   odds, captured with the expected survivors — never to a roll. A maximum over
@@ -445,10 +454,10 @@ way `bench.ts` pairs, over 20 games per tier:
 
 ```
                                    all 20 seeds        seeds both tiers won
-marshal 1.85  <  general 6.00      −0.88 ± 1.44        +0.04 ± 0.56  (17)
-general 6.00  >  colonel 2.08      +0.72 ± 1.41        −0.06 ± 0.44  (16)
-colonel 2.08  <  easy    4.79      −1.43 ± 1.37        −1.67 ± 1.36  (19)
-easy    4.79  <  random  7.11      −3.40 ± 1.65        no seed won by both
+marshal 1.92  <  general 6.09      −0.88 ± 1.45        +0.04 ± 0.58  (17)
+general 6.09  >  colonel 2.15      +0.74 ± 1.42        −0.04 ± 0.44  (16)
+colonel 2.15  <  easy    4.89      −1.45 ± 1.41        −1.70 ± 1.39  (19)
+easy    4.89  <  random  7.19      −3.41 ± 1.68        no seed won by both
 ```
 
 **Read the second column first when the two disagree.** A game nobody won inside the

@@ -472,11 +472,50 @@ function follow(s: GameState, me: PlayerId, bot: Bot, rand: () => number): Move 
  * could actually have done through the interface. Single-roll attacks are
  * dropped — every attack in the UI is a blitz, so "you should have rolled two
  * dice at Ukraine" is advice about a button that doesn't exist.
+ *
+ * It also *adds* to the deploy phase. `legalMoves` offers one army or the whole
+ * pool on each territory, which is right for bounding a bot's branching factor and
+ * wrong for advice: the reviewer could recommend committing nothing or committing
+ * everything, and a player who splits their reinforcement sensibly was being
+ * compared against neither. Splits are what a deploy phase *is*.
  */
 export function candidateMoves(s: GameState): Move[] {
   const all = legalMoves(s)
+  if (s.phase === 'deploy') return [...all, ...splitDeploys(s, all)]
   if (s.phase !== 'attack') return all
   return all.filter((m) => m.type !== 'attack')
+}
+
+/**
+ * The part-deploys `legalMoves` skips: a third and a half of what's in hand.
+ *
+ * Two extra sizes rather than every integer, for the same reason `spread` samples
+ * fortifies — the rollout behind each one is the expensive part, and amounts between
+ * a third and a half of a pool differ by less than the evaluation can tell apart.
+ * Below three armies there is nothing to split.
+ *
+ * Borders only. Splitting an interior deploy is two bad ideas where there was one:
+ * armies out of contact do nothing whether they arrive in halves or all at once, and
+ * the whole-pool version is still in the list to be recommended against.
+ */
+function splitDeploys(s: GameState, all: Move[]): Move[] {
+  if (s.toDeploy < 3) return []
+  const parts = [...new Set([Math.floor(s.toDeploy / 3), Math.floor(s.toDeploy / 2)])].filter(
+    (n) => n >= 1 && n < s.toDeploy,
+  )
+  const out: Move[] = []
+  const seen = new Set(all.map(moveKey))
+  for (const m of all) {
+    if (m.type !== 'deploy' || !isBorder(s, s.current, m.territory)) continue
+    for (const count of parts) {
+      const split: Move = { type: 'deploy', territory: m.territory, count }
+      const key = moveKey(split)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(split)
+    }
+  }
+  return out
 }
 
 /** Stable identity for a move, for de-duplicating candidate lists. */
