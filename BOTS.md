@@ -428,15 +428,27 @@ Three things make the rollout safe to look at:
 
 **And it is confined to deploys, because the check says so.** A rollout has something
 real to say about attacks and occupations too — how much of a stack to advance is
-entirely a question about what you can do next. But measured on the ladder, rolling
-them out makes the reviewer *worse at telling the tiers apart*: with attacks and
-occupations included `easy` came out better than Marshal, General and Colonel and no
-adjacent pair separated; with occupations alone the pair below the top swapped. The
-likely cause is the one `MAX_SHORTFALL` exists for — a loss is denominated in armies,
-a rollout widens the gap between the best line and a reasonable one, and that gap
-grows with the size of the position, which is to say with how well someone is
-playing. Deploys have the most to gain from turn context and the least room for the
-spread to run away, since every candidate is placing the same armies.
+entirely a question about what you can do next. Measured on the ladder it makes the
+reviewer worse at telling the tiers apart, on every pair at once. Read over the seeds
+both tiers won, so that stalls can't be blamed:
+
+```
+                      deploys only    all three phases
+  marshal vs general  +0.04 ± 0.58    +0.37 ± 2.37
+  general vs colonel  −0.04 ± 0.44    +1.08 ± 1.38
+  colonel vs easy     −1.70 ± 1.39    −0.21 ± 0.76
+```
+
+Colonel stops separating from `easy`, the top pair changes sign, the error bars widen
+everywhere, the unrestricted reading fails the check outright, and it costs four and
+a half times as much.
+
+**Roll out where one ply is blind, never where it is exact.** That is the general
+lesson, and it explains the table. An attack's value is already integrated over its
+exact outcome distribution, so a rollout replaces an exact number with that number
+plus a policy's guess about the rest of the turn — strictly more noise for no more
+signal. A deploy has no exact number to replace, because armies in hand buy nothing
+until they are spent. Turn context is worth its cost there and nowhere else.
 
 **Judging whole alternatives needs exposure bounded; playing doesn't.** `assess`
 leaves exposure unbounded and `EXPOSURE_WEIGHT` sets its influence, which is right
