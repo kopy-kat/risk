@@ -85,7 +85,7 @@ while it lasts. Nobody negotiates: the board is public, so everyone reads it the
 way. The truce dissolves the moment the leader is back in the pack, and it is aimed at
 whoever is actually winning, which some games means you and some games doesn't.
 
-Heads-up: Marshal beats General 68/32, General beats Colonel 54/46. `npm run bench`
+Heads-up: Marshal beats General 67/33, General beats Colonel 53/47. `npm run bench`
 measures that with paired seeds and seat rotation, because going first is worth ~50
 points heads-up and an unrotated comparison measures position rather than skill.
 [`BOTS.md`](BOTS.md) has the design, the full results, and the substantial list of

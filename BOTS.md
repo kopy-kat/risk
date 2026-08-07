@@ -177,20 +177,28 @@ four seats is 200 seeds × 4 rotations.
 
 ```
                     2 seats        4 seats
-marshal > general   67.7 ±3.7     55.7 ±3.4
-marshal > colonel   70.4 ±3.6     56.9 ±3.4
-general > colonel   53.6 ±4.0     55.4 ±3.5
+marshal > general   66.6 ±3.8     57.5 ±3.4
+marshal > colonel   70.0 ±3.7     57.0 ±3.4
+general > colonel   53.2 ±4.0     56.6 ±3.5
 
 against the fixed `easy` rung — the yardstick for absolute strength
-marshal > easy      80.3 ±3.2     92.3 ±1.8
-general > easy      71.9 ±3.6     90.8 ±2.0
-colonel > easy      68.2 ±3.7     91.0 ±2.0
-easy    > random    98.7 ±0.9
+marshal > easy      80.5 ±3.2     94.0 ±1.6
+general > easy      71.7 ±3.6     88.3 ±2.2
+colonel > easy      68.4 ±3.7     94.2 ±1.6
+easy    > random    97.9 ±1.1
 ```
 
-Stalled games are 1% or below in every pairing. Mixed tables with random seat counts
-(`npm run sim -- 300`) put the five rungs in the same order: marshal 38.5% · general
-28.7% · colonel 27.4% · easy 5.1% · random 0.3%.
+Stalled games are 2% or below in every pairing. Mixed tables with random seat counts
+(`npm run sim -- 300`) separate Marshal cleanly and leave the other two level:
+marshal 39.4% · colonel 27.9% · general 27.6% · easy 4.7% · random 0.3%.
+
+**Colonel outscoring General against `easy` at four seats is not a misprint**, and it
+is the clearest illustration on this page of why a bench pairing is not a strength
+measurement. Those tables are two of the tier against two `easy`, so General's denial
+and coalition logic aims it at the strongest player present — frequently the *other
+General* — while two Colonels ignore each other and farm the weak seats. It is the
+"doing the bystanders' work" effect that scales denial by opponent count, showing up as
+a scoreboard inversion. Heads-up, where there is no bystander, the order is correct.
 
 **Read the `easy` column, not the tier-vs-tier column, to answer "did this get
 stronger".** Every tier shares one brain, so a fix to `occupy` or `fortify` lifts all
@@ -200,9 +208,9 @@ why the heads-up General-over-Colonel step is the thinnest number on this page w
 every tier beats `easy` by more than it used to.
 
 **The ladder is uneven, and heads-up it is uneven in the wrong direction.** Marshal
-separates cleanly (67.7 / 70.4) because route planning and the chokepoint opening both
-pay in a duel; General over Colonel at 53.6 is barely outside chance. At four seats the
-three steps are level at 55–57 but all narrower than the top tier deserves. The honest
+separates cleanly (66.6 / 70.0) because route planning and the chokepoint opening both
+pay in a duel; General over Colonel at 53.2 is barely outside chance. At four seats the
+three steps are level at 57 but all narrower than the top tier deserves. The honest
 summary is that the top of the ladder moved and the middle did not.
 
 ### The plan layer
@@ -779,7 +787,7 @@ in order wastes nothing.
   dozen plausible improvements measured in the last round, two paid, one was neutral and
   kept for human-likeness, and the rest were negative. Getting materially past here
   means stage B, not another flag.
-- **The middle of the ladder is thin heads-up.** General over Colonel is 53.6%, because
+- **The middle of the ladder is thin heads-up.** General over Colonel is 53.2%, because
   every shared fix helps Colonel at least as much as General. Widening it needs a
   General-only capability that holds up at four seats, and chokepoint drafting — the
   obvious candidate — does not.
