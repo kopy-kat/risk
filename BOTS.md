@@ -644,31 +644,42 @@ ceiling) inside `src/review/price.ts`, deliberately not in `assess`, so nothing 
 plays is touched.
 
 `npm run review-check` measures the result against the ladder, paired by seed the way
-`bench.ts` pairs, and reports mean armies given up per decision with the ordering it
-implies. Run it rather than trusting a figure here: it takes tens of minutes since
-reinforcement started being judged a whole turn deep, and any number written down goes
-stale the next time a doctrine flag moves.
+`bench.ts` pairs. It takes the better part of an hour now that reinforcement is judged a
+whole turn deep, so it is a gate rather than something to iterate against. Mean armies
+given up per decision, 40 games per tier at four seats:
 
-What it reports is not a clean ladder, and the interesting part is why.
+```
+marshal 1.49  <  general 2.13      paired diff −0.41 ± 0.33   separated
+general 2.13  <  colonel 2.36                  −0.33 ± 0.50   right order, inside error
+colonel 2.36  <  easy    4.29                  −0.97 ± 0.97   right order, at the edge
+easy    4.29  <  random  7.34                  −3.68 ± 1.06   separated
+```
 
-**General comes out worst of the top three, and the cause is game length, not the
-reviewer.** At four seats General's self-play runs long and stalls into the turn cap
-far more often than Colonel's. A stalled game is a sprawl nobody can hold, it produces
-bad decisions from end to end, and it contributes several times as many of General's
-decisions as of Colonel's. Loss per decision has no defence against that. The one-ply
-scoring this replaced inverts the same pair slightly harder on the same games, so it is
-not something the rollout introduced — and `npm run bench -- general colonel 200
---players 4` still has General ahead, which is the ladder this check is measured
-against.
+**All four pairs come out in the right order**, and blunders run monotonically up the
+ladder — 0.9 / 1.4 / 1.7 / 4.1 / 7.9 percent of decisions from Marshal to `random`.
 
-Worth fixing at the source: a tier that stalls at a full table is a bot problem
-first and a reviewing problem second.
+**This metric is highly sensitive to how long a tier's games run, and that is the thing
+to check first when it disagrees with the bench.** A game that stalls is a sprawl nobody
+can hold; it produces bad decisions from end to end and contributes all of them to the
+average. Self-play at four seats, 20 games against a 300-turn cap:
 
-Marshal against General is the pair that should be hardest even without that, and is:
+```
+marshal   40 turns   0 stalled   13.5k decisions
+general   72 turns   1 stalled   24.5k decisions
+colonel   36 turns   0 stalled   11.5k decisions
+```
+
+General plays the long game and contributes twice Colonel's decisions, which is why its
+gap to Colonel stays inside the error bar rather than separating. Push its stall rate up
+and this check reports it as the *weakest* of the top three while the bench still has it
+ahead — so an inversion here is worth reading as a bot problem before a reviewer one.
+
+Marshal against General is the pair that should be hardest, and is the one that
+separates most cleanly here — which is not what the earlier ablation predicts, since
 elimination hunting and table reading pay off across turns rather than within one
-decision, and so does route planning, since a per-move metric prices only the first tile
-of a route. That is the same fact the ablation table above reports as "multiplayer
-specialist".
+decision, and route planning only ever shows the reviewer the first tile of a route. The
+honest reading is that a per-decision metric and a win rate are measuring different
+things, and agreement between them is a check rather than a guarantee.
 
 **Pairing is not optional here, and getting it wrong nearly shipped a bad number.**
 The first version treated every decision as an independent sample. Decisions inside
@@ -678,10 +689,10 @@ error bars came out roughly 4× too tight, tight enough that the check passed at
 games per tier and failed at 8 on the *same seeds*. Averaging within a game and
 differencing across seeds fixes both the clustering and the map luck at once.
 
-The consequence worth stating plainly: this check resolves Colonel from `easy` and
-`easy` from `random` at twenty games, and gets General wrong for the reason above. It
-is a guard against gross miscalibration, which is what it is there for — not a
-fine-grained ranking.
+The consequence worth stating plainly: this check separates Marshal from General and
+`easy` from `random`, and puts the other two pairs in the right order without resolving
+them at this sample size. It is a guard against gross miscalibration, which is what it
+is there for — not a fine-grained ranking.
 
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Route planning** — done (`sweep.ts`), Marshal only, three deep.
