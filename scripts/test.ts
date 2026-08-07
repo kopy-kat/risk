@@ -21,6 +21,7 @@ import {
   CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
   targetsFor, validDestination, validSelection,
 } from '../src/ui/decide'
+import { describeRow, recapBetween } from '../src/ui/recap'
 import type { TerritoryId } from '../src/engine/board'
 import { reviewGame } from '../src/review/review'
 import { BOT_BY_KEY } from '../src/bots'
@@ -496,6 +497,74 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
 
   // a finished game has no primary action at all
   eq(primaryFor({ ...s, phase: 'gameOver' }, 1, null, null), null, 'game over offers nothing')
+}
+
+// ── the recap: a scoreline, read off two boards ───────────────────
+{
+  let s = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: 'easy' }, { name: 'C', bot: 'easy' }], seed: 63 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+
+  eq(recapBetween(s, s), [], 'a board against itself has nothing to report')
+
+  // B takes two of C's territories and reinforces
+  const cs = territoriesOf(s, 2)
+  const owner = { ...s.owner, [cs[0]]: 1, [cs[1]]: 1 }
+  const troops = { ...s.troops, [cs[0]]: 4, [cs[1]]: 2 }
+  const after: GameState = { ...s, owner, troops }
+  const rows = recapBetween(s, after)
+  eq(rows.map((r) => r.player), [1, 2], 'only the players who moved get a line')
+  eq(rows[0].territories, 2, 'the attacker gained two territories')
+  eq(rows[1].territories, -2, 'and the defender lost them')
+  eq(rows[0].armies, 6, 'armies are counted where they stand, not where they came from')
+  eq(rows[1].armies, -(s.troops[cs[0]] + s.troops[cs[1]]), 'the defender is down what stood on the ground they lost')
+  eq(rows[0].killed, [], 'nobody was eliminated')
+
+  // wipe C out: the kill is reported on the killer's row, not the corpse's
+  const wiped = { ...s.owner }
+  for (const t of territoriesOf(s, 2)) wiped[t] = 1
+  const dead: GameState = {
+    ...s,
+    owner: wiped,
+    players: s.players.map((p) => (p.id === 2 ? { ...p, alive: false } : p)),
+    log: [...s.log, { turn: s.turn, player: 1, text: 'took the last one', victim: 2 }],
+  }
+  const killRows = recapBetween(s, dead)
+  eq(killRows.map((r) => r.player), [1], 'the eliminated player gets no line of their own')
+  eq(killRows[0].killed, [2], 'the kill lands on whoever took the last territory')
+  eq(
+    describeRow(killRows[0], (p) => dead.players[p].name),
+    `+${killRows[0].territories} territories · +${killRows[0].armies} armies · eliminated C`,
+    'the line reads as a scoreline, ground first',
+  )
+  eq(describeRow({ player: 0, armies: -1, territories: -1, killed: [] }, () => ''), '−1 territory · −1 army', 'losses read as losses, singular')
+}
+
+// ── Replay: a bot stretch is a function of the board and the generator ──
+// The button rewinds to both and lets go. If a bot ever reached for the clock or
+// Math.random, the same two inputs would stop producing the same turns and the
+// replay would quietly be a different game.
+{
+  const seats = [{ name: 'A', bot: 'colonel' }, { name: 'B', bot: 'general' }, { name: 'C', bot: 'marshal' }]
+  let s = createGame({ seats, seed: 5150 })
+  let warmup = rngFrom(31337)
+  for (let i = 0; i < 400 && s.phase !== 'gameOver'; i++)
+    s = stepBot(s, BOT_BY_KEY[s.players[s.current].bot!], () => warmup.next())
+
+  // exactly what App keeps: the board, and the generator the bots draw from
+  const [board, generator] = [s, warmup.state]
+  const run = () => {
+    const rand = rngFrom(generator)
+    let x = board
+    for (let i = 0; i < 120 && x.phase !== 'gameOver'; i++)
+      x = stepBot(x, BOT_BY_KEY[x.players[x.current].bot!], () => rand.next())
+    return x
+  }
+  const first = run()
+  const second = run()
+  ok(first.moves.length > board.moves.length, 'the stretch actually played some turns')
+  eq(second.moves, first.moves, 'replaying from the checkpoint makes exactly the same moves')
+  eq(second.troops, first.troops, 'and lands on exactly the same board')
+  eq(second.rngState, first.rngState, 'dice included')
 }
 
 {

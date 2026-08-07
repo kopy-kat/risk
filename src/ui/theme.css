@@ -189,6 +189,7 @@ svg.map { width: 100%; height: 100%; display: block; }
 /* fixed name column, so a player's continuation lines stay in one block */
 .recap .who { color: var(--c); flex-shrink: 0; width: 58px; }
 .recap .what { color: var(--ink-2); }
+.recap .btn { margin-top: 6px; padding: 7px 12px; }
 
 .readout { position: absolute; top: 16px; left: 18px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
 .readout .t { font-family: 'Instrument Serif', serif; font-size: 27px; line-height: 1; }

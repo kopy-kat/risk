@@ -203,12 +203,17 @@ Stored games carry a fingerprint of the rules they were played under. Retune
 surface as a replay quietly showing a board that never existed — so they're quarantined
 in the list instead of replayed.
 
-When control returns to you — including after Skip — a transient panel lists what the
-bots did: every reinforcement, assault, capture and elimination since your last move,
-grouped by player, not a trimmed tail of them. Repeated rolls against one territory
-collapse into a single line (`attacked Ural from China · 3× · −2/−2`), which is what
-keeps "everything" readable. It clears on your next move; it's a recap, not a log
-panel.
+When control returns to you — including after Skip — a transient panel gives the
+scoreline for the turns you missed: one line per player, ground then armies then any
+eliminations (`Azure +3 territories · −8 armies · eliminated Amber`). It's read off the
+board you left against the board you got back, not off the log, so it says what changed
+rather than what was rolled. It clears on your next move; it's a recap, not a log panel.
+
+**Replay their turns** — the one button on that panel — rewinds to the end of your last
+turn and plays the bot turns again, identically.
+The board is immutable and the dice live inside it, so a checkpoint is just that state
+plus the generator the bots draw from; restoring both and letting go reproduces the same
+turns move for move, whether you watch them or Skip through them again.
 
 Continent labels on the map double as a progress readout — `AUSTRALIA 3/4 +2`, tinted
 by whoever leads and solid once someone holds it outright. Being one territory off a
