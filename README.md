@@ -37,13 +37,16 @@ with an enemy rather than asking you — armies behind the lines do nothing.
 
 ## Features
 
-**One key does everything.** There is exactly one dark button in the bottom bar at any
-moment and `Space` presses it — confirm an occupation, end an attack, end a turn, skip
-the bots. `Esc` deselects, `⌘Z` undoes, `Shift`+click deploys everything at once. That
-is the whole list; the button label carries its own hint, so nothing needs memorising.
+**One key does everything.** `Space` presses the one dark button in the bottom bar —
+confirm an occupation, end an attack, end a turn, skip the bots. `←` `→` size a move
+and `Shift`+`←` `→` take it to the minimum or the maximum. `Esc` deselects, `⌘Z`
+undoes, `Shift`+click deploys everything at once. That is the whole list; the button
+label carries its own hint, so nothing needs memorising.
 
 - **No sidebar.** All controls live in a floating bottom bar; the map gets the screen.
-  Continent labels double as a progress readout (`AUSTRALIA 3/4 +2`).
+  The bar keeps one footprint for the whole game, so nothing you aim at moves when a
+  phase turns over or a bot takes its turn. Continent labels double as a progress
+  readout (`AUSTRALIA 3/4 +2`).
 - **Army counts preview live.** While sizing a deploy, occupy or fortify, both
   territories show the number they'd end on.
 - **Cards trade themselves.** There's one good answer, so the bar highlights the set

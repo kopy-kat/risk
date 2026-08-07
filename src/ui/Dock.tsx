@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react'
 import { TERRITORY_NAMES } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
 import { cashValue } from '../engine/cards'
 import { HAND_LIMIT, bestTradeIn } from '../engine/game'
 import type { GameState } from '../engine/types'
 import { SUIT_GLYPH, playerColor } from './colors'
+import { amountRange } from './decide'
 import { Settings } from './Settings'
 
 /** The one dark button in the bar. Space always presses it. */
@@ -21,13 +23,24 @@ export interface DockProps {
   primary: PrimaryAction | null
   setAmount(n: number): void
   onTrade(): void
-  onCancel(): void
   onShowSettings(): void
   settingsOpen: boolean
   onCloseSettings(): void
   seed: number
-  onUndo(): void
-  canUndo: boolean
+}
+
+/**
+ * What goes in the bar's middle, split by role rather than by phase. The three
+ * land in fixed cells, so the number, the sentence and the controls each keep
+ * their spot from one phase to the next.
+ */
+interface Slots {
+  /** the one big number this phase is about, if it has one */
+  counter?: ReactNode
+  /** a quiet label above the sentence — context the phase pills don't carry */
+  hint?: ReactNode
+  say: ReactNode
+  controls?: ReactNode
 }
 
 const nm = (t: TerritoryId) => TERRITORY_NAMES[t]
@@ -43,12 +56,12 @@ const cashingSpoils = (s: GameState) => s.phase === 'deploy' && s.conqueredThisT
 /**
  * One control for every "how many armies?" question. Deliberately not a text
  * input: a focusable field would own the Space key, which belongs to Confirm.
- * Digits are typed straight into it via the global key handler instead.
+ * ← → drive it from App's global handler instead, so the amount is reachable
+ * without leaving the keyboard.
  */
 function Amount({
-  label, value, min, max, onChange, disabled = false,
+  value, min, max, onChange, disabled = false,
 }: {
-  label: string
   value: number
   min: number
   max: number
@@ -58,74 +71,60 @@ function Amount({
   const v = Math.min(Math.max(value, min), max)
   return (
     <div className="amount">
-      <span className="mono-label">{label}</span>
       <button className="preset" disabled={disabled || v <= min} onClick={() => onChange(min)}>Min</button>
       <button className="nudge" disabled={disabled || v <= min} onClick={() => onChange(v - 1)}>−</button>
       <span className="n">{v}</span>
       <button className="nudge" disabled={disabled || v >= max} onClick={() => onChange(v + 1)}>+</button>
-      <button className="preset" disabled={disabled || v >= max} onClick={() => onChange(max)}>All</button>
+      <button className="preset" disabled={disabled || v >= max} onClick={() => onChange(max)}>Max</button>
     </div>
   )
 }
 
+/**
+ * The bar's footprint never changes — same width, same height, every phase and
+ * every bot move. What varies goes inside the middle cells; what you aim at
+ * (the name, the sentence, Undo, the dark button, the gear) does not move. A bar
+ * that resized itself around its contents jittered on every bot decision, which
+ * is a lot of motion to pay for a few pixels of snugness.
+ */
 export function Dock(props: DockProps) {
-  const { state, primary, onShowSettings, onUndo, canUndo } = props
+  const { state, primary, onShowSettings } = props
   const { settingsOpen, onCloseSettings, seed } = props
   const me = state.players[state.current]
-  const showUndo = !me.bot && state.phase !== 'setup'
+  const slots = me.bot ? botSlots(state) : phaseSlots(props)
 
   return (
     <div className="dock">
       <Identity state={state} />
-      <div className="div" />
 
-      {me.bot ? (
-        <>
-          <div className="prompt">
-            <span className="k">Thinking</span>
-            <span className="v">{describeBotPhase(state)}</span>
-          </div>
-          {state.lastBattle && state.phase !== 'setup' && (
-            <><div className="div" /><Dice state={state} /></>
+      <div className="mid">
+        <div className="cell num">{slots.counter}</div>
+        <div className="prompt">
+          <span className="k">{slots.hint}</span>
+          <span className="v">{slots.say}</span>
+        </div>
+        <div className="cell ctrl">{slots.controls}</div>
+      </div>
+
+      {/* The slot holds its width empty, so a phase with nothing for Space to
+          press doesn't slide the gear out from under the cursor. */}
+      <div className="tail">
+        <span className="slot act">
+          {primary && (
+            <button className="btn primary wide" onClick={primary.run}>
+              {primary.label} <kbd>Space</kbd>
+            </button>
           )}
-        </>
-      ) : (
-        <>
-          {state.phase !== 'setup' && <Cards {...props} />}
-          <PhaseControls {...props} />
-        </>
-      )}
+        </span>
+        <button
+          className={`btn help ${settingsOpen ? 'on' : ''}`}
+          onClick={onShowSettings}
+          title="Settings and shortcuts"
+          aria-label="Settings"
+        >⚙</button>
 
-      {showUndo && (
-        <>
-          <div className="div" />
-          <button
-            className="btn ghost"
-            disabled={!canUndo}
-            onClick={onUndo}
-            title="Undo deploys and fortifies — closes once you roll dice"
-          >
-            Undo <kbd>⌘Z</kbd>
-          </button>
-        </>
-      )}
-
-      {primary && (
-        <>
-          <div className="div" />
-          <button className="btn primary" onClick={primary.run}>
-            {primary.label} <kbd>␣</kbd>
-          </button>
-        </>
-      )}
-      <button
-        className={`btn help ${settingsOpen ? 'on' : ''}`}
-        onClick={onShowSettings}
-        title="Settings and shortcuts"
-        aria-label="Settings"
-      >⚙</button>
-
-      {settingsOpen && <Settings seed={seed} onClose={onCloseSettings} />}
+        {settingsOpen && <Settings seed={seed} onClose={onCloseSettings} />}
+      </div>
     </div>
   )
 }
@@ -142,10 +141,18 @@ function Identity({ state }: { state: GameState }) {
       <span className="swatch" />
       <div className="who">
         <span className="nm">{me.name}</span>
-        {me.bot && <span className="meta">Bot · {me.bot}</span>}
+        <span className="meta">{me.bot ? `Bot · ${me.bot}` : 'You'}</span>
       </div>
     </div>
   )
+}
+
+function botSlots(s: GameState): Slots {
+  return {
+    hint: 'Thinking',
+    say: describeBotPhase(s),
+    controls: s.lastBattle && s.phase !== 'setup' ? <Dice state={s} /> : null,
+  }
 }
 
 function describeBotPhase(s: GameState) {
@@ -163,19 +170,20 @@ function describeBotPhase(s: GameState) {
  * The hand, plus one button that cashes it. Picking the three cards by hand was
  * busywork — there's one best set (see bestTradeIn), so the bar just highlights
  * the cards it's about to spend and hands you the payout.
+ *
+ * Deploy only: it's the one phase you can trade in, and the scoreboard already
+ * carries everyone's card count for the turns in between.
  */
 function Cards({ state, onTrade }: DockProps) {
   const me = state.players[state.current]
   if (!me.cards.length) return null
 
-  const set = state.phase === 'deploy' ? bestTradeIn(state, me.id) : null
+  const set = bestTradeIn(state, me.id)
   const going = new Set(set?.cards ?? [])
-  const mustTrade = state.phase === 'deploy' && me.cards.length >= HAND_LIMIT
 
   return (
     <>
       <div className="cardbar">
-        <span className="mono-label">{mustTrade ? 'Must trade' : 'Cards'}</span>
         <div className="chips">
           {me.cards.map((c) => (
             <span
@@ -210,130 +218,105 @@ function Cards({ state, onTrade }: DockProps) {
   )
 }
 
-function PhaseControls(props: DockProps) {
+function phaseSlots(props: DockProps): Slots {
   switch (props.state.phase) {
-    case 'setup': return <SetupControls {...props} />
-    case 'deploy': return <DeployControls {...props} />
-    case 'attack': return <AttackControls {...props} />
-    case 'occupy': return <OccupyControls {...props} />
-    case 'fortify': return <FortifyControls {...props} />
-    default: return null
+    case 'setup': return setupSlots(props)
+    case 'deploy': return deploySlots(props)
+    case 'attack': return attackSlots(props)
+    case 'occupy': return occupySlots(props)
+    case 'fortify': return fortifySlots(props)
+    default: return { say: null }
   }
 }
 
 /**
- * The phase pills in the top bar already name the phase, so these prompts only
- * carry the k line when it says something the pills don't ("Took Peru").
+ * The phase pills in the top bar already name the phase, so the hint line only
+ * carries what they don't — "Took Peru", or the key that backs out of here.
  */
-function SetupControls({ state }: DockProps) {
-  return (
-    <>
-      <div className="counter">{state.players[state.current].reserve}</div>
-      <div className="prompt">
-        <span className="k">To place</span>
-        <span className="v">Click a territory · <b>1</b> at a time</span>
-      </div>
-    </>
-  )
+function setupSlots({ state }: DockProps): Slots {
+  return {
+    counter: <span className="counter">{state.players[state.current].reserve}</span>,
+    hint: 'To place',
+    say: <>Click a territory · <b>1</b> at a time</>,
+  }
 }
 
-function DeployControls({ state, amount, setAmount }: DockProps) {
+function deploySlots(props: DockProps): Slots {
+  const { state, amount, setAmount } = props
   const me = state.players[state.current]
-  const capped = Math.min(Math.max(1, amount), Math.max(1, state.toDeploy))
+  const range = amountRange(state, null, null)
   const blocked = me.cards.length >= HAND_LIMIT
   const spoils = cashingSpoils(state)
 
-  return (
-    <>
-      <div className="counter">{state.toDeploy}</div>
-      <div className="prompt">
-        {/* mid-turn, the deploy is an interruption — say why it's there, or it
-            reads as the game having lost track of the attack */}
-        {spoils && <span className="k">Spoils</span>}
-        <span className="v">
-          {blocked
-            ? spoils
-              ? <>The cards you took put you over <b>{HAND_LIMIT}</b> · trade a set</>
-              : 'Trade a set to continue'
-            : <>Click a territory to place <b>{capped}</b> · shift-click for all</>}
-        </span>
-      </div>
-      <div className="div" />
-      <Amount
-        label="Per click"
-        value={capped}
-        min={1}
-        max={Math.max(1, state.toDeploy)}
-        onChange={setAmount}
-        disabled={blocked}
-      />
-    </>
-  )
-}
-
-function AttackControls({ state, selected, onCancel }: DockProps) {
-  return (
-    <>
-      <div className="prompt">
-        <span className="v">
-          {selected
-            ? <>From {nm(selected)} · <b>{state.troops[selected]}</b> · click an outlined target</>
-            : <>Click one of your territories with <b>2+</b> armies</>}
-        </span>
-      </div>
-      {(state.lastBlitz || state.lastBattle) && <><div className="div" /><Dice state={state} /></>}
-      {selected && <><div className="div" /><button className="btn ghost" onClick={onCancel}>Deselect <kbd>Esc</kbd></button></>}
-    </>
-  )
-}
-
-function OccupyControls({ state, amount, setAmount }: DockProps) {
-  const occ = state.pendingOccupation!
-  const extra = Math.min(Math.max(amount, occ.min), occ.max)
-  return (
-    <>
-      {/* the map badges carry the arithmetic now — both sides of the move show the
-          count they'd end on, so spelling it out here would just be a second copy */}
-      <div className="prompt">
-        <span className="k">Took {nm(occ.to)}</span>
-        <span className="v"><b>{occ.moved}</b> advanced with the win · send more from {nm(occ.from)}?</span>
-      </div>
-      <div className="div" />
-      <Amount label="Move" value={extra} min={occ.min} max={occ.max} onChange={setAmount} disabled={occ.max === 0} />
-    </>
-  )
-}
-
-function FortifyControls({ state, selected, fortifyTo, amount, setAmount, onCancel }: DockProps) {
-  if (state.canFortify && selected && fortifyTo) {
-    const max = state.troops[selected] - 1
-    const n = Math.min(Math.max(amount, 1), max)
-    return (
+  return {
+    counter: <span className="counter">{state.toDeploy}</span>,
+    // mid-turn, the deploy is an interruption — say why it's there, or it reads
+    // as the game having lost track of the attack
+    hint: spoils ? 'Spoils' : 'Shift-click places the lot',
+    say: blocked
+      ? spoils
+        ? <>The cards you took put you over <b>{HAND_LIMIT}</b> · trade a set</>
+        : 'Trade a set to continue'
+      : <>Click a territory to place <b>{range ? clamp(amount, range.min, range.max) : 1}</b></>,
+    controls: (
       <>
-        <div className="prompt">
-          <span className="v">{nm(selected)} → {nm(fortifyTo)}</span>
-        </div>
-        <div className="div" />
-        <Amount label="Move" value={n} min={1} max={max} onChange={setAmount} />
-        <div className="div" />
-        <button className="btn ghost" onClick={onCancel}>Cancel <kbd>Esc</kbd></button>
+        <Cards {...props} />
+        <Amount
+          value={amount}
+          min={range?.min ?? 1}
+          max={range?.max ?? 1}
+          onChange={setAmount}
+          disabled={!range}
+        />
       </>
-    )
+    ),
   }
-  return (
-    <>
-      <div className="prompt">
-        <span className="v">
-          {!state.canFortify
-            ? 'Already fortified this turn'
-            : selected
-              ? <>From {nm(selected)} · click a connected territory</>
-              : <>Move armies between two of yours, or end your turn</>}
-        </span>
-      </div>
-      {selected && <><div className="div" /><button className="btn ghost" onClick={onCancel}>Deselect <kbd>Esc</kbd></button></>}
-    </>
-  )
+}
+
+function attackSlots({ state, selected }: DockProps): Slots {
+  return {
+    say: selected
+      ? <>From {nm(selected)} · <b>{state.troops[selected]}</b> · click an outlined target</>
+      : <>Click one of your territories with <b>2+</b> armies</>,
+    controls: state.lastBlitz || state.lastBattle ? <Dice state={state} /> : null,
+  }
+}
+
+function occupySlots({ state, amount, setAmount }: DockProps): Slots {
+  const occ = state.pendingOccupation!
+  const range = amountRange(state, null, null)
+  return {
+    // the map badges carry the arithmetic — both sides of the move show the count
+    // they'd end on, so spelling it out here would just be a second copy
+    hint: `Took ${nm(occ.to)}`,
+    say: <><b>{occ.moved}</b> advanced · send more from {nm(occ.from)}?</>,
+    controls: (
+      <Amount
+        value={amount}
+        min={range?.min ?? occ.min}
+        max={range?.max ?? occ.max}
+        onChange={setAmount}
+        disabled={occ.max === 0}
+      />
+    ),
+  }
+}
+
+function fortifySlots({ state, selected, fortifyTo, amount, setAmount }: DockProps): Slots {
+  const range = amountRange(state, selected, fortifyTo)
+  if (range && selected && fortifyTo) {
+    return {
+      say: <>{nm(selected)} → {nm(fortifyTo)}</>,
+      controls: <Amount value={amount} min={range.min} max={range.max} onChange={setAmount} />,
+    }
+  }
+  return {
+    say: !state.canFortify
+      ? 'Already fortified this turn'
+      : selected
+        ? <>From {nm(selected)} · click a connected territory</>
+        : <>Move armies between two territories or end your turn</>,
+  }
 }
 
 function Dice({ state }: { state: GameState }) {
@@ -379,3 +362,5 @@ function Dice({ state }: { state: GameState }) {
     </div>
   )
 }
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
