@@ -192,6 +192,47 @@ async function open(withHistory) {
   await page.close()
 }
 
+// ── D) the recap, and replaying the turns it summarises ────────────
+// The property is that Replay is a rewatch: the same board and the same
+// generator produce the same turns, so the recorded move list after a replay is
+// the one that was there before it. Nothing but a browser holds the two refs
+// that have to survive the rewind.
+{
+  const page = await open(false)
+  await page.getByLabel('Game seed').fill('20260807')
+  await page.getByRole('button', { name: 'Begin deployment' }).click()
+  await page.getByRole('button', { name: /Auto-place rest/ }).click()
+  await page.waitForSelector('.dock .amount', { timeout: 60000 })
+
+  // your turn: place the lot, then hand over
+  await page.locator('.terr.clickable').first().click({ modifiers: ['Shift'] })
+  const primary = page.locator('.btn.primary')
+  for (let i = 0; i < 6 && !/^Skip/i.test(await primary.innerText()); i++) {
+    await primary.click()
+    await page.waitForTimeout(120)
+  }
+  await primary.click()                                   // skip the bots' turns
+  await page.waitForSelector('.recap', { timeout: 60000 })
+
+  const lines = () => page.locator('.recap .lines').innerText()
+  const moves = () => page.evaluate(() => JSON.parse(localStorage.getItem('risk.games.v1'))[0].moves)
+  const said = await lines()
+  const played = await moves()
+
+  ok(/[+−]\d+ (army|armies)/.test(said), `the recap reports armies, got "${said.replace(/\n/g, ' / ')}"`)
+  ok(!/attacked|traded a set/.test(said), 'and not the blow-by-blow')
+  ok((await page.locator('.recap .line').count()) > 0, 'somebody is named in it')
+
+  await page.locator('.recap .btn').click()
+  ok((await page.locator('.recap').count()) === 0, 'replaying dismisses the recap it came from')
+  await page.locator('.btn.primary').click()              // skip the same turns again
+  await page.waitForSelector('.recap', { timeout: 60000 })
+
+  ok((await lines()) === said, 'the replayed turns produce the same recap')
+  ok(JSON.stringify(await moves()) === JSON.stringify(played), 'and exactly the same move list')
+  await page.close()
+}
+
 await browser.close()
 stop()
 

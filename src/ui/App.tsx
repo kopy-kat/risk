@@ -4,7 +4,7 @@ import type { TerritoryId } from '../engine/board'
 import { bestTradeIn, createGame, applyMove, territoriesOf } from '../engine/game'
 import type { SeatConfig } from '../engine/game'
 import { rngFrom } from '../engine/rng'
-import type { GameState, LogEntry, Move } from '../engine/types'
+import type { GameState, Move } from '../engine/types'
 import { BOT_BY_KEY } from '../bots'
 import { easyBot } from '../bots/easy'
 import { stepBot } from '../bots/play'
@@ -18,6 +18,8 @@ import {
   CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
   targetsFor, validDestination, validSelection,
 } from './decide'
+import { describeRow, recapBetween } from './recap'
+import type { RecapRow } from './recap'
 import { newGameId, saveGame } from '../review/store'
 
 const BOT_DELAY = { setup: 60, move: 260 }
@@ -42,12 +44,19 @@ export function App() {
   /** the seed this game was created from, so a bad game can be replayed exactly */
   const [seed, setSeed] = useState(0)
   /** what the bots did while you weren't looking */
-  const [recap, setRecap] = useState<LogEntry[] | null>(null)
-  /** how much of the log you've already seen — moves while it's your turn */
-  const logMark = useRef(0)
+  const [recap, setRecap] = useState<RecapRow[] | null>(null)
   /** whether the last state we saw was bot-controlled, so we know when control returns */
   const wasBot = useRef(false)
   const rng = useRef(rngFrom(12345))
+  /**
+   * The board as the last human left it, with the generator the bots are about to
+   * draw from. Those two are the whole of a bot stretch: `applyMove` takes its
+   * dice from the state and every bot decides from `(state, rand)`, so restoring
+   * the pair and letting go replays the same turns move for move. That's what
+   * Replay is, and it's also the window the recap measures.
+   */
+  const checkpoint = useRef<GameState | null>(null)
+  const checkpointRng = useRef(0)
   /** which stored game this is, so repeated saves overwrite one entry */
   const recordId = useRef('')
   const botSeed = useRef(0)
@@ -77,8 +86,8 @@ export function App() {
     setAutoSetup(false)
     setRecap(null)
     setReviewing(null)
-    logMark.current = 0
     wasBot.current = false
+    checkpoint.current = null
   }, [])
 
   // State updaters must stay side-effect free: React double-invokes them in dev to
@@ -192,26 +201,50 @@ export function App() {
   useEffect(() => { setHistory([]) }, [current])
 
   /**
-   * What happened while you weren't acting. Deliberately transient rather than a
-   * permanent log panel: it appears when control returns to you (which is also
-   * what Skip does) and clears on your next move.
+   * Mark the start of a bot stretch, and score it when control comes back.
    *
-   * The mark tracks along with your own moves and then freezes for the whole bot
-   * stretch — watching for the change of *player* instead would reset it at every
-   * bot handover, and you'd only ever see the last bot's turn.
+   * Both hang off the same transition, because they're the same window: the board
+   * is stashed the moment the last human hands over, and the recap is that board
+   * against this one. Watching for a change of *player* instead would restart the
+   * window at every bot handover, and you'd only ever see the last bot's turn.
    */
   useEffect(() => {
     if (!game) return
     const botNow = !!game.players[game.current].bot
-    if (!botNow) {
-      // your own turn-start line is the last thing logged before control comes
-      // back — it isn't news, so it doesn't belong under "while you were away"
-      const since = game.log.slice(logMark.current).filter((e) => e.player !== game.current)
-      logMark.current = game.log.length
-      if (wasBot.current) setRecap(since.length ? since : null)
+    if (botNow && !wasBot.current) {
+      checkpoint.current = game
+      checkpointRng.current = rng.current.state
+    }
+    if (!botNow && wasBot.current) {
+      const from = checkpoint.current
+      // initial placement runs through the same handovers and has nothing to
+      // report — armies land one at a time and no ground changes hands
+      const rows = from && from.phase !== 'setup' ? recapBetween(from, game) : []
+      setRecap(rows.length ? rows : null)
     }
     wasBot.current = botNow
   }, [game])
+
+  /**
+   * Rewind to the checkpoint and let the bots have their turns again. Identical
+   * turns, not similar ones — see the checkpoint's note — so this is a rewatch,
+   * not a reroll, and Skip still lands on exactly the board you already saw.
+   *
+   * It lives on the recap panel and nowhere else, which is also what keeps it
+   * safe: the recap clears on your first move of the turn, so the button is gone
+   * before you have a decision it could throw away.
+   */
+  const replayBots = useCallback(() => {
+    const from = checkpoint.current
+    if (!from) return
+    rng.current = rngFrom(checkpointRng.current)
+    setGame(from)
+    setRecap(null)
+    setHistory([])
+    setSelected(null)
+    setFortifyTo(null)
+    setError(null)
+  }, [])
 
   const me = game ? game.players[game.current] : null
   const isHuman = !!game && isHumanTurn(game)
@@ -392,21 +425,26 @@ export function App() {
           <div className="recap" onClick={() => setRecap(null)}>
             <span className="mono-label">While you were away</span>
             <div className="lines">
-              {/* every move, not a tail of them — the run of lines under one name
-                  is that player's whole turn */}
-              {recap.map((e, i) => (
+              {/* one line per player: what they gained, what they lost, and who
+                  they took off the board. The blow-by-blow is in the review */}
+              {recap.map((r) => (
                 <div
                   className="line"
-                  key={i}
-                  style={{ ['--c' as string]: e.player === null ? 'var(--ink-3)' : playerColor(game.players[e.player].color) }}
+                  key={r.player}
+                  style={{ ['--c' as string]: playerColor(game.players[r.player].color) }}
                 >
-                  <span className="who">
-                    {e.player === recap[i - 1]?.player ? '' : e.player === null ? '·' : game.players[e.player].name}
-                  </span>
-                  <span className="what">{e.text}</span>
+                  <span className="who">{game.players[r.player].name}</span>
+                  <span className="what">{describeRow(r, (p) => game.players[p].name)}</span>
                 </div>
               ))}
             </div>
+            <button
+              className="btn ghost wide"
+              onClick={(e) => { e.stopPropagation(); replayBots() }}
+              title="Rewind to the end of your last turn and watch those turns again"
+            >
+              Replay their turns
+            </button>
           </div>
         )}
 

@@ -203,12 +203,17 @@ Stored games carry a fingerprint of the rules they were played under. Retune
 surface as a replay quietly showing a board that never existed — so they're quarantined
 in the list instead of replayed.
 
-When control returns to you — including after Skip — a transient panel lists what the
-bots did: every reinforcement, assault, capture and elimination since your last move,
-grouped by player, not a trimmed tail of them. Repeated rolls against one territory
-collapse into a single line (`attacked Ural from China · 3× · −2/−2`), which is what
-keeps "everything" readable. It clears on your next move; it's a recap, not a log
-panel.
+When control returns to you — including after Skip — a transient panel gives the
+scoreline for the turns you missed: one line per player, ground then armies then any
+eliminations (`Azure +3 territories · −8 armies · eliminated Amber`). It's read off the
+board you left against the board you got back, not off the log, so it says what changed
+rather than what was rolled. It clears on your next move; it's a recap, not a log panel.
+
+**Replay their turns** — the one button on that panel — rewinds to the end of your last
+turn and plays the bot turns again, identically.
+The board is immutable and the dice live inside it, so a checkpoint is just that state
+plus the generator the bots draw from; restoring both and letting go reproduces the same
+turns move for move, whether you watch them or Skip through them again.
 
 Continent labels on the map double as a progress readout — `AUSTRALIA 3/4 +2`, tinted
 by whoever leads and solid once someone holds it outright. Being one territory off a
@@ -284,6 +289,9 @@ armies, or hunt eliminations for the cards. See [`BOTS.md`](BOTS.md).
   25, then +5 forever** — retune `CASH_VALUES` in `src/engine/cards.ts` and nothing else
   needs to change. Holding 5+ cards forces a trade before you can deploy. One card per
   turn in which you took at least one territory.
+- **Spoils** — inheriting a hand can push you over the limit mid-attack, and the surplus
+  can't be carried: the turn drops back into deploy, you trade down, and the armies go
+  onto the board before the attack goes on.
 - **Combat** — attacker rolls up to 3 dice (needs troops − 1), defender up to 2. Sorted
   highest-first and compared pairwise; ties go to the defender. A blitz is the same
   maths repeated at full odds until the territory falls or the attacker is down to one
@@ -300,12 +308,8 @@ Bots play on a timer, but the bottom bar has a **skip** button during their turn
 that applies every remaining bot move at once and hands straight back to you. With
 no human seats left it runs the game to its finish instead.
 
-Two deliberate simplifications:
-
-1. The classic +2 territory-match bonus on a traded set is added to your deploy pool
-   rather than forced onto the specific territory pictured.
-2. Inheriting cards can push a hand above 5 mid-turn; the forced trade happens at the
-   start of your next deploy rather than immediately.
+One deliberate simplification: the classic +2 territory-match bonus on a traded set is
+added to your deploy pool rather than forced onto the specific territory pictured.
 
 ## Licensing
 
