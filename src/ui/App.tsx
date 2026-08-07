@@ -71,8 +71,8 @@ export function App() {
   /** the game being reviewed, or null while playing */
   const [reviewing, setReviewing] = useState<string | null>(null)
 
-  const start = useCallback((seats: SeatConfig[], chosenSeed?: number) => {
-    const s = chosenSeed ?? Math.floor(Math.random() * 1e9)
+  const start = useCallback((seats: SeatConfig[]) => {
+    const s = Math.floor(Math.random() * 1e9)
     // one number reproduces the whole game: the deal, the dice, and the bots
     botSeed.current = s ^ 0x9e3779b9
     rng.current = rngFrom(botSeed.current)

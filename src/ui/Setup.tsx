@@ -6,13 +6,12 @@ import type { GameRecord } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[], seed?: number): void
+  onStart(seats: SeatConfig[]): void
   onReview(id: string): void
 }
 
 export function Setup({ onStart, onReview }: Props) {
   const [count, setCount] = useState(4)
-  const [seed, setSeed] = useState('')
   const [past, setPast] = useState<GameRecord[]>(() => listGames())
   const [seats, setSeats] = useState<SeatConfig[]>(
     PALETTE_NAMES.map((name, i) => ({ name, bot: i === 0 ? null : DEFAULT_BOT })),
@@ -68,25 +67,9 @@ export function Setup({ onStart, onReview }: Props) {
           </div>
         </div>
 
-        <div className="field seedfield">
-          <span className="mono-label">Seed</span>
-          <input
-            value={seed}
-            onChange={(e) => setSeed(e.target.value.replace(/\D/g, '').slice(0, 10))}
-            placeholder="random — paste one to replay a game"
-            aria-label="Game seed"
-            inputMode="numeric"
-          />
-        </div>
-
         <button
           className="go"
-          onClick={() =>
-            onStart(
-              active.map((s) => ({ ...s, name: s.name.trim() || 'Player' })),
-              seed ? Number(seed) : undefined,
-            )
-          }
+          onClick={() => onStart(active.map((s) => ({ ...s, name: s.name.trim() || 'Player' })))}
         >
           {humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>

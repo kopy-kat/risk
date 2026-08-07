@@ -199,7 +199,6 @@ async function open(withHistory) {
 // that have to survive the rewind.
 {
   const page = await open(false)
-  await page.getByLabel('Game seed').fill('20260807')
   await page.getByRole('button', { name: 'Begin deployment' }).click()
   await page.getByRole('button', { name: /Auto-place rest/ }).click()
   await page.waitForSelector('.dock .amount', { timeout: 60000 })
