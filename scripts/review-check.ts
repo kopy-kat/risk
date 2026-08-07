@@ -72,7 +72,11 @@ const started = Date.now()
 const rows: Array<{
   tier: string
   n: number
+  /** mean loss per game, indexed by seed */
   perGame: number[]
+  /** whether that seed's game was won inside the turn cap */
+  finished: boolean[]
+  stalled: number
   mean: number
   p50: number
   p90: number
@@ -89,11 +93,15 @@ for (const tier of TIERS) {
   const losses: number[] = []
   /** mean loss per game, so games can be compared seed by seed below */
   const perGame: number[] = []
+  /** whether that seed's game was actually won, for the second reading below */
+  const finished: boolean[] = []
   const grades = Object.fromEntries(GRADES.map((g) => [g, 0])) as Record<Grade, number>
   let luck = 0
   let attacks = 0
+  let stalled = 0
   for (let g = 0; g < GAMES; g++) {
     const record = play(tier, seedFor(g))
+    if (!record.finished) stalled++
     // Seat 0 only. Reviewing every seat would quadruple the work for the same
     // answer, since all four play the same tier.
     const review = reviewGame(record, { players: [0] })
@@ -109,6 +117,7 @@ for (const tier of TIERS) {
       }
     }
     perGame.push(review.judgements.length ? sum / review.judgements.length : 0)
+    finished.push(record.finished)
   }
   losses.sort((a, b) => a - b)
   const mean = losses.reduce((n, x) => n + x, 0) / Math.max(1, losses.length)
@@ -116,6 +125,8 @@ for (const tier of TIERS) {
     tier,
     n: losses.length,
     perGame,
+    finished,
+    stalled,
     mean,
     p50: quantile(losses, 0.5),
     p90: quantile(losses, 0.9),
@@ -130,7 +141,25 @@ for (const tier of TIERS) {
   console.log(
     `${tier.padEnd(9)} ${String(r.n).padStart(6)} decisions   ` +
       `mean ${r.mean.toFixed(2)}   p50 ${r.p50.toFixed(2)}   ` +
-      `p90 ${r.p90.toFixed(2)}   p99 ${r.p99.toFixed(2)}   luck/attack ${r.luck.toFixed(3)}`,
+      `p90 ${r.p90.toFixed(2)}   p99 ${r.p99.toFixed(2)}   luck/attack ${r.luck.toFixed(3)}` +
+      (r.stalled ? `   stalled ${r.stalled}/${GAMES}` : ''),
+  )
+}
+
+// ── games nobody won ───────────────────────────────────────────────
+// On its own line, because it is a fact about the *tier* rather than about the
+// reviewer, and reading it as the latter costs an afternoon. `random` stalls in
+// every game and always has — that is what random play is, and it is why stalled
+// games are reported rather than dropped. What matters is a tier that starts
+// stalling when it didn't before.
+const stalling = rows.filter((r) => r.stalled)
+if (stalling.length) {
+  console.log(
+    `\nstalled past ${TURN_CAP} turns: ` +
+      `${stalling.map((r) => `${r.tier} ${r.stalled}/${GAMES}`).join(', ')}\n` +
+      `  A tier that can't finish at ${SEATS} seats is a bot problem, not a reviewing one — ` +
+      `check\n  \`npm run bench -- <tier> <tier> --players ${SEATS}\`. Its decisions are still ` +
+      `counted below,\n  alongside a second reading over the seeds both tiers won.`,
   )
 }
 
@@ -162,26 +191,48 @@ console.log(`\n${GAMES} games per tier, ${SEATS} seats, in ${((Date.now() - star
 // thousand clustered decisions as four thousand observations understates the error
 // badly enough to flip this check between sample sizes. The unit of independence
 // is the game, so that is what gets averaged and differenced.
+//
+/** Paired difference over the seeds `keep` allows. Positive means the weaker tier won. */
+function pairedDiff(a: number[], b: number[], keep: (g: number) => boolean) {
+  const diffs = a.map((x, g) => (keep(g) ? x - b[g] : null)).filter((d): d is number => d !== null)
+  const mean = diffs.length ? diffs.reduce((n, x) => n + x, 0) / diffs.length : 0
+  const variance =
+    diffs.length > 1 ? diffs.reduce((n, x) => n + (x - mean) ** 2, 0) / (diffs.length - 1) : 0
+  return { n: diffs.length, mean, se: diffs.length ? Math.sqrt(variance / diffs.length) : 0 }
+}
+
+const show = (d: { mean: number; se: number }) =>
+  `${d.mean >= 0 ? '+' : ''}${d.mean.toFixed(2)} ± ${(2 * d.se).toFixed(2)}`
+
 console.log('\nordering (mean armies given up per decision, weakest last):')
 let ok = true
 for (let i = 1; i < rows.length; i++) {
   const prev = rows[i - 1]
   const cur = rows[i]
-  // paired per-seed differences: positive means the weaker tier played better
-  const diffs = prev.perGame.map((x, g) => x - cur.perGame[g])
-  const mean = diffs.reduce((n, x) => n + x, 0) / diffs.length
-  const variance =
-    diffs.length > 1
-      ? diffs.reduce((n, x) => n + (x - mean) ** 2, 0) / (diffs.length - 1)
-      : 0
-  const se = Math.sqrt(variance / diffs.length)
-  const inverted = mean > 2 * se
+  const all = pairedDiff(prev.perGame, cur.perGame, () => true)
+  const inverted = all.mean > 2 * all.se
   if (inverted) ok = false
-  const rel = inverted ? '≫ (!)' : mean < 0 ? '<' : '≈'
+  const rel = inverted ? '≫ (!)' : all.mean < 0 ? '<' : '≈'
   console.log(
     `  ${prev.tier.padEnd(8)} ${prev.mean.toFixed(2)} ${rel} ${cur.tier.padEnd(8)} ${cur.mean.toFixed(2)}` +
-      `   (paired diff ${mean >= 0 ? '+' : ''}${mean.toFixed(2)} ± ${(2 * se).toFixed(2)})`,
+      `   (paired diff ${show(all)})`,
   )
+  // Second reading, over the seeds both tiers actually won.
+  //
+  // A stalled game is a sprawl nobody can hold and it scores badly from end to end,
+  // so a pair where one tier stalls more is partly a comparison of stall rates. When
+  // the two readings disagree, the disagreement *is* the answer: the ordering above
+  // is about the bots' ability to finish, not about the reviewer. Left out below five
+  // seeds, where the error bar stops meaning anything.
+  if (prev.stalled || cur.stalled) {
+    const won = pairedDiff(prev.perGame, cur.perGame, (g) => prev.finished[g] && cur.finished[g])
+    console.log(
+      won.n >= 5
+        ? `      of which both won: ${show(won)} over ${won.n} seeds` +
+          (inverted && won.mean <= 2 * won.se ? '  — the inversion is the stalls' : '')
+        : `      only ${won.n} seeds were won by both — nothing to compare`,
+    )
+  }
 }
 console.log(
   ok

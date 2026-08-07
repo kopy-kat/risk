@@ -444,29 +444,32 @@ plays is touched.
 way `bench.ts` pairs, over 20 games per tier:
 
 ```
-marshal 1.85  <  general 6.00      paired gap −0.88 ± 1.44   ordered
-general 6.00  >  colonel 2.08                 +0.72 ± 1.41   INVERTED, inside error
-colonel 2.08  <  easy    4.79                 −1.43 ± 1.37   separated
-easy    4.79  <  random  7.11                 −3.40 ± 1.65   separated
+                                   all 20 seeds        seeds both tiers won
+marshal 1.85  <  general 6.00      −0.88 ± 1.44        +0.04 ± 0.56  (17)
+general 6.00  >  colonel 2.08      +0.72 ± 1.41        −0.06 ± 0.44  (16)
+colonel 2.08  <  easy    4.79      −1.43 ± 1.37        −1.67 ± 1.36  (19)
+easy    4.79  <  random  7.11      −3.40 ± 1.65        no seed won by both
 ```
 
-**General comes out worst of the top three, and the cause is game length, not the
-reviewer.** At four seats General's self-play averages 91 turns and stalls into the
-300-turn cap in 3 games of 20, against Colonel's 53 turns and 1. A stalled game is a
-sprawl nobody can hold, it produces bad decisions from end to end, and it contributes
-eight thousand of General's decisions against Colonel's two thousand. Loss per
-decision has no defence against that. The one-ply scoring this replaced inverts the
-same pair slightly harder (+0.89 ± 1.47) on the same games, so it is not something
-the rollout introduced — and `npm run bench -- general colonel 200 --players 4` still
-has General ahead 61.4% ± 3.4, which is the ladder this check is measured against.
+**Read the second column first when the two disagree.** A game nobody won inside the
+300-turn cap is a sprawl nobody can hold; it scores badly from end to end and it is
+long, so it brings several times the decisions of a finished game. A pair where one
+tier stalls more is therefore partly a comparison of stall rates. General stalls in 3
+games of 20 at four seats against Colonel's 1, which is the whole of the +0.72 above
+— over the sixteen seeds both of them won they are level, at −0.06 ± 0.44. The error
+bars halve at the same time, because the stalled games are the wild ones.
 
-Worth fixing at the source: a tier that stalls at a full table is a bot problem
-first and a reviewing problem second.
+This is why stalled games are reported rather than dropped: `random` never finishes
+one, and dropping them would delete the clearest separation on the ladder. What the
+count is for is spotting a tier that *starts* stalling — a bot problem arriving
+disguised as a miscalibrated reviewer. `npm run bench -- general colonel 200
+--players 4` has General ahead 61.4% ± 3.4, so the ladder itself is intact.
 
-Marshal against General is the pair that should be hardest even without that, and is:
-elimination hunting and table reading pay off across turns rather than within one
-decision, which is the same fact the ablation table above reports as "multiplayer
-specialist".
+On games that finish, then: Colonel separates from `easy`, and the top three are
+level with each other. Marshal against General is the pair that should be hardest,
+and is — elimination hunting and table reading pay off across turns rather than
+within one decision, which is the same fact the ablation table above reports as
+"multiplayer specialist".
 
 **Pairing is not optional here, and getting it wrong nearly shipped a bad number.**
 The first version treated every decision as an independent sample. Decisions inside
@@ -477,7 +480,7 @@ games per tier and failed at 8 on the *same seeds*. Averaging within a game and
 differencing across seeds fixes both the clustering and the map luck at once.
 
 The consequence worth stating plainly: this check resolves Colonel from `easy` and
-`easy` from `random` at twenty games, and gets General wrong for the reason above. It
+`easy` from `random` at twenty games, and ties the top three on games that finish. It
 is a guard against gross miscalibration, which is what it is there for — not a
 fine-grained ranking.
 
