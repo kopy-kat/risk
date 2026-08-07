@@ -7,7 +7,7 @@
  * about to make — a suggestion and an intention should look identical, because
  * they're the same thing at different times.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TerritoryId } from '../engine/board'
 import type { GameState, Move, PlayerId } from '../engine/types'
 import { describeMove, isNotable, reviewGame } from '../review/review'
@@ -86,6 +86,37 @@ export function Review({ id, onExit }: Props) {
         : [...notable].reverse().find((j) => j.index < cursor) ?? notable[notable.length - 1]
     setCursor(next.index)
   }
+
+  /**
+   * The tape is the one thing on screen too long to show at once, so moving the
+   * cursor has to carry the view with it — a highlight that lands off-screen
+   * reads as nothing happening at all. Only scrolls when the tick is close to an
+   * edge, so stepping through the middle of a game leaves the shape still.
+   */
+  const tape = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = tape.current
+    if (!el) return
+    // Stepping by one lands between decisions as often as on one, so follow the
+    // nearest tick rather than only an exact hit.
+    let at = -1
+    let near = Infinity
+    judgements.forEach((j, i) => {
+      const d = Math.abs(j.index - cursor)
+      if (d < near) { near = d; at = i }
+    })
+    const tick = el.children[at] as HTMLElement | undefined
+    if (!tick) return
+    const box = el.getBoundingClientRect()
+    const t = tick.getBoundingClientRect()
+    const pad = 26
+    const left = t.left - box.left
+    const right = left + t.width
+    let to = el.scrollLeft
+    if (left < pad) to = el.scrollLeft + left - pad
+    else if (right > box.width - pad) to = el.scrollLeft + right - box.width + pad
+    if (Math.abs(to - el.scrollLeft) > 1) el.scrollTo({ left: to, behavior: 'smooth' })
+  }, [cursor, judgements])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -239,7 +270,7 @@ export function Review({ id, onExit }: Props) {
 
         <div className="rev-bar">
           <button className="nav" onClick={() => step(-1)} aria-label="Previous move">←</button>
-          <div className="tape">
+          <div className="tape" ref={tape}>
             {/* every decision you made, in order, coloured by how it graded.
                 It doubles as the scrubber — the shape of a game is legible from it */}
             {judgements.map((j) => (

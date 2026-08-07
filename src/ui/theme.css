@@ -357,16 +357,6 @@ kbd {
 .panel .sub { color: var(--ink-3); font-size: 10px; letter-spacing: .28em; text-transform: uppercase; margin-bottom: 44px; }
 
 .field { margin-bottom: 30px; }
-.seedfield { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-.seedfield > .mono-label { margin-bottom: 0; flex-shrink: 0; }
-.seedfield input {
-  flex: 1; min-width: 0; background: var(--paper-2); border: 1px solid transparent;
-  padding: 9px 12px; border-radius: 2px; color: var(--ink);
-  font-family: inherit; font-size: 12px; outline: none;
-  font-variant-numeric: tabular-nums;
-}
-.seedfield input:focus { border-color: var(--rule); }
-.seedfield input::placeholder { color: var(--ink-3); }
 .field > .mono-label { display: block; margin-bottom: 12px; }
 
 .count { display: flex; gap: 7px; }
@@ -550,7 +540,11 @@ kbd {
 .rev-bar .tape {
   display: flex; gap: 2px; align-items: flex-end;
   max-width: 46vw; overflow-x: auto; padding: 3px 0;
+  /* No scrollbar: the cursor's tick is scrolled into view for you, so the bar
+     never needs dragging and a gutter would only cost the ticks their height. */
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.rev-bar .tape::-webkit-scrollbar { display: none; }
 .rev-bar .tick {
   width: 7px; flex-shrink: 0;
   border: 0; border-radius: 1px; cursor: pointer; padding: 0;
