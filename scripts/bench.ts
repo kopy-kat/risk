@@ -5,6 +5,7 @@
  *   npm run bench -- easy random         -- one pairing
  *   npm run bench -- easy random 500     -- ...over 500 seeds
  *   npm run bench -- --players 4         -- 4-seat games instead of 2
+ *   npm run bench -- --jobs 1            -- one thread, for profiling
  *
  * Two things make the output trustworthy:
  *
@@ -17,33 +18,12 @@
  *
  * Win rates carry Wilson intervals; anything inside the interval is noise.
  */
-import { createGame } from '../src/engine/game'
-import { rngFrom } from '../src/engine/rng'
-import { ALL_BOTS, BOT_BY_KEY } from '../src/bots'
-import { fallbacks, resetFallbacks, stepBot } from '../src/bots/play'
+import { ALL_BOTS, BOT_BY_KEY, LADDER } from '../src/bots'
+import type { Job } from './match'
+import { defaultWorkers, playGames } from './parallel'
 
 const TURN_CAP = 600
 const Z = 1.96 // 95%
-
-interface MatchResult {
-  /** index into the seat list, or null if the game hit the turn cap */
-  winner: number | null
-  turns: number
-}
-
-/** One game. Seats are bot keys in play order; everything derives from `seed`. */
-function playMatch(seatBots: string[], seed: number): MatchResult {
-  const rng = rngFrom(seed ^ 0x5bf03635)
-  let s = createGame({
-    seats: seatBots.map((bot, i) => ({ name: `P${i}`, bot })),
-    seed,
-  })
-  while (s.phase !== 'gameOver' && s.turn < TURN_CAP) {
-    const bot = BOT_BY_KEY[s.players[s.current].bot!]
-    s = stepBot(s, bot, () => rng.next())   // non-strict: one bad move shouldn't abort a 600-game run
-  }
-  return { winner: s.winner, turns: s.turn }
-}
 
 /** Wilson score interval — honest at small n, unlike the normal approximation. */
 function wilson(wins: number, n: number): { p: number; half: number } {
@@ -90,7 +70,12 @@ function label(bots: string[]): { labels: string[]; botOf: Record<string, string
   return { labels, botOf }
 }
 
-function runPairing(bots: string[], seeds: number, seatCount: number): Tally {
+async function runPairing(
+  bots: string[],
+  seeds: number,
+  seatCount: number,
+  workers: number,
+): Promise<{ tally: Tally; fallbacks: Record<string, number> }> {
   const { labels, botOf } = label(bots)
   // fill the table up to seatCount by cycling the contenders
   const seats = Array.from({ length: seatCount }, (_, i) => labels[i % labels.length])
@@ -107,22 +92,32 @@ function runPairing(bots: string[], seeds: number, seatCount: number): Tally {
     botOf,
   }
 
+  // Jobs are built up front and played in any order; the tally below walks them
+  // back in the order they were created, so the numbers don't depend on timing.
+  const jobs: Job[] = []
+  const played: string[][] = []
   for (let i = 0; i < seeds; i++) {
     const seed = i * 2654435761 + 1013904223
     for (const order of orders) {
-      const { winner, turns } = playMatch(order.map((l) => botOf[l]), seed)
-      order.forEach((bot, seat) => t.playedSeat[bot][seat]++)
-      t.games++
-      t.turns += turns
-      if (winner === null) t.capped++
-      else {
-        const key = order[winner]
-        t.wins[key]++
-        t.bySeat[key][winner]++
-      }
+      jobs.push({ order: order.map((l) => botOf[l]), seed, turnCap: TURN_CAP })
+      played.push(order)
     }
   }
-  return t
+
+  const { outcomes, fallbacks } = await playGames(jobs, workers)
+  outcomes.forEach(({ winner, turns }, i) => {
+    const order = played[i]
+    order.forEach((bot, seat) => t.playedSeat[bot][seat]++)
+    t.games++
+    t.turns += turns
+    if (winner === null) t.capped++
+    else {
+      const key = order[winner]
+      t.wins[key]++
+      t.bySeat[key][winner]++
+    }
+  })
+  return { tally: t, fallbacks }
 }
 
 function report(_bots: string[], t: Tally, seatCount: number) {
@@ -158,10 +153,14 @@ function report(_bots: string[], t: Tally, seatCount: number) {
 
 // ── entry point ───────────────────────────────────────────────
 const argv = process.argv.slice(2)
-const playersFlag = argv.indexOf('--players')
-const seatCount = playersFlag >= 0 ? Number(argv[playersFlag + 1]) : 2
-const valueIdx = playersFlag >= 0 ? playersFlag + 1 : -1
-const positional = argv.filter((a, i) => !a.startsWith('--') && i !== valueIdx)
+const flag = (name: string, fallback: number) => {
+  const i = argv.indexOf(name)
+  return i >= 0 ? Number(argv[i + 1]) : fallback
+}
+const seatCount = flag('--players', 2)
+const workers = flag('--jobs', defaultWorkers())
+const flagValues = new Set(['--players', '--jobs'].map((f) => argv.indexOf(f) + 1).filter((i) => i > 0))
+const positional = argv.filter((a, i) => !a.startsWith('--') && !flagValues.has(i))
 
 const names = positional.filter((a) => Number.isNaN(Number(a)))
 const seeds = Number(positional.find((a) => !Number.isNaN(Number(a)))) || 200
@@ -173,15 +172,21 @@ for (const n of names) {
   }
 }
 
-resetFallbacks()
 const started = Date.now()
+const bad: Record<string, number> = {}
+const collect = (f: Record<string, number>) => {
+  for (const [k, n] of Object.entries(f)) bad[k] = (bad[k] ?? 0) + n
+}
 
 if (names.length >= 2) {
-  const t = runPairing(names, seeds, Math.max(seatCount, names.length))
-  report(names, t, Math.max(seatCount, names.length))
+  const seats = Math.max(seatCount, names.length)
+  const { tally, fallbacks } = await runPairing(names, seeds, seats, workers)
+  collect(fallbacks)
+  report(names, tally, seats)
 } else {
-  // round-robin every registered bot, pairwise
-  const keys = ALL_BOTS.map((b) => b.key)
+  // round-robin the ladder, pairwise. Not the opponent pool: those exist to be
+  // beaten by a tier, and ranking them against each other measures nothing.
+  const keys = LADDER.map((b) => b.key)
   if (keys.length < 2) {
     console.error('need at least two registered bots to benchmark')
     process.exit(1)
@@ -192,11 +197,12 @@ if (names.length >= 2) {
   for (let i = 0; i < keys.length; i++)
     for (let j = i + 1; j < keys.length; j++) {
       const pair = [keys[i], keys[j]]
-      const t = runPairing(pair, seeds, 2)
-      report(pair, t, 2)
-      const decided = t.games - t.capped
-      table[keys[i]][keys[j]] = `${((t.wins[keys[i]] / decided) * 100).toFixed(0)}%`
-      table[keys[j]][keys[i]] = `${((t.wins[keys[j]] / decided) * 100).toFixed(0)}%`
+      const { tally, fallbacks } = await runPairing(pair, seeds, 2, workers)
+      collect(fallbacks)
+      report(pair, tally, 2)
+      const decided = tally.games - tally.capped
+      table[keys[i]][keys[j]] = `${((tally.wins[keys[i]] / decided) * 100).toFixed(0)}%`
+      table[keys[j]][keys[i]] = `${((tally.wins[keys[j]] / decided) * 100).toFixed(0)}%`
     }
 
   console.log('\n\nwin rate, row vs column\n')
@@ -206,9 +212,9 @@ if (names.length >= 2) {
     console.log(a.padEnd(w) + keys.map((b) => (a === b ? '—' : table[a][b] ?? '').padStart(w)).join(''))
 }
 
-const bad = Object.entries(fallbacks).filter(([, n]) => n > 0)
-if (bad.length) {
+const illegal = Object.entries(bad).filter(([, n]) => n > 0)
+if (illegal.length) {
   console.log('\nILLEGAL MOVES (bot fell back to random — results are not trustworthy):')
-  for (const [k, n] of bad) console.log(`  ${k}: ${n}`)
+  for (const [k, n] of illegal) console.log(`  ${k}: ${n}`)
 }
 console.log(`\ndone in ${((Date.now() - started) / 1000).toFixed(1)}s`)

@@ -640,6 +640,13 @@ kbd {
 /* ── past games, on the setup screen ── */
 
 .pastgames { margin-top: 34px; margin-bottom: 0; }
+.pastgames > .mono-label { display: flex; justify-content: space-between; align-items: baseline; }
+.pastgames .export {
+  padding: 0; background: transparent; border: 0; cursor: pointer;
+  font-size: inherit; letter-spacing: inherit; text-transform: inherit;
+  color: var(--ink-3); transition: color .18s var(--ease);
+}
+.pastgames .export:hover { color: var(--ink-1); }
 .games { display: flex; flex-direction: column; gap: 1px; max-height: 232px; overflow-y: auto; }
 .game { display: flex; align-items: stretch; background: var(--paper-2); }
 .game .open {

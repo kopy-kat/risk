@@ -142,7 +142,9 @@ Explicit anti-tells, because these are what make a bot feel like a machine:
 
 ## Measuring
 
-`npm run bench` — see the harness in `scripts/bench.ts`.
+`npm run bench` — see the harness in `scripts/bench.ts`. It ranks the **ladder**
+(`LADDER` in `src/bots/index.ts`): three tiers plus the two fixed rungs. The opponent
+pool is deliberately outside it — see "What the bench cannot see" below.
 
 Two things make the numbers trustworthy:
 
@@ -189,8 +191,17 @@ easy    > random    97.9 ±1.1
 ```
 
 Stalled games are 2% or below in every pairing. Mixed tables with random seat counts
-(`npm run sim -- 300`) separate Marshal cleanly and leave the other two level:
-marshal 39.4% · colonel 27.9% · general 27.6% · easy 4.7% · random 0.3%.
+(`npm run sim -- 300`, seats drawn from `ALL_BOTS`, so the opponent pool is in the
+draw) put all three tiers in order and separate every step:
+
+```
+marshal 30.4% · general 24.6% · colonel 19.2% · blitzer 11.9% · easy 8.1%
+farmer 3.5% · random 1.5% · banker 0.8% · camper 0%
+```
+
+That the middle of the ladder separates here and barely does heads-up is not a
+contradiction: a six-way table with five kinds of opponent is a different game from a
+duel, and it is the closest thing on this page to what the app actually opens on.
 
 **Colonel outscoring General against `easy` at four seats is not a misprint**, and it
 is the clearest illustration on this page of why a bench pairing is not a strength
@@ -212,6 +223,155 @@ separates cleanly (66.6 / 70.0) because route planning and the chokepoint openin
 pay in a duel; General over Colonel at 53.2 is barely outside chance. At four seats the
 three steps are level at 57 but all narrower than the top tier deserves. The honest
 summary is that the top of the ladder moved and the middle did not.
+
+### What the bench cannot see
+
+Every number above is a bot against a bot, which answers "is this stronger?" and cannot
+answer "is there a strategy none of these has a reply to?". A bot only ever faces
+opponents that think the way it does, so a hole shared by all three tiers is invisible
+to every pairing at once.
+
+Four recorded games against a person say what that misses. Marshal filled every other
+seat; the person won three of them — at six, five and four seats. `npm run study`
+replays an exported game and prints territories, armies and largest stack per seat per
+turn, which is the shape that makes the pattern visible: in each win they hold four to
+fourteen territories and carry between two and seven times the armies per territory any
+tier does, while Marshal's largest stack sits at two to five for the whole game.
+
+**But banking is the symptom, and the card economy is the cause.** In the six-seat game
+the leader reached turn 53 holding 40 of 42 territories against the person's two, and
+the log for the last four turns reads:
+
+```
+t53  leader  +11 · holds North America, South America
+t53  leader  traded a set · +45      (then +50, and 20 territories taken)
+t54  person  +3 · traded a set · +55
+t55  leader  +33 · holds five continents
+t56  person  +3 · traded a set · +65  → took all 42
+```
+
+`CASH_VALUES` runs 4, 6, 8, 10, 12, 15, 20, 25 and then **+5 forever**, so in a long
+game a set outgrows the entire board. The leader's 40 territories and five continent
+bonuses paid 33 a turn; the person's one set paid 65. Holding ground stopped being how
+income works around turn 45 and no tier noticed, because in self-play games end before
+the sequence gets there — the four-seat tier-vs-tier games above average 49 turns.
+
+**And the tiers do not close games out.** Marshal left a two-territory player alive for
+three consecutive turns while holding 40 territories. That is not a one-off: across 60
+six-seat Marshal self-play games, 339 turns end with a rival that could have been
+wiped out still standing — 5.6 a game — and 2 of those 60 games are won by a player who
+was spared. (The test is crude and reads as an upper bound: it asks whether every one of
+the rival's territories borders one of ours at 80%+ odds, not whether one stack can
+actually chain through them all.) Eliminating a player takes their hand, and a hand is
+worth more than the board late, so declining is not the small mistake it looks like.
+
+The through-line: **elimination hunting and card timing are both priced against map
+income, and late in a long game map income is the smaller number.**
+
+### The opponent pool
+
+`src/bots/pool.ts`. One parameterised policy, four named points, none of them a tier and
+none of them selectable in the seat picker. They are outside `LADDER` on purpose —
+ranking a tier against them would be reading a diagnostic as a score.
+
+| point | what it does |
+| --- | --- |
+| `banker` | garrisons a home continent, banks the surplus, cashes it into one sweep |
+| `blitzer` | takes anything better than a coin flip and never stops |
+| `camper` | holds one small continent very hard and refuses to leave it |
+| `farmer` | one territory a turn for the card, cashed on sight |
+
+`npm run exploit -- --report` scores each against a table of the target. One candidate
+against three or five of the tier, so the number to beat is an equal share:
+
+```
+                  4 seats (25.0%)   6 seats (16.7%)
+banker                1.2 ±1.2          1.2 ±1.2
+blitzer               9.7 ±4.4          6.4 ±3.7
+camper                1.2 ±1.2          1.2 ±1.2
+farmer                1.2 ±1.2          1.3 ±1.3
+```
+
+**None of them is an exploit, and the crude one is the best of them.** Every point that
+banks armies is beaten worse than the one that just attacks, which is the first useful
+thing the pool produced: banking without the card economy behind it is a pile of armies
+behind a border that is too long to hold. `homeFocus` — sit in one continent and
+garrison only its chokepoints — was added precisely to fix that and made `banker` and
+`camper` *worse*, which is worth stating plainly rather than tuning away.
+
+The one thing they are one policy family for: `npm run exploit` searches the space they
+sit in, so a new exploit arrives as seven numbers rather than as a new file.
+
+### Searching for exploits
+
+`scripts/exploit.ts`. Cross-entropy over the policy space, maximising win rate against a
+tier: sample candidates, keep the best third, refit, repeat. Seven dimensions of mixed
+integers and reals, a noisy objective and no gradient, which is what CEM is for. The
+named points seed the first generation, so it starts from the strategies a person would
+have written by hand rather than from noise, and the search seed is reported so a run
+that finds something replays exactly.
+
+Two things keep the noise survivable. **Common random numbers**: every candidate in a
+generation plays the same seeds in the same rotations, so selection compares strategies
+rather than maps. And **one dispatch per generation**: all of a generation's games go to
+the worker pool in a single call, so the cores stay saturated instead of draining
+between candidates.
+
+**Do not read a pool number off `npm run bench`.** The bench fills a table by cycling
+its contenders, so `bench -- marshal blitzer --players 4` is two of each and reports
+12.2 ±4.9 for the pair — about 6 a seat, against the 9.7 ±4.4 a lone `blitzer` scores
+among three Marshals. Two exploiters divide a tier's attention and prop each other up,
+which is a fact about the seating rather than about the strategy. `--report` is the
+number to quote.
+
+**No exploit, and the way it fails is the useful part.** 14 candidates × 8 generations
+× 120 games against Marshal at four seats:
+
+```
+gen 0   11.2 ±5.4     garrison 1  expandTo 42  perTurn 42  safeOdds 0.50  cashAt  4  sweepRatio 99.00  homeFocus 0.00
+gen 3   14.5 ±6.1     garrison 2  expandTo 35  perTurn 37  safeOdds 0.64  cashAt 26  sweepRatio  5.02  homeFocus 0.22
+gen 7   16.1 ±6.4     garrison 2  expandTo 40  perTurn 40  safeOdds 0.76  cashAt 17  sweepRatio  5.50  homeFocus 0.18
+```
+
+It gains five points on the best hand-written point and still lands well under the 25%
+an equal share is worth. **Every knob that makes a policy turtle is driven to its
+inactive end**: `expandTo` and `perTurn` to their ceilings, so neither cap ever binds;
+`sweepRatio` to 5.5, so the sweep never fires; `homeFocus` to 0.18, below the threshold
+at which it does anything. What survives is an unbounded expander with a raised odds
+threshold and mild card patience — a better-tuned `blitzer`.
+
+That is the same conclusion as the tuning sweeps in "Things that measure worse than they
+sound", reached from the other side of the board: **tempo beats position**, and an
+adversary given a free hand to be patient declines to be.
+
+It is also a finding about the space rather than about Marshal. The strategy that
+actually beat Marshal depends on *surviving on two territories while the leader declines
+to finish*, and no setting of these seven parameters steers a game into that — it is the
+opponent's omission, not the policy's choice. Fixing the omission and re-running is the
+measurement that says whether the omission was what mattered.
+
+### The bench runs on every core
+
+`scripts/parallel.ts`. Games are independent and fully determined by their seed, so this
+is embarrassingly parallel, and outcomes come back indexed and are reassembled in job
+order rather than completion order — the results are identical to running them in a row.
+**800 four-seat games: 21s against 130s**, and the `marshal > general` figures above are
+reproduced exactly, which is the check that matters.
+
+Batches are small — several per worker, handed out as they finish. Game length varies by
+an order of magnitude between pairings, so a contiguous split leaves most cores waiting
+on one straggler.
+
+Two things worth knowing before touching it:
+
+- **A worker thread does not inherit tsx's module hooks.** `scripts/game-worker.ts` calls
+  `register()` from `tsx/esm/api` and only then dynamically imports anything from the
+  project. Moving those imports to the top of the file, where they belong everywhere
+  else, breaks the pool with a module-not-found on an extensionless path.
+- **`createGame({ record: false })`** stops `applyMove` appending to the move list and
+  stops `clone` copying it, so per-move cost no longer grows with the length of the
+  game. Nothing replays a benchmark game. Anything that will be saved, undone or
+  reviewed needs it left on.
 
 ### The plan layer
 
@@ -713,7 +873,11 @@ is there for — not a fine-grained ranking.
 9. **Coalitions** — done (`coalition` in `evaluate.ts`), General and Marshal.
 10. **Learned leaf evaluation** — stage B below, and now the *blocking* item rather
     than an optional one: search cannot be validated against hand-picked weights.
-11. **Still open** — personality/posture variation so two Marshals don't play
+11. **Opponent pool and exploiter search** — done (`src/bots/pool.ts`,
+    `scripts/exploit.ts`). The search returns a negative result on the current space;
+    see "Searching for exploits".
+12. **Still open** — pricing the card economy against map income late (below),
+    closing games out, personality/posture variation so two Marshals don't play
     identically, and a plan layer that survives a full table.
 
 ## The search layer
@@ -816,11 +980,24 @@ in order wastes nothing.
 
 ## Open questions
 
+- **Income stops being about territory, and no tier notices.** `CASH_VALUES` escalates
+  without bound while the whole board pays at most 14 plus continent bonuses, so past
+  roughly turn 45 a set is worth more than everything anyone holds. Tier-vs-tier games
+  average 49 turns and rarely reach it, which is exactly why the bench cannot see it.
+  Two things follow and neither is implemented: hold cards when the sequence is about to
+  overtake the map, and treat a player who can still take one territory a turn as
+  dangerous regardless of how little they hold.
+- **The tiers do not close games out.** 5.6 turns a game end with a rival that could
+  have been wiped out still standing. The fix is cheap and the measurement is already
+  written; what is unknown is whether forcing it costs anything elsewhere, since
+  "pressing an advantage" measured mildly harmful and this looks like the same shape
+  from the outside.
 - **"Top 1%" is unverifiable from here.** The real acceptance test is a human, and the
   strongest available evidence says the heuristics are near their ceiling: of roughly a
   dozen plausible improvements measured in the last round, two paid, one was neutral and
   kept for human-likeness, and the rest were negative. Getting materially past here
-  means stage B, not another flag.
+  means stage B, not another flag — though the two items above are ordinary bugs rather
+  than ceiling, and come first.
 - **The middle of the ladder is thin heads-up.** General over Colonel is 53.2%, because
   every shared fix helps Colonel at least as much as General. Widening it needs a
   General-only capability that holds up at four seats, and chokepoint drafting — the

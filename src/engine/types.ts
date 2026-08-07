@@ -120,6 +120,13 @@ export interface GameState {
    * of step with the undo stack.
    */
   moves: Move[]
+  /**
+   * Whether `moves` is being kept. Off, `applyMove` neither appends to the list
+   * nor copies it, which is what stops per-move cost growing with the length of
+   * the game — the benchmark plays hundreds of thousands of moves and replays
+   * none of them. Anything that will be saved, undone or reviewed needs it on.
+   */
+  record: boolean
   rngState: number
   winner: PlayerId | null
 }
