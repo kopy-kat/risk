@@ -64,8 +64,9 @@ jobs:
       # evaluation silently recalibrates it — and a reviewer that has drifted
       # tells people their good moves were mistakes, which is worse than not
       # shipping one. This is the only thing that catches that, and `assess` has
-      # already moved twice. Eight games per tier runs in a couple of minutes,
-      # most of it the turn rollouts behind deploy judgements; run
+      # already moved twice. Eight games per tier is the most this can carry: the
+      # cost is the turn rollouts behind deploy judgements, so it tracks how
+      # expensive the bots are to run and grows whenever they gain a layer. Run
       # `npm run review-check 40` locally before changing any weights.
       - name: Reviewer calibration
         run: npm run review-check -- 8
