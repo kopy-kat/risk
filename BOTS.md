@@ -326,11 +326,11 @@ Two bugs the harness caught that would otherwise have been invisible:
 2. **Combat tables** — done (`src/engine/combat.ts`). `winProb`, `expectedSurvivors`,
    `expectedLoss`, `armiesNeededFor`, `chainOdds`, pinned in tests against the known
    closed-form values (15/36 for 1v1, 2890/7776 for 3v2).
-3. **Colonel** — done. Beats the old bot 67/33 and random 100/0.
+3. **Colonel** — done. Beats `random` 100/0.
 4. **Evaluation function** — done (`src/bots/strategy/evaluate.ts`). Positions scored
    in army units: income over a horizon, plus armies and hand value, minus exposure.
    Also rival tracking (income, hand size, adjacency, about-to-cash).
-5. **General** — done. 57/43 over Colonel heads-up, 64/36 at four seats.
+5. **General** — done. Current margins are in Results above rather than repeated here.
 6. **Marshal** — done, with a caveat. Elimination hunting and table reading both pay
    at four seats and do nothing heads-up.
 
@@ -643,15 +643,13 @@ ranked Colonel below `easy` as a result. Bounded per territory at 12 (`garrisonF
 ceiling) inside `src/review/price.ts`, deliberately not in `assess`, so nothing that
 plays is touched.
 
-`npm run review-check` measures the result against the ladder, paired by seed the
-way `bench.ts` pairs. Mean armies given up per decision, weakest last:
+`npm run review-check` measures the result against the ladder, paired by seed the way
+`bench.ts` pairs, and reports mean armies given up per decision with the ordering it
+implies. Run it rather than trusting a figure here: it takes tens of minutes since
+reinforcement started being judged a whole turn deep, and any number written down goes
+stale the next time a doctrine flag moves.
 
-```
-marshal 1.85  <  general 6.00      paired gap −0.88 ± 1.44   ordered
-general 6.00  >  colonel 2.08                 +0.72 ± 1.41   INVERTED, inside error
-colonel 2.08  <  easy    4.79                 −1.43 ± 1.37   separated
-easy    4.79  <  random  7.11                 −3.40 ± 1.65   separated
-```
+What it reports is not a clean ladder, and the interesting part is why.
 
 **General comes out worst of the top three, and the cause is game length, not the
 reviewer.** At four seats General's self-play runs long and stalls into the turn cap
