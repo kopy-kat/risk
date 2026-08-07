@@ -63,10 +63,11 @@ label carries its own hint, so nothing needs memorising.
 
 ## Bots
 
-Three tiers — **Marshal**, **General**, **Colonel** — and they are one brain at three
-depths of thought, not three implementations. Tiers differ by *what the bot is allowed
-to think about*, never by injected mistakes, so a weaker one reads as a player
-considering less rather than a stronger one with noise added.
+Three tiers — **Colonel**, **General**, **Marshal** — picked once in setup for every bot
+at the table, not per seat. They are one brain at three depths of thought, not three
+implementations. Tiers differ by *what the bot is allowed to think about*, never by
+injected mistakes, so a weaker one reads as a player considering less rather than a
+stronger one with noise added.
 
 ```
 combat model    exact win/loss tables and expected survivors — no simulated rolls
@@ -124,7 +125,8 @@ export const myBot: Bot = {
 }
 ```
 
-Add it to `BOTS` in `src/bots/index.ts` and it appears in the seat picker. Then
+Add it to `BOTS` in `src/bots/index.ts` (weakest first) and it appears as a difficulty
+rung in setup. Then
 `npm run bench -- mine general 300`.
 
 ## Development

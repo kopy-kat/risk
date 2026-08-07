@@ -10,18 +10,27 @@ interface Props {
   onReview(id: string): void
 }
 
+/** A seat as the picker holds it: difficulty is global, so a seat is only ever human or not. */
+interface Seat {
+  name: string
+  isBot: boolean
+}
+
 export function Setup({ onStart, onReview }: Props) {
   const [count, setCount] = useState(4)
   const [past, setPast] = useState<GameRecord[]>(() => listGames())
-  const [seats, setSeats] = useState<SeatConfig[]>(
-    PALETTE_NAMES.map((name, i) => ({ name, bot: i === 0 ? null : DEFAULT_BOT })),
+  const [difficulty, setDifficulty] = useState(DEFAULT_BOT)
+  const [seats, setSeats] = useState<Seat[]>(
+    PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
 
-  const update = (i: number, patch: Partial<SeatConfig>) =>
+  const update = (i: number, patch: Partial<Seat>) =>
     setSeats((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
 
   const active = seats.slice(0, count)
-  const humans = active.filter((s) => s.bot === null).length
+  const humans = active.filter((s) => !s.isBot).length
+  const bots = active.length - humans
+  const tier = BOTS.find((b) => b.key === difficulty)
 
   return (
     <div className="overlay">
@@ -51,26 +60,40 @@ export function Setup({ onStart, onReview }: Props) {
                   aria-label={`Seat ${i + 1} name`}
                 />
                 <span className="toggle">
-                  <button className={s.bot === null ? 'on' : ''} onClick={() => update(i, { bot: null })}>Human</button>
-                  <button className={s.bot !== null ? 'on' : ''} onClick={() => update(i, { bot: DEFAULT_BOT })}>Bot</button>
+                  <button className={!s.isBot ? 'on' : ''} onClick={() => update(i, { isBot: false })}>Human</button>
+                  <button className={s.isBot ? 'on' : ''} onClick={() => update(i, { isBot: true })}>Bot</button>
                 </span>
-                <select
-                  value={s.bot ?? ''}
-                  disabled={s.bot === null}
-                  onChange={(e) => update(i, { bot: e.target.value })}
-                  aria-label={`Seat ${i + 1} bot`}
-                >
-                  {s.bot === null && <option value="">—</option>}
-                  {BOTS.map((b) => <option key={b.key} value={b.key}>{b.name}</option>)}
-                </select>
               </div>
             ))}
           </div>
         </div>
 
+        {bots > 0 && (
+          <div className="field">
+            {/* one rung for every bot in the game — mixed tables read as a handicap match */}
+            <span className="mono-label">Difficulty · all bots</span>
+            <div className="tiers">
+              {BOTS.map((b) => (
+                <button
+                  key={b.key}
+                  className={b.key === difficulty ? 'on' : ''}
+                  onClick={() => setDifficulty(b.key)}
+                >
+                  {b.name}
+                </button>
+              ))}
+            </div>
+            {tier && <div className="blurb">{tier.blurb}</div>}
+          </div>
+        )}
+
         <button
           className="go"
-          onClick={() => onStart(active.map((s) => ({ ...s, name: s.name.trim() || 'Player' })))}
+          onClick={() =>
+            onStart(
+              active.map((s) => ({ name: s.name.trim() || 'Player', bot: s.isBot ? difficulty : null })),
+            )
+          }
         >
           {humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>

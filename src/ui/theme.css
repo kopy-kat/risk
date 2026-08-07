@@ -431,7 +431,7 @@ kbd {
 
 .seats { display: flex; flex-direction: column; gap: 1px; }
 .seat {
-  display: grid; grid-template-columns: 10px 1fr auto auto; gap: 12px; align-items: center;
+  display: grid; grid-template-columns: 10px 1fr auto; gap: 12px; align-items: center;
   padding: 10px 13px; background: var(--paper-2); border: 1px solid transparent;
   transition: border-color .2s var(--ease);
 }
@@ -441,12 +441,15 @@ kbd {
   background: transparent; border: 0; color: var(--ink);
   font-family: inherit; font-size: 13px; outline: none; width: 100%; min-width: 0;
 }
-.seat select {
-  background: var(--paper); border: 1px solid var(--rule); color: var(--ink-2);
-  font-family: inherit; font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
-  padding: 5px 6px; border-radius: 2px; cursor: pointer; outline: none;
+.tiers { display: flex; gap: 7px; }
+.tiers button {
+  flex: 1; padding: 13px 0; border: 1px solid var(--border); background: transparent;
+  color: var(--ink-2); font-family: 'Instrument Serif', serif; font-size: 19px;
+  cursor: pointer; border-radius: 2px; transition: all .2s var(--ease);
 }
-.seat select:disabled { opacity: .3; cursor: not-allowed; }
+.tiers button:hover { border-color: var(--ink); color: var(--ink); }
+.tiers button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.blurb { margin-top: 10px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
 
 .toggle { display: flex; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
 .toggle button {
