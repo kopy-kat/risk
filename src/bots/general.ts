@@ -30,4 +30,5 @@ export const generalBot = makeStrategist({
   modelsOpponents: true,
   cardPatience: true,
   retaliates: true,
+  formsCoalitions: true,
 })

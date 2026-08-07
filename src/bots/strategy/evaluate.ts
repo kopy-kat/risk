@@ -6,7 +6,7 @@
  * number for a position, and it has to be in comparable units. Everything here is
  * denominated in **armies**, with per-turn income converted at `INCOME_HORIZON`.
  */
-import { ADJACENCY } from '../../engine/board'
+import { ADJACENCY, TERRITORY_IDS } from '../../engine/board'
 import type { TerritoryId } from '../../engine/board'
 import { cashValue, findSets } from '../../engine/cards'
 import { HAND_LIMIT, territoriesOf } from '../../engine/game'
@@ -168,4 +168,91 @@ export function primaryThreat(s: GameState, me: PlayerId): Rival | null {
   if (!rs.length) return null
   const weight = (x: Rival) => x.score * (x.adjacent ? 1 : 0.55)
   return rs.reduce((best, r) => (weight(r) > weight(best) ? r : best))
+}
+
+/**
+ * How far clear of the **runner-up** the leader has to be before the table turns.
+ *
+ * Against the runner-up, deliberately, not against the average of the field. The
+ * average version reads as a coalition and behaves as a standing policy of
+ * attacking whoever is nominally ahead: eliminations and ground-down players drag
+ * the mean down, so the ratio only ever climbs. Measured, it was live on 83% of
+ * turns at a mean 2.64x — which is lookahead attempt 1 from BOTS.md wearing a
+ * different hat, and it cost General 8 points at four seats.
+ */
+export const GANG_UP_LEAD = 1.4
+
+/**
+ * ...and how much of the board the leader must hold for the lead to be worth
+ * answering.
+ *
+ * Set high on purpose. Cutting the leader down is a public good — it costs you
+ * armies and relieves everyone still standing — so at 30% of the board the correct
+ * individual play is to free-ride, and a bot that goes in anyway just loses. Near
+ * half the map that inverts: nobody who lets the leader through wins at all, so
+ * joining stops being generous and starts being survival. Which is also when a
+ * human table actually turns, rather than when someone merely edges ahead.
+ */
+export const GANG_UP_SHARE = 0.45
+
+export interface Coalition {
+  /** who the table should be hitting */
+  target: PlayerId
+  /** the leader's score as a multiple of the runner-up's */
+  lead: number
+  /** the coalition is against *us* — three people want our ground */
+  againstMe: boolean
+  /** whether we share a border with the target, so we can actually join in */
+  canReach: boolean
+  /**
+   * Whether it's *our* fight yet. Cutting the leader down relieves everyone still
+   * standing, so going first is a gift to the bystanders — measured at −6 points at
+   * four seats when every General did it unprompted. So a bot joins only once the
+   * pile-on exists, or once the leader has come for it. Both mean the armies are
+   * already committed, which is what makes joining rational rather than generous —
+   * and it's how a real table works: the leader's victims start it, everyone else
+   * piles on afterwards.
+   */
+  joined: boolean
+}
+
+/**
+ * Whether the table should be ganging up, and on whom.
+ *
+ * Human games are decided by this as much as by any tactic: the moment somebody is
+ * clearly winning, everyone else stops fighting each other and turns on them, and
+ * the truce dissolves the moment the leader is back in the pack. None of it needs
+ * negotiating — the position is public, so every player reads the same board and
+ * reaches the same conclusion independently, which is exactly what a bot can do.
+ *
+ * Nothing here applies to a duel: with one opponent, "gang up on the leader" and
+ * "play the game" are the same sentence.
+ */
+export function coalition(s: GameState, me: PlayerId): Coalition | null {
+  const live = s.players.filter((p) => p.alive)
+  if (live.length < 3) return null
+  const scored = live
+    .map((p) => ({ id: p.id, score: assess(s, p.id).score }))
+    .sort((a, b) => b.score - a.score)
+  const [leader, runnerUp] = scored
+  const lead = leader.score / Math.max(1, runnerUp.score)
+  if (lead < GANG_UP_LEAD) return null
+  const theirs = territoriesOf(s, leader.id)
+  if (theirs.length / TERRITORY_IDS.length < GANG_UP_SHARE) return null
+  const mine = new Set<TerritoryId>(territoriesOf(s, me))
+  const joined = s.log.some(
+    (e) =>
+      s.turn - e.turn <= 2 &&
+      // somebody else is already taking ground off them...
+      ((e.victim === leader.id && e.player !== null && e.player !== me && e.player !== leader.id) ||
+        // ...or they came for us, in which case hitting back *is* joining
+        (e.victim === me && e.player === leader.id)),
+  )
+  return {
+    target: leader.id,
+    lead,
+    againstMe: leader.id === me,
+    canReach: leader.id !== me && theirs.some((t) => ADJACENCY[t].some((n) => mine.has(n))),
+    joined,
+  }
 }

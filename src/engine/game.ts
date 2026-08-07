@@ -36,6 +36,12 @@ export interface SeatConfig {
   name: string
   /** bot registry key, or null for a human seat */
   bot: string | null
+  /**
+   * Palette slot, if it should differ from the seat index. Turn order is the seat
+   * index and gets shuffled, so a player's colour has to be able to travel with
+   * them — otherwise you pick Crimson in setup and start the game as Jade.
+   */
+  color?: number
 }
 
 export interface NewGameOptions {
@@ -117,7 +123,7 @@ export function createGame({ seats, seed = 1 }: NewGameOptions): GameState {
   const players: Player[] = seats.map((seat, id) => ({
     id,
     name: seat.name,
-    color: id,
+    color: seat.color ?? id,
     bot: seat.bot,
     alive: true,
     cards: [],

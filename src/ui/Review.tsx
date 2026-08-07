@@ -277,7 +277,7 @@ export function Review({ id, onExit }: Props) {
               <button
                 key={j.index}
                 className={`tick ${j.grade} ${j.index === cursor ? 'on' : ''}`}
-                style={{ ['--c' as string]: playerColor(j.player) }}
+                style={{ ['--c' as string]: playerColor(record.seats[j.player].color ?? j.player) }}
                 onClick={() => setCursor(j.index)}
                 title={`Turn ${j.turn} · ${GRADE_LABEL[j.grade]}`}
                 aria-label={`Turn ${j.turn}, ${GRADE_LABEL[j.grade]}`}

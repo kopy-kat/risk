@@ -13,9 +13,10 @@ npm run dev        # then open the URL it prints
 
 Standard Risk, as implemented in `src/engine`:
 
-- **Setup** — 42 territories dealt at random with 1 army each, then players place
-  their remaining armies one at a time in turn order (40/35/30/25/20 for 2/3/4/5/6
-  players).
+- **Setup** — turn order is drawn at kick-off, then 42 territories are dealt at random
+  with 1 army each and players place their remaining armies one at a time in that order
+  (40/35/30/25/20 for 2/3/4/5/6 players). Moving first is worth ~50 points heads-up, so
+  the seat list in setup is who you are, not when you go.
 - **Deploy** — `floor(territories / 3)`, minimum 3, plus continent bonuses.
 - **Cards** — 42 territory cards plus 2 wilds. A set is three of a kind, one of each,
   or anything with a wild. Cash-ins escalate 4, 6, 8, 10, 12, 15, 20, 25, then +5
@@ -51,8 +52,8 @@ is the whole list; the button label carries its own hint, so nothing needs memor
   or end a turn — rewinding past a roll would be save-scumming.
 - **Bot turns recap.** When control returns, a panel gives the scoreline for the turns
   you missed, with a button to replay them identically.
-- **Every game replays from one number.** The seed drives the deal, the dice and the
-  bots; paste it into setup to re-run a game exactly.
+- **Every game replays from one number.** One seed drives the turn order, the deal, the
+  dice and the bots, and it is stored with the move list.
 - **Review your games.** Finished games are stored locally as a seed and a move list,
   and played back with the bot's opinion of every move — see below.
 
@@ -71,15 +72,23 @@ execution       turn the intent into concrete moves
 ```
 
 The plan layer is what makes play legible: people think "I'm taking Australia this
-turn", not "maximise a weighted sum". Colonel gets expand and consolidate; General
-adds denial, card cycling and the discipline to decline ground it can't hold; Marshal
-adds elimination hunting and reading who is about to be forced to cash.
+turn", not "maximise a weighted sum". Colonel gets expand and consolidate; General adds
+denial, card cycling and the discipline to decline ground it can't hold; Marshal adds
+elimination hunting, reading who is about to be forced to cash, attack routes planned
+three captures deep, and an opening spent on the chokepoints that will have to hold its
+continent.
 
-Heads-up they separate cleanly — Marshal beats General 61/39, General beats Colonel
-58/42. `npm run bench` measures that with paired seeds and seat rotation, because
-going first is worth ~39 points heads-up and an unrotated comparison measures position
-rather than skill. [`BOTS.md`](BOTS.md) has the design, the full results and the
-lookahead attempts that failed.
+**They gang up.** General and Marshal both watch for a runaway leader — 45% of the board
+and pulling clear of the runner-up — and turn on them together, easing off each other
+while it lasts. Nobody negotiates: the board is public, so everyone reads it the same
+way. The truce dissolves the moment the leader is back in the pack, and it is aimed at
+whoever is actually winning, which some games means you and some games doesn't.
+
+Heads-up: Marshal beats General 68/32, General beats Colonel 54/46. `npm run bench`
+measures that with paired seeds and seat rotation, because going first is worth ~50
+points heads-up and an unrotated comparison measures position rather than skill.
+[`BOTS.md`](BOTS.md) has the design, the full results, and the substantial list of
+plausible improvements that measured worse — including four attempts at lookahead.
 
 **The reviewer prices moves before the dice.** Attack at 75%, lose the roll, and a
 naive reviewer calls it a blunder — it wasn't. So each decision is scored by

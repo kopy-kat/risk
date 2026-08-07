@@ -3,8 +3,9 @@
  * implementations — that's what makes them read as the same species at different
  * skill levels instead of three different opponents.
  *
- * See BOTS.md. This file currently implements the Colonel-level plans (expand and
- * consolidate); deny / cycle / decapitate hook in at the marked points.
+ * A doctrine is a set of things the bot is allowed to think about, never a handicap —
+ * see BOTS.md, which also records what each flag is worth and the longer list of
+ * plausible flags that measured worse than doing nothing.
  */
 import { ADJACENCY } from '../../engine/board'
 import type { TerritoryId } from '../../engine/board'
@@ -14,6 +15,7 @@ import { HAND_LIMIT, attackableFrom, connectedOwn, legalMoves, territoriesOf } f
 import type { GameState, Move, PlayerId } from '../../engine/types'
 import {
   aggressorsAgainst,
+  CONTINENT_BORDERS,
   borderSecurityRatio,
   breaksContinent,
   chooseGoal,
@@ -23,9 +25,11 @@ import {
   pressure,
   stagingFor,
 } from './board-sense'
-import { exposure, killableRival, primaryThreat, rivals } from './evaluate'
+import { coalition, exposure, killableRival, primaryThreat, rivals } from './evaluate'
+import type { Coalition } from './evaluate'
 import { selectIntent } from './plans'
 import type { Intent } from './plans'
+import { bestSweep } from './sweep'
 import { cashValue } from '../../engine/cards'
 import { CONTINENTS as CONTS } from '../../engine/board'
 import type { Bot } from '../types'
@@ -81,6 +85,23 @@ export interface Doctrine {
    * every target independently and drifting across three continents. See plans.ts.
    */
   usesPlans?: boolean
+  /**
+   * Gang up. When one player is clearly winning, turn on them and stop spending
+   * armies on everyone else — and when the runaway player is *us*, notice that
+   * three people are coming and stop sprawling. See `coalition` in evaluate.ts.
+   */
+  formsCoalitions?: boolean
+  /**
+   * How many captures deep to plan a single stack's route. 0 or 1 leaves the bot
+   * choosing one blitz at a time, which cannot see a cheap tile that opens an
+   * expensive one. See sweep.ts.
+   */
+  sweepDepth?: number
+  /**
+   * Spend the opening on the tiles that will have to *hold* the target continent,
+   * rather than levelling every territory near it. See the setup phase.
+   */
+  draftsChokepoints?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
@@ -88,10 +109,14 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
 /**
  * Commit to a plan only when there is a single opponent left to out-plan.
  *
- * Measured: planning is worth +10 points heads-up and costs ~12 at four seats. A
- * plan is a claim about several turns, and at a full table the board is rearranged
- * by three other people before your next one — so the claim expires before it pays.
- * In a duel it survives, which is exactly when the tiers needed the help.
+ * A plan is a claim about the next several turns, and at a full table three other
+ * people rearrange the board before your next one — so the claim expires before it
+ * pays. Measured: +10 points heads-up, −12 at four seats.
+ *
+ * This is an on/off gate rather than a weight on purpose. Scaling the objective's
+ * pull by 1/opponents instead — so a plan is worth a third as much against three
+ * people as against one — still cost 7 points at four seats and gained nothing
+ * heads-up. Commitment is either right or it isn't; a fraction of it is neither.
  */
 function planApplies(s: GameState, me: PlayerId, d: Doctrine): boolean {
   return !!d.usesPlans && liveOpponents(s, me) <= 1
@@ -117,6 +142,7 @@ function targetValue(
   threatId: PlayerId | null,
   grudges: Map<PlayerId, number>,
   intent: Intent | null,
+  pact: Coalition | null,
 ): number {
   let v = 1.5
   const completed = completesContinent(s, me, t)
@@ -163,6 +189,16 @@ function targetValue(
     }
   }
 
+  // Join the pile-on. The boost scales with how far clear the leader is, and the
+  // matching discount on everyone else is the truce — no point spending armies on a
+  // peer while the player who is actually winning grows unchecked. Soft rather than
+  // absolute, so a free elimination is still taken, and conditional on `canReach`:
+  // declining to attack anyone we *can* reach is paralysis, not diplomacy.
+  if (pact && !pact.againstMe && pact.canReach && pact.joined) {
+    if (s.owner[t] === pact.target) v *= 1 + clamp((pact.lead - 1) * 1.6, 0.2, 1)
+    else v *= 0.6
+  }
+
   return v
 }
 
@@ -198,8 +234,19 @@ function shouldTrade(
   if (goal && value >= goal.resistance * 1.3) return true
   // or when it turns a near-elimination into a certain one
   if (d.huntsEliminations && killableRival(s, me, 1.4)) return true
-  return value >= 15
+  return value >= PATIENCE_CEILING
 }
+
+/**
+ * Cash unconditionally once a set is worth this much, however little else is going on.
+ *
+ * A backstop that almost never fires. Sweeping it over 6 / 10 / 15 / 20 / 25 returns
+ * *identical* win rates from 10 upwards: the rules above it decide first, and a game
+ * rarely runs long enough for the escalating sequence to reach here anyway. Card
+ * timing in this engine is therefore entirely "cash when it buys the objective" —
+ * which is worth knowing before anyone tunes this number again.
+ */
+const PATIENCE_CEILING = 15
 
 export function makeStrategist(doctrine: Doctrine): Bot {
   return {
@@ -215,6 +262,21 @@ export function makeStrategist(doctrine: Doctrine): Bot {
         // ── initial placement ───────────────────────────────────
         case 'setup': {
           const mine = territoriesOf(s, me)
+
+          // The opening is the one phase where every tier used to play identically,
+          // and it is not a small phase: 20–40 armies, placed before a shot is fired.
+          // A continent is held at its doors — Australia has exactly one — so the
+          // armies belong there rather than spread evenly over the ground behind it.
+          if (doctrine.draftsChokepoints && goalId) {
+            const doors = CONTINENT_BORDERS[goalId].filter((t) => s.owner[t] === me)
+            if (doors.length) {
+              return {
+                type: 'placeInitial',
+                territory: doors.reduce((a, b) => (s.troops[a] <= s.troops[b] ? a : b)),
+              }
+            }
+          }
+
           const wanted = goal && !goal.held ? goal.missing : []
           const staging = stagingFor(s, me, wanted)
           // shore up the thinnest useful territory: piling onto one tile during
@@ -254,6 +316,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           // defend anything about to fall, before thinking about expansion
           const atRisk = mine.filter((t) => risk(t) > 1.1).sort((a, b) => risk(b) - risk(a))
 
+          // The `goal?.held` gate is load-bearing: defending a threatened border that
+          // carries no bonus costs 8–16 points at every table size, because the armies
+          // buy a tile that was going to fall anyway instead of buying ground.
           if (doctrine.plans.has('consolidate') && atRisk.length && goal?.held) {
             const t = atRisk[0]
             const need = Math.ceil(pressure(s, me, t) * 0.6) - s.troops[t]
@@ -287,6 +352,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
             ? aggressorsAgainst(s, me)
             : new Map<PlayerId, number>()
           const intent = planApplies(s, me, doctrine) ? selectIntent(s, me, doctrine.plans) : null
+          // hoisted: `coalition` assesses every live player, which is far too
+          // expensive to repeat inside the per-target loop below
+          const pact = doctrine.formsCoalitions ? coalition(s, me) : null
 
           for (const from of territoriesOf(s, me)) {
             const a = s.troops[from]
@@ -296,6 +364,12 @@ export function makeStrategist(doctrine: Doctrine): Bot {
             for (const to of attackableFrom(s, from)) {
               const d = s.troops[to]
               const p = winProb(a, d)
+              // One flat gate for every target, deliberately, and cheap enough to run
+              // before pricing anything. Scaling it against the prize — a 30% shot at
+              // finishing a continent waved through where a 30% shot at a field in
+              // Siberia isn't — reads as obviously better judgement and measures +1.5
+              // heads-up against −4.5 at four seats. `score` below already prices the
+              // odds; letting marginal attacks through on top of that spends twice.
               if (p < doctrine.attackThreshold) continue
 
               const survivors = expectedSurvivors(a, d)
@@ -305,11 +379,16 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const leftBehind = survivors - 1
               if (isBorder(s, me, from) && leftBehind < keep * 0.5) continue
 
-              let value = targetValue(s, me, to, goalId, doctrine, threatId, grudges, intent)
+              let value = targetValue(s, me, to, goalId, doctrine, threatId, grudges, intent, pact)
 
               // Discipline: don't take what the neighbours will simply take back.
               // Scaled by table size for the mirror-image reason denial isn't —
               // sprawl heads-up has one punisher, sprawl at a full table has three.
+              //
+              // Deliberately *not* raised when the table has turned on us. Turtling
+              // while ahead measures −7.5 at four seats: a leader holding a third of
+              // the board wins by finishing, and a bot that answers pressure by
+              // valuing position over tempo stops closing games out.
               const discipline = (doctrine.holdDiscipline ?? 0) * liveOpponents(s, me) * 0.6
               if (discipline > 0) {
                 const after = postCapturePressure(s, me, from, to)
@@ -327,20 +406,65 @@ export function makeStrategist(doctrine: Doctrine): Bot {
             }
           }
 
+          // Plan the whole route, not just the next tile. The two are priced the same
+          // way — `targetValue` for the tiles, `lossAversion` for the armies — so the
+          // better of them can simply be taken. A route wins when a cheap tile that
+          // scores nothing on its own opens one that matters, which is precisely the
+          // case a greedy scorer is blind to.
+          const sweep = doctrine.sweepDepth
+            ? bestSweep(
+                s,
+                me,
+                doctrine.sweepDepth,
+                (t) => targetValue(s, me, t, goalId, doctrine, threatId, grudges, intent, pact),
+                { minStepOdds: doctrine.attackThreshold, lossAversion: doctrine.lossAversion },
+              )
+            : null
+          if (sweep && (!best || sweep.score > best.score)) {
+            return { type: 'blitz', from: sweep.from, to: sweep.route[0] }
+          }
+
           if (!best) return { type: 'endAttack' }
           return { type: 'blitz', from: best.from, to: best.to }
         }
 
         // ── how far to advance after a capture ──────────────────
+        //
+        // `to` is already ours by the time we're asked, so `garrisonFor` reads both
+        // sides post-capture and the only question is how to split what's left.
         case 'occupy': {
           const occ = s.pendingOccupation!
-          const total = s.troops[occ.from]
-          const keepHere = isBorder(s, me, occ.from) ? garrisonFor(s, me, occ.from) : 1
-          const extra = clamp(total - keepHere, occ.min, occ.max)
-          return { type: 'occupy', count: extra }
+          const here = s.troops[occ.from]
+          const needFrom = garrisonFor(s, me, occ.from)
+          const shortTo = Math.max(0, garrisonFor(s, me, occ.to) - s.troops[occ.to])
+          const sparable = here - needFrom
+
+          let extra: number
+          if (needFrom <= 1) {
+            // the source is interior now: armies left there can neither attack nor
+            // defend, which is the classic stack stranded a tile behind the front
+            extra = occ.max
+          } else if (sparable < shortTo) {
+            // not enough to hold both doors, so the one facing more guns gets it
+            const pTo = pressure(s, me, occ.to)
+            const pFrom = pressure(s, me, occ.from)
+            extra = Math.round(((here - 1) * pTo) / Math.max(1, pTo + pFrom))
+          } else if (isBorder(s, me, occ.to)) {
+            extra = sparable // the front moved forward; the armies go with it
+          } else {
+            extra = shortTo // nothing beyond it to fight, so keep the reserve at the door
+          }
+          return { type: 'occupy', count: clamp(extra, occ.min, occ.max) }
         }
 
         // ── end-of-turn shuffle ─────────────────────────────────
+        //
+        // Only interior stacks are drained, and only into the front closest to
+        // falling. That declines the fortify on about a third of turns, 60% of which
+        // do have three-plus armies within reach of a thin border — but moving them
+        // measures neutral. Two rewrites were tried and both are recorded in BOTS.md;
+        // the armies are idle *behind a front that isn't the decisive one*, and one
+        // move per turn cannot repair that. Massing in one stack is already correct.
         case 'fortify': {
           if (!s.canFortify) return { type: 'endTurn' }
           const mine = territoriesOf(s, me)
