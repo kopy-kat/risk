@@ -18,7 +18,7 @@
  *
  * Win rates carry Wilson intervals; anything inside the interval is noise.
  */
-import { ALL_BOTS, BOT_BY_KEY, LADDER } from '../src/bots'
+import { ALL_BOTS, BENCH_LADDER, BOT_BY_KEY } from '../src/bots'
 import type { Job } from './match'
 import { defaultWorkers, playGames } from './parallel'
 
@@ -186,7 +186,7 @@ if (names.length >= 2) {
 } else {
   // round-robin the ladder, pairwise. Not the opponent pool: those exist to be
   // beaten by a tier, and ranking them against each other measures nothing.
-  const keys = LADDER.map((b) => b.key)
+  const keys = BENCH_LADDER.map((b) => b.key)
   if (keys.length < 2) {
     console.error('need at least two registered bots to benchmark')
     process.exit(1)

@@ -9,7 +9,7 @@ Design notes for the agents. The goal is three difficulty tiers that all play
 | **General** | a good club player |
 | **Marshal** | aspirationally top-1% |
 
-There is no "easy" tier in the seat picker. `easy` and `random` stay in the codebase as
+There is no "easy" rung in the difficulty picker. `easy` and `random` stay in the codebase as
 regression rungs — `easy` in particular is the **fixed yardstick**: it never changes, so
 "tier vs `easy`" is the only number that answers whether a change made the bots stronger
 rather than merely rearranged the gaps between them.
@@ -142,9 +142,10 @@ Explicit anti-tells, because these are what make a bot feel like a machine:
 
 ## Measuring
 
-`npm run bench` — see the harness in `scripts/bench.ts`. It ranks the **ladder**
-(`LADDER` in `src/bots/index.ts`): three tiers plus the two fixed rungs. The opponent
-pool is deliberately outside it — see "What the bench cannot see" below.
+`npm run bench` — see the harness in `scripts/bench.ts`. It ranks `BENCH_LADDER` in
+`src/bots/index.ts`: the three tiers plus the two fixed rungs. That is a different list
+from `BOTS`, which is the difficulty setting a person picks from; the opponent pool
+below is in neither.
 
 Two things make the numbers trustworthy:
 
@@ -271,7 +272,7 @@ income, and late in a long game map income is the smaller number.**
 ### The opponent pool
 
 `src/bots/pool.ts`. One parameterised policy, four named points, none of them a tier and
-none of them selectable in the seat picker. They are outside `LADDER` on purpose —
+none of them offered as a difficulty. They are outside `BENCH_LADDER` on purpose —
 ranking a tier against them would be reading a diagnostic as a score.
 
 | point | what it does |
