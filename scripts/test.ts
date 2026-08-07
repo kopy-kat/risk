@@ -104,7 +104,8 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   eq(s.players[s.current].cards.length, 0, 'cards left the hand')
   eq(s.discard.length, 3, 'cards went to the discard pile')
 
-  // second set pays 6, plus the +2 territory bonus when a card matches something owned
+  // second set pays 6 into the pool; the +2 territory bonus never gets there, it
+  // garrisons the pictured territory on the spot
   const mine = territoriesOf(s, s.current)[0]
   s.players[s.current].cards = [
     { id: 93, suit: 'infantry', territory: mine },
@@ -112,8 +113,31 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     { id: 95, suit: 'wild', territory: null },
   ]
   const before2 = s.toDeploy
+  const garrison = s.troops[mine]
   s = applyMove(s, { type: 'tradeCards', cards: [93, 94, 95] })
-  eq(s.toDeploy - before2, 8, 'second set pays 6 plus the +2 territory bonus')
+  eq(s.toDeploy - before2, 6, 'the pool gets the cash-in and nothing else')
+  eq(s.troops[mine] - garrison, 2, 'the +2 lands on the pictured territory')
+
+  // a set picturing two territories you hold puts the bonus on the one in contact
+  // with an enemy — two armies behind the lines would do nothing. Hand the player
+  // all of Australia so there is a genuine interior to pass over.
+  const inAus = (t: TerritoryId) => TERRITORIES_IN.australia.includes(t)
+  const interior = TERRITORIES_IN.australia.find((t) => ADJACENCY[t].every(inAus))!
+  const border = TERRITORIES_IN.australia.find((t) => ADJACENCY[t].some((n) => !inAus(n)))!
+  const owner = { ...s.owner }
+  for (const t of TERRITORIES_IN.australia) owner[t] = s.current
+  const foreign = ADJACENCY[border].find((n) => !inAus(n))!
+  owner[foreign] = 1 - s.current
+  s = { ...s, owner }
+  s.players[s.current].cards = [
+    { id: 96, suit: 'cavalry', territory: interior },
+    { id: 97, suit: 'cavalry', territory: border },
+    { id: 98, suit: 'cavalry', territory: foreign },
+  ]
+  eq(bestTradeIn(s, s.current)!.bonusAt, border, 'the front line is offered the garrison')
+  const inner = s.troops[interior]
+  s = applyMove(s, { type: 'tradeCards', cards: [96, 97, 98] })
+  eq(s.troops[interior], inner, 'the interior territory gets nothing')
 }
 
 // ── the set the UI cashes for you ────────────────────────────────
@@ -135,7 +159,11 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     { id: 93, suit: 'cavalry', territory: mine },
     { id: 94, suit: 'artillery', territory: notMine },
   ]
-  eq(bestTradeIn(s, p), { cards: [90, 93, 94], value: 6 }, 'takes the set carrying the +2 territory bonus')
+  eq(
+    bestTradeIn(s, p),
+    { cards: [90, 93, 94], value: 4, bonusAt: mine },
+    'takes the set carrying the +2 territory bonus, and names where it lands',
+  )
 
   // same payout either way — then the wild is the one to keep
   s.players[p].cards = [
@@ -144,7 +172,7 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     { id: 92, suit: 'infantry', territory: notMine },
     { id: 93, suit: 'wild', territory: null },
   ]
-  eq(bestTradeIn(s, p), { cards: [90, 91, 92], value: 4 }, 'spends wilds last')
+  eq(bestTradeIn(s, p), { cards: [90, 91, 92], value: 4, bonusAt: null }, 'spends wilds last')
 }
 
 // ── the recap's log: repeated rolls collapse, earlier states don't move ──

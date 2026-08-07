@@ -188,9 +188,21 @@ function Cards({ state, onTrade }: DockProps) {
           ))}
         </div>
         {/* with no set in hand the button still names the next cash-in, so the
-            escalating value is visible while you decide whether to hold */}
-        <button className="btn trade" disabled={!set} onClick={onTrade} title="Cash the highlighted set">
+            escalating value is visible while you decide whether to hold. The +2
+            match bonus is called out separately because it isn't yours to place —
+            it garrisons the pictured territory the moment you trade */}
+        <button
+          className="btn trade"
+          disabled={!set}
+          onClick={onTrade}
+          title={
+            set?.bonusAt
+              ? `Cash the highlighted set · 2 more garrison ${TERRITORY_NAMES[set.bonusAt]}`
+              : 'Cash the highlighted set'
+          }
+        >
           Trade +{set?.value ?? cashValue(state.setsTraded)}
+          {set?.bonusAt && <span className="bonus">+2 {TERRITORY_NAMES[set.bonusAt]}</span>}
         </button>
       </div>
       <div className="div" />

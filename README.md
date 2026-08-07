@@ -21,7 +21,8 @@ Standard Risk, as implemented in `src/engine`:
 - **Cards** — 42 territory cards plus 2 wilds. A set is three of a kind, one of each,
   or anything with a wild. Cash-ins escalate 4, 6, 8, 10, 12, 15, 20, 25, then +5
   forever (`CASH_VALUES` in `src/engine/cards.ts`). Five cards forces a trade. One
-  card per turn in which you took a territory.
+  card per turn in which you took a territory. A set picturing ground you hold
+  garrisons it with 2 extra armies on the spot — those never enter your deploy pool.
 - **Combat** — attacker rolls up to 3 dice, defender up to 2, compared highest-first,
   ties to the defender. Every attack is a blitz: it repeats at best odds until the
   territory falls or the attacker is down to one army.
@@ -32,8 +33,8 @@ Standard Risk, as implemented in `src/engine`:
 - **Elimination** — take a player's last territory and you inherit their hand.
 - **Victory** — hold all 42 territories, or be the last player standing.
 
-One deliberate simplification: the +2 territory-match bonus on a traded set goes into
-your deploy pool rather than onto the pictured territory.
+When a set pictures more than one territory you hold, the +2 goes to one in contact
+with an enemy rather than asking you — armies behind the lines do nothing.
 
 ## Features
 
@@ -96,6 +97,13 @@ integrating over the outcome distribution with the same exact combat tables, giv
 two numbers that never contaminate each other: **loss** (armies given up against the
 best available move) and **luck** (what the dice then did about it). The summary reads
 *"1.4 armies given up per decision; the dice were worth +10"*.
+
+**Reinforcement is judged a turn at a time.** Armies in hand buy nothing until
+they're spent, so a deploy is priced by letting the bot finish the turn behind it —
+and the recommendation says what it was for: *deploy 1 to Ural, then take
+Afghanistan*. Alongside the per-move verdicts the review names what you did wrong
+more than once (*taking ground you can't hold, 6× −41*) and splits accuracy by where
+in the turn it went.
 
 ### Writing one
 

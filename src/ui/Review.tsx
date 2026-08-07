@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TerritoryId } from '../engine/board'
 import type { GameState, Move, PlayerId } from '../engine/types'
-import { describeMove, isNotable, reviewGame } from '../review/review'
+import { FAULT_LABEL, describeContinuation, describeMove, isNotable, reviewGame } from '../review/review'
 import type { GameReview, Grade } from '../review/review'
 import { getGame } from '../review/store'
 import { MapView } from './MapView'
@@ -28,6 +28,7 @@ const GRADE_LABEL: Record<Grade, string> = {
   mistake: 'Mistake',
   blunder: 'Blunder',
 }
+
 
 export function Review({ id, onExit }: Props) {
   const record = useMemo(() => getGame(id), [id])
@@ -88,6 +89,23 @@ export function Review({ id, onExit }: Props) {
   }
 
   /**
+   * Which tick the tape points at. Stepping by one lands between decisions as
+   * often as on one — a bot's whole turn is a dozen moves with nothing of yours
+   * in it — so the tape tracks the nearest decision rather than only an exact
+   * hit. Without that the bar goes blank for those steps and clicking → reads as
+   * having done nothing at all.
+   */
+  const nearest = useMemo(() => {
+    let at = -1
+    let near = Infinity
+    judgements.forEach((j, i) => {
+      const d = Math.abs(j.index - cursor)
+      if (d < near) { near = d; at = i }
+    })
+    return at
+  }, [judgements, cursor])
+
+  /**
    * The tape is the one thing on screen too long to show at once, so moving the
    * cursor has to carry the view with it — a highlight that lands off-screen
    * reads as nothing happening at all. Only scrolls when the tick is close to an
@@ -97,15 +115,7 @@ export function Review({ id, onExit }: Props) {
   useEffect(() => {
     const el = tape.current
     if (!el) return
-    // Stepping by one lands between decisions as often as on one, so follow the
-    // nearest tick rather than only an exact hit.
-    let at = -1
-    let near = Infinity
-    judgements.forEach((j, i) => {
-      const d = Math.abs(j.index - cursor)
-      if (d < near) { near = d; at = i }
-    })
-    const tick = el.children[at] as HTMLElement | undefined
+    const tick = el.children[nearest] as HTMLElement | undefined
     if (!tick) return
     const box = el.getBoundingClientRect()
     const t = tick.getBoundingClientRect()
@@ -116,7 +126,7 @@ export function Review({ id, onExit }: Props) {
     if (left < pad) to = el.scrollLeft + left - pad
     else if (right > box.width - pad) to = el.scrollLeft + right - box.width + pad
     if (Math.abs(to - el.scrollLeft) > 1) el.scrollTo({ left: to, behavior: 'smooth' })
-  }, [cursor, judgements])
+  }, [nearest])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -138,6 +148,7 @@ export function Review({ id, onExit }: Props) {
   // way the live game renders a move you're lining up.
   const shown: Move | null = here ? (showing === 'better' ? here.best : here.played) : null
   const overlay = useMemo(() => paint(state, shown), [state, shown])
+  const ahead = here ? describeContinuation(here.line) : ''
 
   if (!record) return <Shell onExit={onExit}><Empty>That game is no longer stored.</Empty></Shell>
   if (!review) return <Shell onExit={onExit}><Empty>Analysing…</Empty></Shell>
@@ -223,6 +234,28 @@ export function Review({ id, onExit }: Props) {
 
         {review.error && <div className="replay-warn mono-label">{review.error}</div>}
 
+        {/* The game-level read, opposite the per-decision one. A hundred and thirty
+            verdicts is a transcript; what someone can act on is the two or three
+            things they did wrong over and over. */}
+        {summary && summary.decisions > 0 && (
+          <div className="rev-habits">
+            <div className="mono-label">Cost you more than once</div>
+            {summary.habits.slice(0, 3).map((h) => (
+              <div className="habit" key={h.fault}>
+                <span className="v">{FAULT_LABEL[h.fault]}</span>
+                <span className="n">
+                  {h.count}× · −{h.armies.toFixed(0)}
+                </span>
+              </div>
+            ))}
+            {!summary.habits.length && (
+              <div className="habit">
+                <span className="v">Nothing that cost you twice.</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="rev-panel">
           {here ? (
             <>
@@ -245,7 +278,13 @@ export function Review({ id, onExit }: Props) {
                   onClick={() => setShowing('better')}
                 >
                   <span className="k">Better</span>
-                  <span className="v">{describeMove(state, here.best)}</span>
+                  <span className="v">
+                    {describeMove(state, here.best)}
+                    {/* What the move was for. A recommendation to put one army
+                        somewhere is unreadable until you can see the attack it
+                        was buying. */}
+                    {ahead && <em>{ahead}</em>}
+                  </span>
                 </button>
               )}
 
@@ -273,10 +312,12 @@ export function Review({ id, onExit }: Props) {
           <div className="tape" ref={tape}>
             {/* every decision you made, in order, coloured by how it graded.
                 It doubles as the scrubber — the shape of a game is legible from it */}
-            {judgements.map((j) => (
+            {judgements.map((j, i) => (
               <button
                 key={j.index}
-                className={`tick ${j.grade} ${j.index === cursor ? 'on' : ''}`}
+                className={`tick ${j.grade} ${
+                  j.index === cursor ? 'on' : i === nearest ? 'near' : ''
+                }`}
                 style={{ ['--c' as string]: playerColor(record.seats[j.player].color ?? j.player) }}
                 onClick={() => setCursor(j.index)}
                 title={`Turn ${j.turn} · ${GRADE_LABEL[j.grade]}`}

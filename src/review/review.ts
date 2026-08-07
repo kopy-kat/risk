@@ -16,13 +16,15 @@
  */
 import { CONTINENTS, TERRITORY_NAMES } from '../engine/board'
 import type { ContinentId, TerritoryId } from '../engine/board'
-import { winProb } from '../engine/combat'
-import type { GameState, Move, PlayerId } from '../engine/types'
+import { expectedSurvivors, winProb } from '../engine/combat'
+import { applyMove } from '../engine/game'
+import type { GameState, Move, Phase, PlayerId } from '../engine/types'
 import { rngFrom } from '../engine/rng'
 import { marshalBot } from '../bots/marshal'
 import type { Bot } from '../bots/types'
 import {
   candidateMoves,
+  evalLine,
   evalMove,
   moveKey,
   objective,
@@ -30,12 +32,31 @@ import {
   rivalCount,
   settle,
 } from './price'
-import { breaksContinent, completesContinent, isBorder } from '../bots/strategy/board-sense'
+import { breaksContinent, completesContinent, isBorder, pressure } from '../bots/strategy/board-sense'
 import { replay } from './replay'
 import type { Replay } from './replay'
 import type { GameRecord } from './store'
 
 export type Grade = 'best' | 'good' | 'inaccuracy' | 'mistake' | 'blunder'
+
+/**
+ * The recurring ways a turn is thrown away.
+ *
+ * One graded move is a verdict on a move. The same verdict eleven times is a
+ * verdict on how someone plays, and that is the thing worth telling them — a
+ * hundred and thirty separate judgements is a transcript, not advice. The list is
+ * short on purpose: these are the faults the evaluator can name from what it
+ * already computed, not every way a game can go wrong.
+ */
+export type Fault = 'long-odds' | 'unholdable' | 'stopped-early' | 'interior-deploy' | 'no-fortify'
+
+export const FAULT_LABEL: Record<Fault, string> = {
+  'long-odds': 'attacking at long odds',
+  unholdable: "taking ground you can't hold",
+  'stopped-early': 'stopping with attacks still on the board',
+  'interior-deploy': 'deploying away from the fighting',
+  'no-fortify': 'ending the turn without fortifying',
+}
 
 /**
  * Grade boundaries, in armies, anchored to what an army is actually worth in
@@ -73,6 +94,34 @@ export const gradeFor = (loss: number): Grade =>
  */
 export const isNotable = (g: Grade) => g === 'mistake' || g === 'blunder'
 
+/**
+ * Reinforcement, and only reinforcement, is judged by playing the turn out.
+ *
+ * Two of the other phases have nothing left in the turn to play, so a rollout there
+ * returns the static value exactly (see `evalLine`) at a hundred times the cost: an
+ * initial placement hands straight over to the next player, and a fortify is
+ * followed only by `endTurn`.
+ *
+ * Attacks and occupations are the interesting exclusions, because a rollout does say
+ * something new about both — how much of a stack to advance is a question about what
+ * you can do next, and one ply cannot see it. They are left static because
+ * `review-check` says so. Rolling them out makes the reviewer *worse at telling the
+ * tiers apart*: with attacks and occupations included, `easy` scored better than
+ * Marshal, General and Colonel, and no adjacent pair separated. With occupations
+ * alone, General and Colonel swapped. Deploys alone order all five tiers correctly
+ * for the first time, and separate Colonel from `easy`, which one-ply scoring gets
+ * backwards.
+ *
+ * The likely reason is that a loss is denominated in armies and a rollout widens the
+ * spread between the best line and a merely reasonable one — and that spread grows
+ * with the size of the position, which is to say with how well someone is playing.
+ * A deploy has the most to gain from turn context and the least room for the spread
+ * to run away, since every candidate places the same armies. This is the same shape
+ * of problem `MAX_SHORTFALL` exists for, and worth remembering before widening the
+ * set: a change here has to be measured, not reasoned about.
+ */
+const DEEP_PHASES = new Set<Phase>(['deploy'])
+
 export interface Judgement {
   /** index into `record.moves`, and into `replay.states` for the board before it */
   index: number
@@ -87,8 +136,33 @@ export interface Judgement {
   grade: Grade
   /** attacks only: what the dice did relative to expectation, in armies */
   luck: number | null
+  /**
+   * What the recommendation was *for*: `best`, then how the reference policy spent
+   * the rest of the turn behind it. A single move is often unreadable on its own —
+   * "deploy 1 to Ural" means nothing until you see it followed by the attack it
+   * was buying.
+   */
+  line: Move[]
   note: string
+  /** the named fault behind the note, when there was one to name */
+  fault: Fault | null
 }
+
+export interface Habit {
+  fault: Fault
+  /** how many decisions it cost, and how many armies in total */
+  count: number
+  armies: number
+}
+
+/**
+ * What a habit has to have cost before it's worth naming.
+ *
+ * A turn's reinforcement is 3–15 armies, so ten is roughly a turn thrown away —
+ * the same anchor `GRADE_CUTS` uses. Below it, "you did this twice" is a coincidence
+ * being promoted to a diagnosis.
+ */
+const HABIT_FLOOR = 10
 
 export interface PlayerReview {
   player: PlayerId
@@ -99,6 +173,16 @@ export interface PlayerReview {
   /** net armies the dice handed you (positive) or took (negative) */
   luck: number
   grades: Record<Grade, number>
+  /**
+   * What went wrong more than once, dearest first.
+   *
+   * Deliberately not accompanied by a per-phase accuracy split, tempting as it is:
+   * only deploys are priced a turn deep (see `DEEP_PHASES`), so their losses are
+   * measured against a wider field of alternatives than an attack's. Printing the
+   * two side by side would read as "your deploys are your weakness" when the
+   * difference is in the measurement.
+   */
+  habits: Habit[]
 }
 
 export interface GameReview {
@@ -144,28 +228,41 @@ export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameRe
     // A forced move is not a decision, and grading one is noise.
     if (options.length < 2) continue
 
+    const price = DEEP_PHASES.has(s.phase)
+      ? (m: Move) => evalLine(s, m, me, divisor, bot, rand)
+      : (m: Move) => ({ value: evalMove(s, m, me, divisor), moves: [m] })
+
+    const playedKey = moveKey(played)
     let best = options[0]
     let evBest = -Infinity
+    let line: Move[] = [best]
+    let evPlayed: number | null = null
     for (const m of options) {
-      const ev = evalMove(s, m, me, divisor)
-      if (ev > evBest) {
-        evBest = ev
+      const priced = price(m)
+      if (moveKey(m) === playedKey) evPlayed = priced.value
+      if (priced.value > evBest) {
+        evBest = priced.value
         best = m
+        line = priced.moves
       }
     }
+    // The played move is in the candidate set in all but a corner case — a fortify
+    // size `spread` doesn't sample, say — so it usually costs nothing to price.
+    if (evPlayed === null) evPlayed = price(played).value
 
-    const evPlayed = evalMove(s, played, me, divisor)
     // The played move is always in the candidate set in principle, but floating
     // point and the single-roll trim mean it can price a hair above the winner.
     const loss = Math.max(0, evBest - evPlayed)
     const grade = gradeFor(loss)
 
-    // Luck is measured against the same modelled split the expectation used, which
-    // is what `settle` is for — otherwise the two would be scored at different
-    // points in the turn and the gap would look like fortune.
+    // Luck stays a one-ply quantity whatever the loss is priced at: it is what the
+    // dice did to *this* move, so it compares the board they produced against what
+    // the move was worth before them. Measured against the same modelled split the
+    // expectation used, which is what `settle` is for — otherwise the two would be
+    // scored at different points in the turn and the gap would look like fortune.
     const luck =
       played.type === 'attack' || played.type === 'blitz'
-        ? objective(settle(r.states[i + 1]), me, divisor) - evPlayed
+        ? objective(settle(r.states[i + 1]), me, divisor) - evalMove(s, played, me, divisor)
         : null
 
     judgements.push({
@@ -179,7 +276,8 @@ export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameRe
       loss,
       grade,
       luck,
-      note: explain(s, me, played, best, loss),
+      line,
+      ...explain(s, me, played, best, loss),
     })
   }
 
@@ -206,9 +304,15 @@ function candidatesWith(s: GameState, bot: Bot, me: PlayerId, rand: () => number
   const seen = new Set(out.map(moveKey))
   try {
     const pick = bot.decide(s, me, rand)
-    if (!seen.has(moveKey(pick))) out.push(pick)
+    // A bot may return an illegal move — the game loop is allowed to fall back to a
+    // random one, so this is a supported outcome rather than a bug. It must not
+    // reach the pricing, which would either throw or recommend an unplayable move.
+    if (!seen.has(moveKey(pick))) {
+      applyMove(s, pick)
+      out.push(pick)
+    }
   } catch {
-    // a bot that throws just doesn't contribute a candidate
+    // a bot that throws, or offers something illegal, contributes no candidate
   }
   return out
 }
@@ -220,10 +324,17 @@ function summarise(player: PlayerId, all: Judgement[]): PlayerReview {
   }
   let totalLoss = 0
   let luck = 0
+  const habits = new Map<Fault, Habit>()
   for (const j of mine) {
     grades[j.grade]++
     totalLoss += j.loss
     if (j.luck !== null) luck += j.luck
+    if (j.fault) {
+      const h = habits.get(j.fault) ?? { fault: j.fault, count: 0, armies: 0 }
+      h.count++
+      h.armies += j.loss
+      habits.set(j.fault, h)
+    }
   }
   return {
     player,
@@ -232,6 +343,11 @@ function summarise(player: PlayerId, all: Judgement[]): PlayerReview {
     meanLoss: mine.length ? totalLoss / mine.length : 0,
     luck,
     grades,
+    // Once is a bad move; twice is how you play. A habit named off a single
+    // decision would be the per-move verdict again, wearing a summary's clothes.
+    habits: [...habits.values()]
+      .filter((h) => h.count > 1 && h.armies >= HABIT_FLOOR)
+      .sort((a, b) => b.armies - a.armies),
   }
 }
 
@@ -268,6 +384,61 @@ export function describeMove(s: GameState, m: Move): string {
 }
 
 /**
+ * A move as a plan rather than an instruction, for the moves behind the
+ * recommendation. No odds: they'd be read against the board on screen, and every
+ * step of a continuation happens on a board that doesn't exist yet.
+ */
+function intent(m: Move): string {
+  switch (m.type) {
+    case 'attack':
+    case 'blitz':
+      return `take ${name(m.to)}`
+    case 'deploy':
+      return `${m.count} more to ${name(m.territory)}`
+    case 'tradeCards':
+      return 'cash a set'
+    case 'fortify':
+      return `move ${m.count} up to ${name(m.to)}`
+    case 'placeInitial':
+      return `reinforce ${name(m.territory)}`
+    case 'occupy':
+      return `advance ${m.count}`
+    case 'endAttack':
+      return 'stop attacking'
+    case 'endTurn':
+      return 'end the turn'
+  }
+}
+
+/**
+ * What the recommendation was in aid of.
+ *
+ * The move itself is already on screen; this is the rest of the turn behind it,
+ * and it's the part that makes a recommendation like "deploy 1 to Ural" mean
+ * anything at all. Occupations are dropped — advancing after a capture is the
+ * second half of an attack, not a separate intention — and so is the end of the
+ * turn, which is where every line finishes and so distinguishes none of them.
+ *
+ * Three steps, because past that a line stops being the reason for a move and
+ * starts being a forecast of a turn nobody has played yet.
+ */
+export function describeContinuation(line: Move[]): string {
+  const rest = line
+    .slice(1)
+    .filter((m) => m.type !== 'occupy' && m.type !== 'endAttack' && m.type !== 'endTurn')
+  if (!rest.length) return ''
+  const shown = rest.slice(0, 3)
+  // `legalMoves` offers a deploy of one army or of all of them, so a recommendation
+  // to place one is routinely followed by the policy placing the rest in the same
+  // spot. Naming the territory twice reads like two different ideas.
+  const here = line[0].type === 'deploy' ? line[0].territory : null
+  const phrases = shown.map((m) =>
+    m.type === 'deploy' && m.territory === here ? `${m.count} more there` : intent(m),
+  )
+  return `then ${phrases.join(', ')}${rest.length > shown.length ? '…' : ''}`
+}
+
+/**
  * Why the recommendation is better, in the terms the bot actually reasons in.
  *
  * Every clause here comes from a signal the strategist itself uses — continent
@@ -275,15 +446,29 @@ export function describeMove(s: GameState, m: Move): string {
  * generated separately from the decision would be a plausible-sounding story
  * about a number it had no part in producing.
  */
-function explain(s: GameState, me: PlayerId, played: Move, best: Move, loss: number): string {
-  if (loss < GRADE_CUTS[0].upTo) return 'As good as anything else available.'
-
+function explain(
+  s: GameState,
+  me: PlayerId,
+  played: Move,
+  best: Move,
+  loss: number,
+): { note: string; fault: Fault | null } {
+  if (loss < GRADE_CUTS[0].upTo) {
+    return { note: 'As good as anything else available.', fault: null }
+  }
   // The recommendation is already spelled out in the row above this, so the note
   // says *why* rather than repeating *what*.
   const why = merit(s, me, best)
-  const fault = critique(s, me, played)
-  return [why ? `${cap(why)}.` : '', fault].filter(Boolean).join(' ')
+  const wrong = critique(s, me, played, best)
+  return {
+    note: [why ? `${cap(why)}.` : '', wrong.text].filter(Boolean).join(' '),
+    fault: wrong.fault,
+  }
 }
+
+/** The chance an attack comes off, or null for anything that isn't one. */
+const oddsOf = (s: GameState, m: Move): number | null =>
+  m.type === 'blitz' || m.type === 'attack' ? winProb(s.troops[m.from], s.troops[m.to]) : null
 
 /** What recommends a move. */
 function merit(s: GameState, me: PlayerId, m: Move): string {
@@ -301,14 +486,23 @@ function merit(s: GameState, me: PlayerId, m: Move): string {
     }
     if (!bits.length) {
       const p = winProb(s.troops[m.from], s.troops[to])
-      bits.push(p > 0.8 ? `it's ${pct(p)} and costs little` : 'it is the best value on the board')
+      // What it leaves standing, not just what it's likely to take: an attack you
+      // win with one army left is a territory you hand straight back.
+      const left = Math.round(expectedSurvivors(s.troops[m.from], s.troops[to]))
+      bits.push(
+        p > 0.8
+          ? `it's ${pct(p)} and should leave ${left} armies across the pair`
+          : 'it is the best value on the board',
+      )
     }
     return bits.join(', and ')
   }
   if (m.type === 'deploy') {
-    return isBorder(s, me, m.territory)
-      ? 'those armies would be in contact with the enemy'
-      : 'it builds the stack that does the work'
+    if (!isBorder(s, me, m.territory)) return 'it builds the stack that does the work'
+    const short = Math.round(pressure(s, me, m.territory) * 0.6) - s.troops[m.territory]
+    return short > 0
+      ? `${name(m.territory)} faces ${pressure(s, me, m.territory)} enemy armies and is ${short} short`
+      : 'those armies would be in contact with the enemy'
   }
   if (m.type === 'tradeCards') return 'the set is worth more spent than held'
   if (m.type === 'endAttack') return 'there was nothing left worth the armies'
@@ -317,22 +511,52 @@ function merit(s: GameState, me: PlayerId, m: Move): string {
   return ''
 }
 
-/** What was wrong with what happened instead. */
-function critique(s: GameState, me: PlayerId, m: Move): string {
+/**
+ * What was wrong with what happened instead, said against the recommendation
+ * wherever the two are comparable.
+ *
+ * A criticism with one number in it is an assertion; with both it's an argument
+ * the reader can check — and the numbers are the ones the grade was computed from,
+ * so there's nothing to reconcile.
+ */
+function critique(
+  s: GameState,
+  me: PlayerId,
+  m: Move,
+  best: Move,
+): { text: string; fault: Fault | null } {
+  const theirs = oddsOf(s, best)
   if (m.type === 'blitz' || m.type === 'attack') {
     const a = s.troops[m.from]
-    const d = s.troops[m.to]
-    const p = winProb(a, d)
-    if (p < 0.4) return `Yours was only ${pct(p)}.`
+    const p = winProb(a, s.troops[m.to])
+    if (theirs !== null && theirs - p > 0.15)
+      return { text: `Yours was ${pct(p)} against ${pct(theirs)}.`, fault: 'long-odds' }
+    if (p < 0.4) return { text: `Yours was only ${pct(p)}.`, fault: 'long-odds' }
     const after = pressureAfter(s, me, m.from, m.to)
-    if (after > a * 1.4) return `You'd have taken ${name(m.to)} into ${after} enemy armies.`
-    return ''
+    if (after > a * 1.4)
+      return {
+        text: `You'd have taken ${name(m.to)} into ${after} enemy armies.`,
+        fault: 'unholdable',
+      }
+    return { text: '', fault: null }
   }
-  if (m.type === 'endAttack') return 'You stopped with armies still in contact.'
+  if (m.type === 'endAttack') {
+    return {
+      text:
+        theirs !== null
+          ? `You stopped with ${pct(theirs)} on the board.`
+          : 'You stopped with armies still in contact.',
+      fault: 'stopped-early',
+    }
+  }
   if (m.type === 'deploy' && !isBorder(s, me, m.territory))
-    return `${name(m.territory)} is interior — those armies were out of the game.`
-  if (m.type === 'endTurn' && s.canFortify) return 'You left your fortify unused.'
-  return ''
+    return {
+      text: `${name(m.territory)} is interior — those armies were out of the game.`,
+      fault: 'interior-deploy',
+    }
+  if (m.type === 'endTurn' && s.canFortify)
+    return { text: 'You left your fortify unused.', fault: 'no-fortify' }
+  return { text: '', fault: null }
 }
 
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
