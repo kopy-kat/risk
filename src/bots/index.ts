@@ -6,11 +6,11 @@ import { randomBot } from './random'
 import type { Bot } from './types'
 
 /**
- * What a human can pick as an opponent. `easy` and `random` are deliberately not
- * here — they exist as benchmark rungs, not as something anyone should have to
- * play against.
+ * The difficulty ladder, weakest first — one setting picks one rung for every bot
+ * in the game. `easy` and `random` are deliberately not here — they exist as
+ * benchmark rungs, not as something anyone should have to play against.
  */
-export const BOTS: Bot[] = [marshalBot, generalBot, colonelBot]
+export const BOTS: Bot[] = [colonelBot, generalBot, marshalBot]
 
 /** Everything registered, including the baselines. Used by the bench and the sim. */
 export const ALL_BOTS: Bot[] = [marshalBot, generalBot, colonelBot, easyBot, randomBot]
