@@ -422,7 +422,7 @@ real to say about attacks and occupations too — how much of a stack to advance
 entirely a question about what you can do next. But measured on the ladder, rolling
 them out makes the reviewer *worse at telling the tiers apart*: with attacks and
 occupations included `easy` came out better than Marshal, General and Colonel and no
-adjacent pair separated; with occupations alone General and Colonel swapped. The
+adjacent pair separated; with occupations alone the pair below the top swapped. The
 likely cause is the one `MAX_SHORTFALL` exists for — a loss is denominated in armies,
 a rollout widens the gap between the best line and a reasonable one, and that gap
 grows with the size of the position, which is to say with how well someone is
@@ -444,19 +444,29 @@ plays is touched.
 way `bench.ts` pairs, over 20 games per tier:
 
 ```
-marshal 1.64  <  general 2.34      paired gap −0.53 ± 0.55   ordered
-general 2.34  <  colonel 3.38                 −0.24 ± 1.02   ordered
-colonel 3.38  <  easy    6.62                 −2.15 ± 2.14   separated
-easy    6.62  <  random  7.43                 −2.00 ± 1.87   separated
+marshal 1.85  <  general 6.00      paired gap −0.88 ± 1.44   ordered
+general 6.00  >  colonel 2.08                 +0.72 ± 1.41   INVERTED, inside error
+colonel 2.08  <  easy    4.79                 −1.43 ± 1.37   separated
+easy    4.79  <  random  7.11                 −3.40 ± 1.65   separated
 ```
 
-**All four pairs come out in the right order**, and the grade histogram is monotone in
-both tails — the share of decisions graded best runs 75 / 73 / 70 / 55 / 36 down the
-ladder, and blunders run 1.0 / 1.6 / 5.3 / 5.5 / 8.5 up it. Two of the four gaps are
-wider than twice their standard error; the other two are the right sign inside it.
-Marshal against General is the pair that should be hardest, and is: elimination
-hunting and table reading pay off across turns rather than within one decision, which
-is the same fact the ablation table above reports as "multiplayer specialist".
+**General comes out worst of the top three, and the cause is game length, not the
+reviewer.** At four seats General's self-play averages 91 turns and stalls into the
+300-turn cap in 3 games of 20, against Colonel's 53 turns and 1. A stalled game is a
+sprawl nobody can hold, it produces bad decisions from end to end, and it contributes
+eight thousand of General's decisions against Colonel's two thousand. Loss per
+decision has no defence against that. The one-ply scoring this replaced inverts the
+same pair slightly harder (+0.89 ± 1.47) on the same games, so it is not something
+the rollout introduced — and `npm run bench -- general colonel 200 --players 4` still
+has General ahead 61.4% ± 3.4, which is the ladder this check is measured against.
+
+Worth fixing at the source: a tier that stalls at a full table is a bot problem
+first and a reviewing problem second.
+
+Marshal against General is the pair that should be hardest even without that, and is:
+elimination hunting and table reading pay off across turns rather than within one
+decision, which is the same fact the ablation table above reports as "multiplayer
+specialist".
 
 **Pairing is not optional here, and getting it wrong nearly shipped a bad number.**
 The first version treated every decision as an independent sample. Decisions inside
@@ -466,10 +476,10 @@ error bars came out roughly 4× too tight, tight enough that the check passed at
 games per tier and failed at 8 on the *same seeds*. Averaging within a game and
 differencing across seeds fixes both the clustering and the map luck at once.
 
-The consequence worth stating plainly: this check confirms the ordering and resolves
-Colonel from `easy` and `easy` from `random` at twenty games. It does **not** resolve
-Marshal from General or General from Colonel at that size. It is a guard against gross
-miscalibration, which is what it is there for — not a fine-grained ranking.
+The consequence worth stating plainly: this check resolves Colonel from `easy` and
+`easy` from `random` at twenty games, and gets General wrong for the reason above. It
+is a guard against gross miscalibration, which is what it is there for — not a
+fine-grained ranking.
 
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Still open** — search *over* plans (as opposed to choosing one greedily),
