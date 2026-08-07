@@ -18,7 +18,7 @@ import {
 } from '../src/engine/game'
 import { rngFrom } from '../src/engine/rng'
 import {
-  CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, previewFor, primaryFor,
+  CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, mustTrade, previewFor, primaryFor,
   targetsFor, validDestination, validSelection,
 } from '../src/ui/decide'
 import { describeRow, recapBetween } from '../src/ui/recap'
@@ -284,6 +284,60 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   let threw = false
   try { applyMove(s3, { type: 'blitz', from: f3, to: t3 }) } catch { threw = true }
   ok(threw, 'blitz from a single army is rejected')
+}
+
+// ── spoils over the hand limit are cashed on the spot ─────────────
+{
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: null }, { name: 'C', bot: null }]
+  let s = createGame({ seats, seed: 41 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+
+  // A holds one territory next to C's last one, B holds the other 40 — so the
+  // kill takes C out without ending the game
+  const [attacker, victim] = [0, 2]
+  const from = TERRITORY_IDS[0]
+  const to = ADJACENCY[from][0]
+  const elsewhere = TERRITORY_IDS.find((t) => t !== from && t !== to)!
+  const owner = { ...s.owner }
+  for (const t of TERRITORY_IDS) owner[t] = 1
+  owner[from] = attacker
+  owner[to] = victim
+  // every card pictures ground neither player holds, so no +2 bonus muddies the payout
+  const hand = (ids: number[], suits: Card['suit'][]): Card[] =>
+    ids.map((id, i) => ({ id, suit: suits[i], territory: elsewhere }))
+  s = { ...s, owner, troops: { ...s.troops, [from]: 40, [to]: 1 }, phase: 'attack', current: attacker, toDeploy: 0 }
+  s.players[attacker].cards = hand([90, 91, 92, 93], ['infantry', 'infantry', 'cavalry', 'cavalry'])
+  s.players[victim].cards = hand([94, 95, 96, 97], ['artillery', 'artillery', 'infantry', 'cavalry'])
+
+  s = applyMove(s, { type: 'blitz', from, to })
+  eq(s.phase, 'occupy', 'the killing blow still asks how far to advance')
+  eq(s.players[victim].alive, false, 'taking the last territory ends the player')
+  eq(s.players[attacker].cards.length, 8, 'the victor inherits the whole hand')
+
+  s = applyMove(s, { type: 'occupy', count: s.pendingOccupation!.min })
+  const garrison = s.troops[from]
+  eq(s.phase, 'deploy', 'an over-limit hand interrupts the attack')
+  ok(legalMoves(s).every((m) => m.type === 'tradeCards'), 'nothing but a trade is legal while over the limit')
+  let threw = false
+  try { applyMove(s, { type: 'endAttack' }) } catch { threw = true }
+  ok(threw, 'the attack cannot go on with the spoils still in hand')
+
+  // the same rule as the interface sees it: nothing to click, nothing to press
+  eq(mustTrade(s), true, 'the bar knows the trade is owed')
+  eq(clickableFor(s, new Set()).size, 0, 'no territory is clickable until the set is cashed')
+  eq(primaryFor(s, 1, null, null), null, 'and the dark button offers nothing')
+
+  s = applyMove(s, legalMoves(s)[0])
+  eq(s.players[attacker].cards.length, 5, 'one set off an eight-card hand leaves five')
+  ok(legalMoves(s).every((m) => m.type === 'tradeCards'), 'five is still over the limit — trade again')
+  s = applyMove(s, legalMoves(s)[0])
+  eq(s.players[attacker].cards.length, 2, 'trading stops as soon as the hand is under the limit')
+  eq(s.toDeploy, cashValue(0) + cashValue(1), 'both cash-ins pay into one pool')
+  ok(clickableFor(s, new Set()).has(from), 'the armies become placeable once the hand is legal')
+
+  s = applyMove(s, { type: 'deploy', territory: from, count: s.toDeploy })
+  eq(s.phase, 'attack', 'placing the last army hands back to the attack')
+  eq(s.troops[from], garrison + cashValue(0) + cashValue(1), 'the armies land this turn, not next')
 }
 
 // ── combat maths, pinned to the known closed-form values ──────────

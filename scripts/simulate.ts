@@ -9,7 +9,8 @@
  * three turns later.
  */
 import { TERRITORY_IDS } from '../src/engine/board'
-import { applyMove, createGame, legalMoves, territoriesOf } from '../src/engine/game'
+import { findSets } from '../src/engine/cards'
+import { HAND_LIMIT, applyMove, createGame, legalMoves, territoriesOf } from '../src/engine/game'
 import type { GameState } from '../src/engine/types'
 import { rngFrom } from '../src/engine/rng'
 import { ALL_BOTS, BOT_BY_KEY } from '../src/bots'
@@ -43,6 +44,13 @@ function check(s: GameState, ctx: string) {
   if ((s.phase === 'gameOver') !== (s.winner !== null))
     throw new Error(`${ctx}: phase ${s.phase} vs winner ${s.winner}`)
   if (s.phase === 'occupy' && !s.pendingOccupation) throw new Error(`${ctx}: occupy phase with nothing pending`)
+
+  // Nobody fights on with a cashable hand over the limit. `occupy` is the one
+  // legitimate window — spoils land there and are traded off the moment it
+  // resolves — and `deploy` is where the trade happens.
+  const cur = s.players[s.current]
+  if ((s.phase === 'attack' || s.phase === 'fortify') && cur.cards.length >= HAND_LIMIT && findSets(cur.cards).length)
+    throw new Error(`${ctx}: ${cur.name} is acting on ${cur.cards.length} cards`)
 }
 
 const wins = new Map<string, number>()

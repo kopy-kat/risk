@@ -33,6 +33,14 @@ export interface DockProps {
 const nm = (t: TerritoryId) => TERRITORY_NAMES[t]
 
 /**
+ * A deploy in the middle of a turn is the spoils rule: an elimination pushed the
+ * hand over the limit and it has to come down before the attack goes on. Nothing
+ * else can conquer and then deploy in the same turn, so the flag identifies it —
+ * see `forceSpoilsTrade`.
+ */
+const cashingSpoils = (s: GameState) => s.phase === 'deploy' && s.conqueredThisTurn
+
+/**
  * One control for every "how many armies?" question. Deliberately not a text
  * input: a focusable field would own the Space key, which belongs to Confirm.
  * Digits are typed straight into it via the global key handler instead.
@@ -143,7 +151,7 @@ function Identity({ state }: { state: GameState }) {
 function describeBotPhase(s: GameState) {
   switch (s.phase) {
     case 'setup': return 'placing an army'
-    case 'deploy': return `deploying ${s.toDeploy}`
+    case 'deploy': return cashingSpoils(s) ? 'cashing the spoils' : `deploying ${s.toDeploy}`
     case 'attack': return 'looking for a fight'
     case 'occupy': return 'advancing'
     case 'fortify': return 'shuffling the line'
@@ -221,13 +229,21 @@ function DeployControls({ state, amount, setAmount }: DockProps) {
   const me = state.players[state.current]
   const capped = Math.min(Math.max(1, amount), Math.max(1, state.toDeploy))
   const blocked = me.cards.length >= HAND_LIMIT
+  const spoils = cashingSpoils(state)
 
   return (
     <>
       <div className="counter">{state.toDeploy}</div>
       <div className="prompt">
+        {/* mid-turn, the deploy is an interruption — say why it's there, or it
+            reads as the game having lost track of the attack */}
+        {spoils && <span className="k">Spoils</span>}
         <span className="v">
-          {blocked ? 'Trade a set to continue' : <>Click a territory to place <b>{capped}</b> · shift-click for all</>}
+          {blocked
+            ? spoils
+              ? <>The cards you took put you over <b>{HAND_LIMIT}</b> · trade a set</>
+              : 'Trade a set to continue'
+            : <>Click a territory to place <b>{capped}</b> · shift-click for all</>}
         </span>
       </div>
       <div className="div" />

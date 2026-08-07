@@ -19,12 +19,17 @@ export const HAND_LIMIT = 5
  * way through, which would otherwise surface as a replay quietly showing the
  * wrong board rather than as an error. Stored games carry this string and are
  * quarantined rather than replayed when it no longer matches.
+ *
+ * Rules that aren't a number get a literal token. Change what one of them names
+ * and change the token with it — a move list only replays under the rules that
+ * produced it, and the fingerprint is the only thing that knows.
  */
 export const RULES_VERSION = [
   `t${TERRITORY_IDS.length}`,
   `h${HAND_LIMIT}`,
   `s${Object.entries(START_ARMIES).map(([n, a]) => `${n}:${a}`).join(',')}`,
   `c${CASH_VALUES.join(',')}`,
+  'spoils:immediate',
 ].join('|')
 
 export interface SeatConfig {
@@ -391,6 +396,7 @@ export function applyMove(state: GameState, move: Move): GameState {
       s.pendingOccupation = null
       s.phase = 'attack'
       checkWinner(s)
+      forceSpoilsTrade(s)
       break
     }
 
@@ -519,6 +525,30 @@ function drawCard(s: GameState, rng: ReturnType<typeof rngFrom>): Card | null {
     s.discard = []
   }
   return s.deck.pop() ?? null
+}
+
+/**
+ * Cards inherited from an eliminated player are cashed on the spot.
+ *
+ * Spoils are the only way a hand crosses the limit mid-turn, and the surplus
+ * can't be carried: you trade down before the attack goes on, and the armies go
+ * straight onto the board. That is a deploy, so this re-enters the deploy phase
+ * rather than inventing one — `legalMoves` already refuses everything but a trade
+ * while the hand is over the limit, and placing the last army hands back to
+ * `attack`. Requiring a set as well as the count is what stops that from wedging:
+ * an over-limit hand with nothing to cash would be a deploy phase with an empty
+ * pool and no legal move.
+ *
+ * `conqueredThisTurn` distinguishes this deploy from a turn-opening one — it is
+ * false for the whole of a normal deploy — which is how the UI can explain the
+ * interruption without the state carrying a flag for it.
+ */
+function forceSpoilsTrade(s: GameState) {
+  if (s.phase !== 'attack') return
+  const me = s.players[s.current]
+  if (me.cards.length < HAND_LIMIT || !findSets(me.cards).length) return
+  s.phase = 'deploy'
+  log(s, s.current, `holds ${me.cards.length} cards · must trade before attacking on`)
 }
 
 function maybeEliminate(s: GameState, loser: PlayerId, victor: PlayerId) {
