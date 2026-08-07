@@ -629,7 +629,10 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   const seats = [{ name: 'A', bot: 'colonel' }, { name: 'B', bot: 'general' }, { name: 'C', bot: 'marshal' }]
   let s = createGame({ seats, seed: 5150 })
   let warmup = rngFrom(31337)
-  for (let i = 0; i < 400 && s.phase !== 'gameOver'; i++)
+  // Stop mid-game on purpose: there has to be a stretch left to replay, and this
+  // seed finishes inside 350 steps. A warmup long enough to end the game turns the
+  // whole check into a tautology about a finished board.
+  for (let i = 0; i < 150 && s.phase !== 'gameOver'; i++)
     s = stepBot(s, BOT_BY_KEY[s.players[s.current].bot!], () => warmup.next())
 
   // exactly what App keeps: the board, and the generator the bots draw from

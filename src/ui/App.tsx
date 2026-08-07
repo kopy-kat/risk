@@ -3,7 +3,7 @@ import { TERRITORY_IDS } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
 import { bestTradeIn, createGame, applyMove, territoriesOf } from '../engine/game'
 import type { SeatConfig } from '../engine/game'
-import { rngFrom } from '../engine/rng'
+import { rngFrom, shuffle } from '../engine/rng'
 import type { GameState, Move } from '../engine/types'
 import { BOT_BY_KEY } from '../bots'
 import { easyBot } from '../bots/easy'
@@ -27,6 +27,20 @@ const BOT_DELAY = { setup: 60, move: 260 }
 const SKIP_MOVE_CAP = 100_000
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
+
+/**
+ * Deal out turn order.
+ *
+ * Moving first is the largest single edge in Risk — `npm run bench` puts it at
+ * ~50 points heads-up and ~10 at four seats — so a fixed seat order handed the
+ * human that edge in every game, which is worth more than any bot tier. Order is
+ * drawn from the game seed, and each seat carries its palette slot along so the
+ * colour you picked in setup is still the colour you play.
+ */
+function drawForTurnOrder(seats: SeatConfig[], seed: number): SeatConfig[] {
+  const tagged = seats.map((s, i) => ({ ...s, color: s.color ?? i }))
+  return shuffle(tagged, rngFrom(seed ^ 0x517cc1b7))
+}
 
 export function App() {
   const [game, setGame] = useState<GameState | null>(null)
@@ -82,7 +96,7 @@ export function App() {
     assisted.current = []
     savedTurn.current = -1
     setSeed(s)
-    setGame(createGame({ seats, seed: s }))
+    setGame(createGame({ seats: drawForTurnOrder(seats, s), seed: s }))
     setSelected(null)
     setFortifyTo(null)
     setAutoSetup(false)
@@ -173,7 +187,8 @@ export function App() {
       id: recordId.current,
       seed,
       botSeed: botSeed.current,
-      seats: game.players.map((p) => ({ name: p.name, bot: p.bot })),
+      // colour travels with the seat, since turn order is drawn rather than fixed
+      seats: game.players.map((p) => ({ name: p.name, bot: p.bot, color: p.color })),
       moves: game.moves,
       assisted: assisted.current,
       winner: game.winner,

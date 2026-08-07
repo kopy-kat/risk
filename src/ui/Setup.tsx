@@ -39,7 +39,8 @@ export function Setup({ onStart, onReview }: Props) {
         </div>
 
         <div className="field">
-          <span className="mono-label">Seats</span>
+          {/* order is drawn at kick-off, so this list is identity, not sequence */}
+          <span className="mono-label">Seats · turn order drawn at start</span>
           <div className="seats">
             {active.map((s, i) => (
               <div className="seat" key={i} style={{ ['--c' as string]: playerColor(i) }}>
@@ -118,7 +119,7 @@ function PastGame({
             <span
               key={i}
               className={`dot ${s.bot ? 'bot' : ''}`}
-              style={{ ['--c' as string]: playerColor(i) }}
+              style={{ ['--c' as string]: playerColor(s.color ?? i) }}
               title={s.bot ? `${s.name} · ${s.bot}` : `${s.name} · you`}
             />
           ))}

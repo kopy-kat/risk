@@ -125,7 +125,7 @@ export function MapView({
             <path
               key={t.id}
               className={['terr owned', clickable.has(t.id) ? 'clickable' : '', dimmed(t.id) ? 'dim' : ''].join(' ')}
-              style={{ ['--c' as string]: playerColor(state.owner[t.id]) }}
+              style={{ ['--c' as string]: playerColor(state.players[state.owner[t.id]].color) }}
               d={t.d}
               onClick={(e) => clickable.has(t.id) && onPick(t.id, e.shiftKey)}
               onMouseEnter={() => onHover(t.id)}
@@ -183,7 +183,7 @@ export function MapView({
               <g
                 key={t.id}
                 className={`badge ${dimmed(t.id) ? 'dim' : ''} ${delta ? 'preview' : ''}`}
-                style={{ ['--c' as string]: playerColor(state.owner[t.id]) }}
+                style={{ ['--c' as string]: playerColor(state.players[state.owner[t.id]].color) }}
               >
                 <circle cx={t.cx} cy={t.cy} r={10.5} />
                 <text x={t.cx} y={t.cy + 4}>{after ?? now}</text>
