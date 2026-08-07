@@ -89,6 +89,13 @@ two numbers that never contaminate each other: **loss** (armies given up against
 best available move) and **luck** (what the dice then did about it). The summary reads
 *"1.4 armies given up per decision; the dice were worth +10"*.
 
+**Reinforcement is judged a turn at a time.** Armies in hand buy nothing until
+they're spent, so a deploy is priced by letting the bot finish the turn behind it —
+and the recommendation says what it was for: *deploy 1 to Ural, then take
+Afghanistan*. Alongside the per-move verdicts the review names what you did wrong
+more than once (*taking ground you can't hold, 6× −41*) and splits accuracy by where
+in the turn it went.
+
 ### Writing one
 
 ```ts

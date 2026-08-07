@@ -15,11 +15,11 @@
  * If it does, the reviewer is measuring something else, and no amount of
  * plausible-sounding advice on top of it would be worth shipping.
  *
- * Note the claim is "doesn't contradict", not "reproduces exactly". Marshal and
- * General come out tied here, and that is the honest result rather than a failure:
+ * Note the claim is "doesn't contradict", not "resolves". At twenty games all five
+ * tiers come out in the right order, but the gaps between the strong ones sit inside
+ * twice their standard error, and that is the honest result rather than a failure:
  * Marshal's edge is elimination hunting and table reading — strategy that pays off
- * over turns — while this measures the quality of single decisions. A per-move
- * metric shouldn't be expected to see it.
+ * over turns — while this measures the quality of single decisions.
  *
  * It also prints the loss distribution, which is where the grade thresholds in
  * `src/review/review.ts` come from — percentiles of real play rather than round
