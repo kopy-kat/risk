@@ -605,7 +605,18 @@ having no idea what the turn was for. `evalLine` prices a deploy by applying it 
 letting Marshal finish the turn behind it, which also gives the recommendation
 something to say: *deploy 1 to Ural, then take Afghanistan*.
 
-Three things make that safe to look at:
+The candidate list has to widen to match, and this is the one place the reviewer
+deliberately leaves the engine's move generation behind. `legalMoves` offers `{1,
+all}` on each territory, which is the right branching factor for a bot and useless as
+advice: the only reinforcement the reviewer could recommend was committing nothing or
+committing everything, and a player who split their armies sensibly was compared
+against neither. `candidateMoves` adds a third and a half of the pool on each border,
+and roughly one deploy recommendation in five is now one of them. Borders only —
+splitting an interior deploy is two bad ideas where there was one, the whole-pool
+version is still there to be recommended against, and measured, every split worth
+recommending was on a border anyway.
+
+Three things make the rollout safe to look at:
 
 - **No dice.** The continuation's attacks resolve to their likely board — above even
   odds, captured with the expected survivors — never to a roll. A maximum over
@@ -622,15 +633,18 @@ Three things make that safe to look at:
 
 **And it is confined to deploys, because the check says so.** A rollout has something
 real to say about attacks and occupations too — how much of a stack to advance is
-entirely a question about what you can do next. But measured on the ladder, rolling
-them out makes the reviewer *worse at telling the tiers apart*: with attacks and
-occupations included `easy` came out better than Marshal, General and Colonel and no
-adjacent pair separated; with occupations alone the pair below the top swapped. The
-likely cause is the one `MAX_SHORTFALL` exists for — a loss is denominated in armies,
-a rollout widens the gap between the best line and a reasonable one, and that gap
-grows with the size of the position, which is to say with how well someone is
-playing. Deploys have the most to gain from turn context and the least room for the
-spread to run away, since every candidate is placing the same armies.
+entirely a question about what you can do next. Widening the set has been measured
+twice now, under two different sets of rules, and both times it made the reviewer
+*worse at telling the tiers apart* on every pair at once: pairs that separated stopped
+separating, the error bars widened everywhere, `review-check` failed outright, and it
+cost several times as much.
+
+**Roll out where one ply is blind, never where it is exact.** That is the durable
+lesson and it explains the result. An attack's value is already integrated over its
+exact outcome distribution, so rolling one out replaces an exact number with that
+number plus a policy's guess about the rest of the turn — strictly more noise for no
+more signal. A deploy has no exact number to replace, because armies in hand buy
+nothing until they're spent. Turn context earns its cost there and nowhere else.
 
 **Judging whole alternatives needs exposure bounded; playing doesn't.** `assess`
 leaves exposure unbounded and `EXPOSURE_WEIGHT` sets its influence, which is right

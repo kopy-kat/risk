@@ -104,20 +104,20 @@ export const isNotable = (g: Grade) => g === 'mistake' || g === 'blunder'
  *
  * Attacks and occupations are the interesting exclusions, because a rollout does say
  * something new about both — how much of a stack to advance is a question about what
- * you can do next, and one ply cannot see it. They are left static because
- * `review-check` says so. Rolling them out makes the reviewer *worse at telling the
- * tiers apart*: with attacks and occupations included, `easy` scored better than
- * Marshal, General and Colonel, and no adjacent pair separated. With occupations
- * alone, the pair below the top swapped. Deploys alone separate Colonel from `easy`,
- * which one-ply scoring leaves inside its error bars.
+ * you can do next, and one ply cannot see it. Widening this set has been measured
+ * twice, on two different sets of rules, and both times it made the reviewer *worse
+ * at telling the tiers apart* on every pair at once: pairs that separated stopped
+ * separating, the error bars widened everywhere, and `review-check` failed outright.
+ * It also costs several times as much. Widen it only behind a `review-check 20`, and
+ * read the second, both-won line — the first one moves when a bot's stall rate does.
  *
- * The likely reason is that a loss is denominated in armies and a rollout widens the
- * spread between the best line and a merely reasonable one — and that spread grows
- * with the size of the position, which is to say with how well someone is playing.
- * A deploy has the most to gain from turn context and the least room for the spread
- * to run away, since every candidate places the same armies. This is the same shape
- * of problem `MAX_SHORTFALL` exists for, and worth remembering before widening the
- * set: a change here has to be measured, not reasoned about.
+ * The reason is the durable part, because it says where the technique belongs at all:
+ * **roll out where one ply is blind, never where it is exact.** An attack's value is
+ * already integrated over its exact outcome distribution, so rolling one out replaces
+ * an exact number with that same number plus a policy's guess about the rest of the
+ * turn — strictly more noise, no more signal. A deploy has no exact number to
+ * replace: armies in hand buy nothing until they're spent, which is what makes turn
+ * context worth its cost there and nowhere else.
  */
 const DEEP_PHASES = new Set<Phase>(['deploy'])
 
