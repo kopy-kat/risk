@@ -30,6 +30,7 @@ export const RULES_VERSION = [
   `s${Object.entries(START_ARMIES).map(([n, a]) => `${n}:${a}`).join(',')}`,
   `c${CASH_VALUES.join(',')}`,
   'spoils:immediate',
+  'match2:onboard',
 ].join('|')
 
 export interface SeatConfig {
@@ -59,24 +60,47 @@ export function reinforcementFor(s: GameState, p: PlayerId): number {
 }
 
 /**
- * The set worth cashing, and what it pays. Which three cards you hand in is a
- * decision with exactly one good answer — take the +2 territory bonus if it's
- * there, and spend wilds last — so the UI picks for you rather than making you
- * hunt for the combination.
+ * Where the +2 territory-match bonus lands, or null if the set pictures nothing
+ * you hold. The armies garrison the pictured territory itself — they never reach
+ * the deploy pool, so they are not yours to place.
+ *
+ * Up to three cards in a set can match. Two armies behind the lines do nothing,
+ * so a territory in contact with an enemy wins; beyond that the choice is between
+ * equals and the board order settles it.
  */
-export function bestTradeIn(s: GameState, p: PlayerId): { cards: number[]; value: number } | null {
+function bonusTerritory(s: GameState, p: PlayerId, cards: Card[]): TerritoryId | null {
+  const held = cards
+    .map((c) => c.territory)
+    .filter((t): t is TerritoryId => !!t && s.owner[t] === p)
+  if (!held.length) return null
+  const front = held.filter((t) => ADJACENCY[t].some((n) => s.owner[n] !== p))
+  const pool = front.length ? front : held
+  return TERRITORY_IDS.find((t) => pool.includes(t)) as TerritoryId
+}
+
+/**
+ * The set worth cashing, what it pays into the pool, and where its +2 garrison
+ * lands. Which three cards you hand in is a decision with exactly one good answer
+ * — take the +2 territory bonus if it's there, and spend wilds last — so the UI
+ * picks for you rather than making you hunt for the combination.
+ */
+export function bestTradeIn(
+  s: GameState,
+  p: PlayerId,
+): { cards: number[]; value: number; bonusAt: TerritoryId | null } | null {
   const hand = s.players[p].cards
   const byId = new Map(hand.map((c) => [c.id, c]))
-  let best: { cards: number[]; value: number; wilds: number } | null = null
+  const value = cashValue(s.setsTraded)
+  let best: { cards: number[]; bonusAt: TerritoryId | null; worth: number; wilds: number } | null = null
   for (const ids of findSets(hand)) {
     const cards = ids.map((id) => byId.get(id) as Card)
-    const matched = cards.some((c) => c.territory && s.owner[c.territory] === p)
+    const bonusAt = bonusTerritory(s, p, cards)
     const wilds = cards.filter((c) => c.suit === 'wild').length
-    const value = cashValue(s.setsTraded) + (matched ? 2 : 0)
-    if (!best || value > best.value || (value === best.value && wilds < best.wilds))
-      best = { cards: ids, value, wilds }
+    const worth = value + (bonusAt ? 2 : 0)
+    if (!best || worth > best.worth || (worth === best.worth && wilds < best.wilds))
+      best = { cards: ids, bonusAt, worth, wilds }
   }
-  return best && { cards: best.cards, value: best.value }
+  return best && { cards: best.cards, value, bonusAt: best.bonusAt }
 }
 
 /** Territories reachable from `from` travelling only through `p`'s own territories. */
@@ -332,10 +356,11 @@ export function applyMove(state: GameState, move: Move): GameState {
       const value = cashValue(s.setsTraded)
       s.setsTraded++
       s.toDeploy += value
-      // classic territory bonus, pooled rather than forced onto the named territory
-      const matched = cards.some((c) => c.territory && s.owner[c.territory] === p)
-      if (matched) s.toDeploy += 2
-      log(s, p, `traded a set · +${value}${matched ? ' +2 territory bonus' : ''}`)
+      // the territory-match bonus garrisons the pictured territory on the spot; only
+      // the cash-in itself is yours to place
+      const bonusAt = bonusTerritory(s, p, cards)
+      if (bonusAt) s.troops[bonusAt] += 2
+      log(s, p, `traded a set · +${value}${bonusAt ? ` · +2 on ${name(bonusAt)}` : ''}`)
       break
     }
 
