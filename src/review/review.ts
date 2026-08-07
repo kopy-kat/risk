@@ -108,9 +108,8 @@ export const isNotable = (g: Grade) => g === 'mistake' || g === 'blunder'
  * `review-check` says so. Rolling them out makes the reviewer *worse at telling the
  * tiers apart*: with attacks and occupations included, `easy` scored better than
  * Marshal, General and Colonel, and no adjacent pair separated. With occupations
- * alone, General and Colonel swapped. Deploys alone order all five tiers correctly
- * for the first time, and separate Colonel from `easy`, which one-ply scoring gets
- * backwards.
+ * alone, the pair below the top swapped. Deploys alone separate Colonel from `easy`,
+ * which one-ply scoring leaves inside its error bars.
  *
  * The likely reason is that a loss is denominated in armies and a rollout widens the
  * spread between the best line and a merely reasonable one — and that spread grows

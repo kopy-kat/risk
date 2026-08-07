@@ -102,6 +102,26 @@ export function clickableFor(
 }
 
 /**
+ * The bounds on "how many armies?", or null when the phase isn't asking. One
+ * definition for the bar's ± control and for the keys that drive it, so a typed
+ * amount and a clicked one can't disagree about what's allowed.
+ */
+export function amountRange(
+  s: GameState,
+  sel: TerritoryId | null,
+  dest: TerritoryId | null,
+): { min: number; max: number } | null {
+  if (!isHumanTurn(s)) return null
+  if (s.phase === 'deploy') return mustTrade(s) ? null : { min: 1, max: Math.max(1, s.toDeploy) }
+  if (s.phase === 'occupy' && s.pendingOccupation) {
+    const occ = s.pendingOccupation
+    return { min: occ.min, max: occ.max }
+  }
+  if (s.phase === 'fortify' && s.canFortify && sel && dest) return { min: 1, max: s.troops[sel] - 1 }
+  return null
+}
+
+/**
  * What the badges would read if you confirmed — for the two moves where you pick
  * an amount and the result is certain. An attack has no honest preview: the dice
  * decide, so the map keeps showing what's actually there.

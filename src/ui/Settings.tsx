@@ -1,13 +1,14 @@
 /**
  * The whole keyboard surface. It's short on purpose: anything that merely
- * duplicated Space or a button next to it (end turn, skip bots, typing amounts)
- * was cut rather than listed.
+ * duplicated Space or a button next to it (end turn, skip bots) was cut rather
+ * than listed.
  */
 const KEYS: [string, string][] = [
   ['Space', 'Press the highlighted button'],
+  ['← →', 'Size the move · ⇧ for min / max'],
+  ['⇧click', 'Deploy everything at once'],
   ['Esc', 'Deselect / close'],
   ['⌘Z', 'Undo — until you roll dice'],
-  ['⇧ click', 'Deploy everything at once'],
 ]
 
 interface Props {

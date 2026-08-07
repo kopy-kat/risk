@@ -48,13 +48,6 @@ function seaPath(pa: [number, number], pb: [number, number]) {
 export function MapView({
   state, selected, targets, clickable, focus, flash, preview, hover, onPick, onHover,
 }: Props) {
-  const graticule = useMemo(() => {
-    const lines: JSX.Element[] = []
-    for (let x = 40; x < 745; x += 60) lines.push(<line key={`v${x}`} className="grat" x1={x} x2={x} y1={0} y2={560} />)
-    for (let y = 30; y < 560; y += 60) lines.push(<line key={`h${y}`} className="grat" x1={0} x2={760} y1={y} y2={y} />)
-    return lines
-  }, [])
-
   const seaRoutes = useMemo(
     () => SEA_ROUTES.map((r) => ({ key: `${r.a}|${r.b}`, d: seaPath(r.pa, r.pb), pa: r.pa, pb: r.pb })),
     [],
@@ -99,7 +92,15 @@ export function MapView({
   return (
     <>
       <svg className="map" viewBox={VIEW_BOX} preserveAspectRatio="xMidYMid meet">
-        <g>{graticule}</g>
+        {/* The graticule runs past the viewBox on purpose. `meet` letterboxes the
+            map inside the stage, and a grid that stopped at the box would draw its
+            own edge across the screen — the paper has to reach the window. */}
+        <defs>
+          <pattern id="grat" x={10} y={0} width={60} height={60} patternUnits="userSpaceOnUse">
+            <path className="grat" d="M 30 0 V 60 M 0 30 H 60" />
+          </pattern>
+        </defs>
+        <rect x={-3000} y={-3000} width={6500} height={6500} fill="url(#grat)" pointerEvents="none" />
 
         {/* sea routes sit under the land so they tuck neatly beneath the coastlines */}
         <g className="sea-layer">

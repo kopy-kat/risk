@@ -25,6 +25,10 @@
   --p6: #ac4a78;
 
   --topbar: 52px;
+  /* the bottom bar's footprint, held constant on purpose — see .dock */
+  --dock-w: min(1400px, calc(100% - 40px));
+  --dock-h: 72px;
+  --dock-lead: 168px;
   --ease: cubic-bezier(.22,.61,.36,1);
 }
 
@@ -38,7 +42,11 @@ html, body, #root {
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  /* The board is clicked, never read as a document: without this a shift-click
+     or a stray drag extends a text selection and paints the troop counts blue. */
+  user-select: none; -webkit-user-select: none;
 }
+input { user-select: text; -webkit-user-select: text; }
 
 button { font-family: inherit; }
 
@@ -83,7 +91,9 @@ button { font-family: inherit; }
 .seatline .cards i { font-style: normal; color: var(--accent); margin-left: 1px; }
 .seatline.on .cards { color: var(--ink-2); }
 
-@media (max-width: 1280px) {
+/* six named seats stop fitting somewhere around here; the colour and the counts
+   still identify a row, so the name is what goes */
+@media (max-width: 1120px) {
   .seatline .nm { display: none; }
 }
 
@@ -197,43 +207,84 @@ svg.map { width: 100%; height: 100%; display: block; }
 
 /* ─────────────────────────── bottom bar ─────────────────────────── */
 
+/* One footprint for the whole game. Sizing to its contents meant the bar moved
+   under the cursor on every bot decision — twenty times a turn — for the sake of
+   a snugger box nobody was looking at. Fixed width and height instead, with the
+   phase-specific parts varying inside fixed cells. */
 .dock {
   position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 14px;
+  display: grid;
+  grid-template-columns: var(--dock-lead) minmax(0, 1fr) auto;
+  align-items: center; gap: 16px;
   padding: 11px 18px;
   background: rgba(252,250,245,.95);
   border: 1px solid var(--border); border-radius: 3px;
   backdrop-filter: blur(14px);
   box-shadow: 0 14px 34px rgba(80,68,44,.14), 0 2px 6px rgba(80,68,44,.08);
-  /* max-content keeps it on one row by preference; it only wraps once genuinely
-     constrained, rather than shrink-to-fit guessing a narrow box */
-  width: max-content;
-  max-width: calc(100% - 32px);
-  flex-wrap: wrap;
-  justify-content: center;
+  width: var(--dock-w);
+  height: var(--dock-h);
 }
-.dock .div { width: 1px; align-self: stretch; background: var(--rule); }
+.dock .div { width: 1px; align-self: stretch; max-height: 34px; background: var(--rule); }
 
-.ident { display: flex; align-items: center; gap: 10px; }
+/* number · sentence · controls. The first two are pinned so the thing you read
+   every move is always in the same place; the controls hug the right, next to
+   the buttons they belong with. */
+.dock .mid { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
+.dock .cell { display: flex; align-items: center; gap: 12px; }
+.dock .cell.num { width: 40px; justify-content: center; flex-shrink: 0; }
+.dock .cell.ctrl { margin-left: auto; flex-shrink: 0; }
+
+/* The dark button keeps its width whether or not the phase offers one, so the
+   gear beside it never shifts. */
+.dock .tail { position: relative; display: flex; align-items: center; gap: 10px; }
+.dock .tail .slot.act {
+  display: flex; align-items: center; justify-content: flex-end;
+  width: 208px; flex-shrink: 0;
+}
+/* a seat can be named anything, and "Skip to <name>" is one of the labels */
+.dock .tail .slot.act .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+.ident { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ident .swatch {
   width: 11px; height: 11px; border-radius: 50%; background: var(--c); flex-shrink: 0;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 20%, transparent);
 }
-.ident .who { display: flex; flex-direction: column; gap: 2px; }
-.ident .nm { font-family: 'Instrument Serif', serif; font-size: 22px; line-height: 1; }
-.ident .meta { font-size: 8.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.ident .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ident .nm {
+  font-family: 'Instrument Serif', serif; font-size: 22px; line-height: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ident .meta {
+  font-size: 8.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
-.prompt { display: flex; flex-direction: column; gap: 4px; }
+/* Two rows, always — the hint line holds its height when it has nothing to say,
+   so the sentence underneath never shifts up and down as phases turn over. */
+.prompt { display: grid; grid-template-rows: 11px auto; gap: 4px; min-width: 0; }
 .prompt .k { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
-.prompt .v { font-size: 13px; color: var(--ink); white-space: nowrap; }
+/* two lines is the ceiling: the bar's height is fixed, so a long sentence in a
+   narrow window has to fit rather than push the box around */
+.prompt .v {
+  font-size: 13px; line-height: 1.35; color: var(--ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 .prompt .v b { color: var(--accent); font-weight: 500; }
+
+/* Below this the bar can't hold a row and stay honest, so it gives up the fixed
+   height rather than clipping a control off the end. */
+@media (max-width: 1180px) {
+  .dock { height: auto; min-height: var(--dock-h); }
+  .dock .mid { flex-wrap: wrap; overflow: visible; }
+}
 
 .counter { font-family: 'Instrument Serif', serif; font-size: 34px; line-height: .85; color: var(--accent); font-variant-numeric: tabular-nums; }
 .counter.sm { font-size: 22px; }
 
-/* cards, as compact chips */
+/* cards, as compact chips. The rack holds a full hand's width whatever it's
+   carrying, so cashing a set doesn't drag the ± control across the bar. */
 .cardbar { display: flex; align-items: center; gap: 10px; }
-.chips { display: flex; gap: 4px; }
+.chips { display: flex; gap: 4px; min-width: 141px; }
 /* the hand is a readout, not a control — the set to trade picks itself */
 .chip {
   width: 25px; height: 32px; border: 1px solid var(--border); border-radius: 2px;
@@ -270,10 +321,10 @@ svg.map { width: 100%; height: 100%; display: block; }
 .btn.help.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .btn.wide { width: 100%; text-align: center; }
 
-/* ── settings popover, anchored above the bar's gear ── */
+/* ── settings popover, anchored above the bar's action group ── */
 .popover-scrim { position: fixed; inset: 0; z-index: 40; }
 .popover {
-  position: absolute; bottom: calc(100% + 10px); right: 0; z-index: 41;
+  position: absolute; bottom: calc(100% + 14px); right: 0; z-index: 41;
   width: 290px; padding: 14px 15px;
   background: var(--paper); border: 1px solid var(--border); border-radius: 3px;
   box-shadow: 0 16px 40px rgba(40,32,20,.22);
@@ -330,7 +381,9 @@ kbd {
 .amount .nudge:disabled, .amount .preset:disabled { opacity: .3; cursor: not-allowed; }
 
 .dice { display: flex; align-items: center; gap: 14px; }
-.dice .side { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+/* Each side holds three dice worth of room and the verdict its longest line, so
+   a roll lands in place instead of shunting the pair around it. */
+.dice .side { display: flex; flex-direction: column; gap: 5px; align-items: center; width: 83px; }
 .dice .side .mono-label { font-size: 8px; letter-spacing: .12em; }
 .dice .row { display: flex; gap: 4px; }
 .die {
@@ -341,7 +394,10 @@ kbd {
 }
 @keyframes roll { from { opacity: 0; transform: translateY(-7px) rotate(-9deg); } }
 .die.lost { opacity: .3; text-decoration: line-through; }
-.dice .verdict { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+.dice .verdict {
+  font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2);
+  white-space: nowrap; width: 128px; text-align: center;
+}
 
 /* ─────────────────────────── setup / gameover ─────────────────────────── */
 
@@ -411,18 +467,7 @@ kbd {
 .winner { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
 .winner .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--c); }
 
-/* ─────────────────────────── shortcut sheet ─────────────────────────── */
-
-.overlay.sheet { background: rgba(34,30,24,.42); backdrop-filter: blur(3px); cursor: pointer; }
-.panel.narrow {
-  width: 430px; padding: 26px 28px; cursor: default;
-  /* a help sheet should feel instant, not glide in like a title screen */
-  animation-duration: .16s;
-  background: var(--paper); border: 1px solid var(--border); border-radius: 3px;
-  box-shadow: 0 24px 60px rgba(40,32,20,.28);
-}
-.sheet-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
-.sheet-head h2 { font-family: 'Instrument Serif', serif; font-size: 30px; font-weight: 400; }
+/* ─────────────────────────── key list ─────────────────────────── */
 
 .keys { display: flex; flex-direction: column; gap: 2px; }
 .keys > .mono-label { margin-bottom: 4px; }
@@ -544,7 +589,8 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* the scrubber, where the dock sits in the live game */
+/* the scrubber, where the dock sits in the live game — and the same footprint,
+   so switching the seat under review doesn't resize the bar around the tape */
 .rev-bar {
   position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px;
@@ -553,7 +599,7 @@ kbd {
   border: 1px solid var(--border); border-radius: 3px;
   backdrop-filter: blur(14px);
   box-shadow: 0 14px 34px rgba(80,68,44,.14);
-  width: max-content; max-width: calc(100% - 32px);
+  width: var(--dock-w); min-height: var(--dock-h);
 }
 .rev-bar .div { width: 1px; align-self: stretch; background: var(--rule); }
 .rev-bar .nav {
@@ -568,7 +614,7 @@ kbd {
    more than any summary line could. */
 .rev-bar .tape {
   display: flex; gap: 2px; align-items: flex-end;
-  max-width: 46vw; overflow-x: auto; padding: 3px 0;
+  flex: 1; min-width: 0; overflow-x: auto; padding: 3px 0;
   /* No scrollbar: the cursor's tick is scrolled into view for you, so the bar
      never needs dragging and a gutter would only cost the ticks their height. */
   scrollbar-width: none; -ms-overflow-style: none;
