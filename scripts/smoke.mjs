@@ -140,6 +140,9 @@ async function open(withHistory) {
   ok(ticks > 20, `the tape has the seat's decisions on it, got ${ticks}`)
   ok((await page.locator('.review .stat').count()) === 2, 'accuracy and luck are reported separately')
 
+  // the game-level read, alongside the per-decision one
+  ok((await page.locator('.rev-habits .habit').count()) > 0, 'recurring faults are summarised')
+
   // stepping and jumping
   const at = () => page.locator('.topbar .mono-label').first().textContent()
   const t0 = await at()
@@ -163,6 +166,18 @@ async function open(withHistory) {
   await page.locator('.rev-panel .line').first().click()
   await page.waitForTimeout(200)
   ok((await page.locator('.edge.sel, .edge.target').count()) > 0, 'and so is the move actually played')
+
+  // A deploy is recommended with the rest of the turn behind it, which is the only
+  // thing that makes "deploy 1 to Ural" readable. Scanned rather than jumped to:
+  // which decisions have a continuation depends on the game.
+  const marks = Math.min(await page.locator('.rev-bar .tick').count(), 80)
+  let behind = 0
+  for (let i = 0; i < marks && !behind; i++) {
+    await page.locator('.rev-bar .tick').nth(i).click()
+    await page.waitForTimeout(20)
+    behind = await page.locator('.rev-panel .line.better .v em').count()
+  }
+  ok(behind > 0, 'a recommendation shows the turn it was for')
 
   await page.keyboard.press('Escape')
   await page.waitForTimeout(250)

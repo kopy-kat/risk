@@ -361,7 +361,7 @@ Win-rate neutral, and kept anyway. It's on the human-likeness list, not the stre
 list, and an attacker has already committed forces to our border so it isn't
 *unsound* either.
 
-### One ply is fine for judging, and wrong for playing
+### One ply is fine for judging attacks, and wrong for playing
 
 The game reviewer (`src/review/price.ts`) scores candidate moves by the position
 they lead to — which is, structurally, the thing that just failed three times. It's
@@ -371,9 +371,9 @@ The objection that killed the lookahead was depth: the position after our captur
 says little about the position after three replies. That is an objection to
 *predicting* a game still being played. A review predicts nothing — the game is
 over, the replies are already in the record, and the only question is what the
-alternatives were worth at the moment of choice. One ply isn't an approximation of
-that answer, it's the whole of it. No bot imports the module, and the tiers are
-unchanged.
+alternatives were worth at the moment of choice. For an attack, one ply isn't an
+approximation of that answer, it's the whole of it. No bot imports the module, and
+the tiers are unchanged.
 
 Its objective is own score minus the **sum** of rival scores over a divisor fixed
 at the decision point. Both halves avoid a specific failure:
@@ -393,6 +393,42 @@ And it is entirely downstream of the evaluation fix above. Built on the old
 `assess`, the reviewer would have told people that 58% of their good attacks were
 mistakes.
 
+**A deploy can't be priced at one ply, and the fix is one turn deep.** Armies in hand
+buy nothing until they're spent, and `objective` counts them either way — so at one
+ply "place one army and think again" scores within a hair of the position before it,
+and it was frequently the best thing the reviewer could find. Every deploy was
+compared against a move that committed nothing, which is why the advice read as
+having no idea what the turn was for. `evalLine` prices a deploy by applying it and
+letting Marshal finish the turn behind it, which also gives the recommendation
+something to say: *deploy 1 to Ural, then take Afghanistan*.
+
+Three things make that safe to look at:
+
+- **No dice.** The continuation's attacks resolve to their likely board — above even
+  odds, captured with the expected survivors — never to a roll. A maximum over
+  *rolled* alternatives selects for the one the dice favoured, which invents blunders
+  and grades the same game differently on a second viewing.
+- **Discounted by reach.** Each step contributes what it adds times the chance of
+  getting there. A gain three even-money attacks deep is worth an eighth of itself;
+  counting it whole hands the comparison to whichever alternative has the longest
+  line. Lines stop at four attacks and at the first elimination they claim, because
+  past that a review is forecasting a conquest rather than explaining a move.
+- **It only ever adds.** A move with nothing after it prices exactly as it did
+  before — its own value is still the full expectation over both outcomes — so the
+  grade bands stay anchored to what they were calibrated against.
+
+**And it is confined to deploys, because the check says so.** A rollout has something
+real to say about attacks and occupations too — how much of a stack to advance is
+entirely a question about what you can do next. But measured on the ladder, rolling
+them out makes the reviewer *worse at telling the tiers apart*: with attacks and
+occupations included `easy` came out better than Marshal, General and Colonel and no
+adjacent pair separated; with occupations alone General and Colonel swapped. The
+likely cause is the one `MAX_SHORTFALL` exists for — a loss is denominated in armies,
+a rollout widens the gap between the best line and a reasonable one, and that gap
+grows with the size of the position, which is to say with how well someone is
+playing. Deploys have the most to gain from turn context and the least room for the
+spread to run away, since every candidate is placing the same armies.
+
 **Judging whole alternatives needs exposure bounded; playing doesn't.** `assess`
 leaves exposure unbounded and `EXPOSURE_WEIGHT` sets its influence, which is right
 for agents: they compare small local changes, and the unbounded part largely
@@ -408,17 +444,19 @@ plays is touched.
 way `bench.ts` pairs, over 20 games per tier:
 
 ```
-marshal 1.65  ≈  general 1.55      paired gap +0.02 ± 0.37   tied
-general 1.55  <  colonel 4.19                 −1.12 ± 0.90   separated
-colonel 4.19  <  easy    4.81                 −0.87 ± 1.59   tied
-easy    4.81  <  random  6.87                 −2.52 ± 1.65   separated
+marshal 1.64  <  general 2.34      paired gap −0.53 ± 0.55   ordered
+general 2.34  <  colonel 3.38                 −0.24 ± 1.02   ordered
+colonel 3.38  <  easy    6.62                 −2.15 ± 2.14   separated
+easy    6.62  <  random  7.43                 −2.00 ± 1.87   separated
 ```
 
-**Marshal and General tie, and that's the honest answer.** Both of Marshal's
-additions — elimination hunting and table reading — pay off across turns rather than
-within one decision, so a per-move metric has no way to see them. The same fact the
-ablation table above reports as "multiplayer specialist" shows up here as a tie. It
-is a limit of per-decision review, not a defect in the tiers.
+**All four pairs come out in the right order**, and the grade histogram is monotone in
+both tails — the share of decisions graded best runs 75 / 73 / 70 / 55 / 36 down the
+ladder, and blunders run 1.0 / 1.6 / 5.3 / 5.5 / 8.5 up it. Two of the four gaps are
+wider than twice their standard error; the other two are the right sign inside it.
+Marshal against General is the pair that should be hardest, and is: elimination
+hunting and table reading pay off across turns rather than within one decision, which
+is the same fact the ablation table above reports as "multiplayer specialist".
 
 **Pairing is not optional here, and getting it wrong nearly shipped a bad number.**
 The first version treated every decision as an independent sample. Decisions inside
@@ -428,10 +466,10 @@ error bars came out roughly 4× too tight, tight enough that the check passed at
 games per tier and failed at 8 on the *same seeds*. Averaging within a game and
 differencing across seeds fixes both the clustering and the map luck at once.
 
-The consequence worth stating plainly: this check confirms the reviewer separates the
-strong tiers from Colonel and separates `easy` from `random`. It does **not** resolve
-Marshal vs General or Colonel vs `easy` at these sample sizes. It is a guard against
-gross miscalibration, which is what it is there for — not a fine-grained ranking.
+The consequence worth stating plainly: this check confirms the ordering and resolves
+Colonel from `easy` and `easy` from `random` at twenty games. It does **not** resolve
+Marshal from General or General from Colonel at that size. It is a guard against gross
+miscalibration, which is what it is there for — not a fine-grained ranking.
 
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Still open** — search *over* plans (as opposed to choosing one greedily),
