@@ -30,7 +30,6 @@ export function Setup({ onStart, onReview }: Props) {
   const active = seats.slice(0, count)
   const humans = active.filter((s) => !s.isBot).length
   const bots = active.length - humans
-  const tier = BOTS.find((b) => b.key === difficulty)
 
   return (
     <div className="overlay">
@@ -71,7 +70,7 @@ export function Setup({ onStart, onReview }: Props) {
         {bots > 0 && (
           <div className="field">
             {/* one rung for every bot in the game — mixed tables read as a handicap match */}
-            <span className="mono-label">Difficulty · all bots</span>
+            <span className="mono-label">Difficulty</span>
             <div className="tiers">
               {BOTS.map((b) => (
                 <button
@@ -83,7 +82,6 @@ export function Setup({ onStart, onReview }: Props) {
                 </button>
               ))}
             </div>
-            {tier && <div className="blurb">{tier.blurb}</div>}
           </div>
         )}
 

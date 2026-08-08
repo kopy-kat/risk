@@ -449,7 +449,6 @@ kbd {
 }
 .tiers button:hover { border-color: var(--ink); color: var(--ink); }
 .tiers button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.blurb { margin-top: 10px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
 
 .toggle { display: flex; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
 .toggle button {
