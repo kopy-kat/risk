@@ -193,11 +193,27 @@ export interface GameReview {
   error: string | null
 }
 
+/**
+ * A review's verdicts without the boards behind them.
+ *
+ * What crosses the worker boundary in `review.worker.ts`: `replay.states` is a
+ * thousand full positions for a long game, and `replay` rebuilds them from the
+ * record in milliseconds, so recomputing them on the receiving side costs less
+ * than cloning them across.
+ */
+export type Verdicts = Pick<GameReview, 'judgements' | 'byPlayer' | 'reviewed'>
+
 export interface ReviewOptions {
   /** seats to judge. Defaults to every human seat. */
   players?: PlayerId[]
   /** the reference opponent whose judgement is being borrowed */
   bot?: Bot
+  /**
+   * Called as each decision is taken up, so a caller can show something moving.
+   * A long game is tens of seconds of arithmetic and a still screen is
+   * indistinguishable from a hang.
+   */
+  onProgress?(done: number, total: number): void
 }
 
 export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameReview {
@@ -216,11 +232,21 @@ export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameRe
   const rng = rngFrom((record.seed ^ 0x1eaf) >>> 0)
   const rand = () => rng.next()
 
+  // The denominator has to be known before the first one is judged, and which
+  // moves count is a property of the record rather than of the pricing, so it's
+  // a scan of the seats rather than a first pass over the work itself.
+  let total = 0
+  for (let i = 0; i < r.states.length - 1; i++) {
+    if (wanted.has(r.states[i].current) && !assisted.has(i)) total++
+  }
+  let done = 0
+
   for (let i = 0; i < r.states.length - 1; i++) {
     const s = r.states[i]
     const played = record.moves[i]
     const me = s.current
     if (!wanted.has(me) || assisted.has(i)) continue
+    opts.onProgress?.(++done, total)
 
     const divisor = rivalCount(s, me)
     const options = candidatesWith(s, bot, me, rand)

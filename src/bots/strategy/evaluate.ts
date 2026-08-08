@@ -6,12 +6,12 @@
  * number for a position, and it has to be in comparable units. Everything here is
  * denominated in **armies**, with per-turn income converted at `INCOME_HORIZON`.
  */
-import { ADJACENCY, TERRITORY_IDS } from '../../engine/board'
+import { ADJACENCY, CONTINENTS, TERRITORY_IDS } from '../../engine/board'
 import type { TerritoryId } from '../../engine/board'
 import { cashValue, findSets } from '../../engine/cards'
-import { HAND_LIMIT, territoriesOf } from '../../engine/game'
+import { HAND_LIMIT, continentsHeldBy, territoriesOf } from '../../engine/game'
 import type { GameState, PlayerId } from '../../engine/types'
-import { incomeOf, isBorder, pressure } from './board-sense'
+import { incomeOf } from './board-sense'
 
 /**
  * How many turns of income an army is worth. Risk games run 15–40 turns and income
@@ -41,12 +41,10 @@ export const EXPOSURE_WEIGHT = 0.25
  * hopeless — most individual captures look worthless, so anything scoring moves by
  * position learns not to attack. The marginal value of a territory is a third of an
  * army per turn, and that is what a smooth objective should see.
+ *
+ * Takes the counts rather than the board because `assess` has already walked it.
  */
-function smoothIncome(s: GameState, p: PlayerId): number {
-  const base = territoriesOf(s, p).length / 3
-  const bonus = incomeOf(s, p) - Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
-  return base + bonus
-}
+const smoothIncome = (territories: number, bonus: number): number => territories / 3 + bonus
 
 /** Expected armies sitting in a hand, including partial progress toward a set. */
 export function handValue(s: GameState, p: PlayerId): number {
@@ -61,14 +59,43 @@ export function handValue(s: GameState, p: PlayerId): number {
  * Armies we'd need to add to feel safe everywhere. High exposure means the
  * position looks bigger than it is — the classic overextended sprawl.
  */
-export function exposure(s: GameState, p: PlayerId): number {
-  let need = 0
-  for (const t of territoriesOf(s, p)) {
-    if (!isBorder(s, p, t)) continue
-    const want = pressure(s, p, t) * 0.6
-    if (want > s.troops[t]) need += want - s.troops[t]
+export const exposure = (s: GameState, p: PlayerId): number =>
+  exposureOver(s, p, territoriesOf(s, p), Infinity).total
+
+/** Exposure both ways: as it stands, and with each territory's share bounded. */
+interface Exposed {
+  total: number
+  /** `total` with no territory contributing more than the cap — see `assess` */
+  capped: number
+}
+
+/**
+ * `exposure` over holdings the caller already has, so `assess` walks once.
+ *
+ * Being a border and the pressure on it are the same scan — a border *is* a
+ * territory with an enemy neighbour — so they're read together rather than by
+ * calling `isBorder` and then `pressure` over the same list twice.
+ */
+function exposureOver(s: GameState, p: PlayerId, mine: TerritoryId[], cap: number): Exposed {
+  let total = 0
+  let capped = 0
+  for (const t of mine) {
+    let enemies = 0
+    let bearing = 0
+    for (const n of ADJACENCY[t]) {
+      if (s.owner[n] === p) continue
+      enemies++
+      bearing += s.troops[n]
+    }
+    if (!enemies) continue
+    const want = bearing * 0.6
+    if (want > s.troops[t]) {
+      const short = want - s.troops[t]
+      total += short
+      capped += Math.min(short, cap)
+    }
   }
-  return need
+  return { total, capped }
 }
 
 export interface Assessment {
@@ -78,26 +105,47 @@ export interface Assessment {
   cards: number
   handValue: number
   exposure: number
+  /**
+   * `exposure` with each territory's shortfall bounded by the `exposureCap`
+   * argument, which defaults to no bound at all. Only the reviewer passes one, and
+   * only the reviewer reads this — the reason and the number are both in
+   * `src/review/price.ts`.
+   */
+  cappedExposure: number
   /** everything above, folded into one number in army units */
   score: number
 }
 
-export function assess(s: GameState, p: PlayerId): Assessment {
+/**
+ * Every term computed exactly once.
+ *
+ * This is the innermost call of every rollout the reviewer does — hundreds of
+ * thousands of times for one game — so the spelling that reads best is not
+ * affordable: naming `handValue`, `exposure` and the income pair in both the
+ * fields and the score walks the board seven times for four distinct answers.
+ */
+export function assess(s: GameState, p: PlayerId, exposureCap = Infinity): Assessment {
   const mine = territoriesOf(s, p)
-  const armies = mine.reduce((n, t) => n + s.troops[t], 0)
+  let armies = 0
+  for (const t of mine) armies += s.troops[t]
+  let bonus = 0
+  for (const c of continentsHeldBy(s, p)) bonus += CONTINENTS[c].bonus
+  const hand = handValue(s, p)
+  const exposed = exposureOver(s, p, mine, exposureCap)
   return {
     territories: mine.length,
     armies,
-    income: incomeOf(s, p),
+    income: Math.max(3, Math.floor(mine.length / 3)) + bonus,
     cards: s.players[p].cards.length,
-    handValue: handValue(s, p),
-    exposure: exposure(s, p),
+    handValue: hand,
+    exposure: exposed.total,
+    cappedExposure: exposed.capped,
     // exposure is discounted: defending every border is never actually correct
     score:
-      smoothIncome(s, p) * INCOME_HORIZON +
+      smoothIncome(mine.length, bonus) * INCOME_HORIZON +
       armies * ARMY_WEIGHT +
-      handValue(s, p) -
-      exposure(s, p) * EXPOSURE_WEIGHT,
+      hand -
+      exposed.total * EXPOSURE_WEIGHT,
   }
 }
 
