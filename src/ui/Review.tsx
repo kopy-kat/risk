@@ -10,8 +10,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TerritoryId } from '../engine/board'
 import type { GameState, Move, PlayerId } from '../engine/types'
-import { FAULT_LABEL, describeContinuation, describeMove, isNotable, reviewGame } from '../review/review'
+import { FAULT_LABEL, describeContinuation, describeMove, isNotable } from '../review/review'
 import type { GameReview, Grade } from '../review/review'
+import { replay } from '../review/replay'
+import type { FromReviewWorker } from '../review/review.worker'
 import { getGame } from '../review/store'
 import { MapView } from './MapView'
 import { playerColor } from './colors'
@@ -37,24 +39,41 @@ export function Review({ id, onExit }: Props) {
   /** whether the map is showing what you played or what was better */
   const [showing, setShowing] = useState<'played' | 'better'>('better')
   const [hover, setHover] = useState<TerritoryId | null>(null)
+  /** how far the analysis has got, 0–1, or null once it can't finish */
+  const [progress, setProgress] = useState<number | null>(0)
 
-  // Analysis is a second or so of arithmetic. Kicking it to a timeout lets the
-  // shell paint first, so the screen never appears to hang on open.
+  // Judging happens in a worker, because it is seconds to a minute of arithmetic
+  // with no yield points in it — see `review.worker.ts`. The boards it doesn't
+  // send back are replayed here instead, which is milliseconds.
   useEffect(() => {
     if (!record) return
     let live = true
-    const t = setTimeout(() => {
-      const r = reviewGame(record)
-      if (live) {
-        const first = r.reviewed[0] ?? null
-        setReview(r)
-        setSubject(first)
-        setCursor(r.judgements.find((j) => j.player === first)?.index ?? 0)
+    setProgress(0)
+    const worker = new Worker(new URL('../review/review.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    worker.onmessage = ({ data }: MessageEvent<FromReviewWorker>) => {
+      if (!live) return
+      if (data.kind === 'progress') {
+        setProgress(data.total ? data.done / data.total : 1)
+        return
       }
-    }, 0)
+      const r = replay(record)
+      const first = data.verdicts.reviewed[0] ?? null
+      setReview({ ...data.verdicts, replay: r, error: r.error })
+      setSubject(first)
+      setCursor(data.verdicts.judgements.find((j) => j.player === first)?.index ?? 0)
+    }
+    // A worker that dies takes the analysis with it. Saying so beats leaving the
+    // word "Analysing" on screen forever, which is the failure this all exists to
+    // stop looking like.
+    worker.onerror = () => {
+      if (live) setProgress(null)
+    }
+    worker.postMessage(record)
     return () => {
       live = false
-      clearTimeout(t)
+      worker.terminate()
     }
   }, [record])
 
@@ -151,7 +170,20 @@ export function Review({ id, onExit }: Props) {
   const ahead = here ? describeContinuation(here.line) : ''
 
   if (!record) return <Shell onExit={onExit}><Empty>That game is no longer stored.</Empty></Shell>
-  if (!review) return <Shell onExit={onExit}><Empty>Analysing…</Empty></Shell>
+  if (!review) {
+    return (
+      <Shell onExit={onExit}>
+        {progress === null ? (
+          <Empty>The analysis stopped before it finished.</Empty>
+        ) : (
+          <Empty>
+            Analysing… {Math.round(progress * 100)}%
+            <div className="bar"><i style={{ width: `${progress * 100}%` }} /></div>
+          </Empty>
+        )}
+      </Shell>
+    )
+  }
   if (!state) {
     return (
       <Shell onExit={onExit}>

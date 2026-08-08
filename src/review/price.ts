@@ -42,9 +42,9 @@ import {
   expectedSurvivors,
   winProb,
 } from '../engine/combat'
-import { applyMove, legalMoves, territoriesOf } from '../engine/game'
+import { applyMove, legalMoves } from '../engine/game'
 import type { GameState, Move, PlayerId } from '../engine/types'
-import { garrisonFor, isBorder, pressure } from '../bots/strategy/board-sense'
+import { garrisonFor, isBorder } from '../bots/strategy/board-sense'
 import { EXPOSURE_WEIGHT, assess } from '../bots/strategy/evaluate'
 import type { Bot } from '../bots/types'
 
@@ -117,20 +117,16 @@ const MAX_SHORTFALL = 12
 /**
  * `assess`'s score with exposure bounded per territory.
  *
- * Done here rather than in `assess` so the bots keep exactly the evaluation they
- * were tuned and benchmarked against — this is a property the *reviewer* needs,
- * not a correction to how anything plays.
+ * The ceiling goes in as an argument so that `assess` reads the board once — this
+ * is the innermost call of every rollout, and computing the bounded figure out here
+ * meant walking every player's whole position a second time. What the cap is and
+ * why stays on this side, and the bots pass none, so they keep exactly the
+ * evaluation they were tuned and benchmarked against.
  */
 function scoreOf(s: GameState, p: PlayerId): number {
-  const a = assess(s, p)
-  let capped = 0
-  for (const t of territoriesOf(s, p)) {
-    if (!isBorder(s, p, t)) continue
-    const want = pressure(s, p, t) * 0.6
-    if (want > s.troops[t]) capped += Math.min(want - s.troops[t], MAX_SHORTFALL)
-  }
+  const a = assess(s, p, MAX_SHORTFALL)
   // add back the share of exposure we refuse to count
-  return a.score + (a.exposure - capped) * EXPOSURE_WEIGHT
+  return a.score + (a.exposure - a.cappedExposure) * EXPOSURE_WEIGHT
 }
 
 /**

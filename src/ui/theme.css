@@ -508,9 +508,13 @@ kbd {
 .review .stat .u { font-size: 8px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 
 .rev-empty {
-  position: absolute; inset: 0; display: grid; place-items: center;
+  position: absolute; inset: 0; display: grid; place-items: center; align-content: center;
+  gap: 10px;
   color: var(--ink-3); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
 }
+/* Judging a long game is tens of seconds, so the percentage carries the screen. */
+.rev-empty .bar { width: 180px; height: 2px; background: var(--rule); }
+.rev-empty .bar i { display: block; height: 100%; background: var(--ink-3); transition: width .2s; }
 
 .replay-warn {
   position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
