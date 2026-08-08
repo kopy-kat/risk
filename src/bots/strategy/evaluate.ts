@@ -149,6 +149,19 @@ export function assess(s: GameState, p: PlayerId, exposureCap = Infinity): Asses
   }
 }
 
+/** Ground income of everyone still alive — what the whole map pays per turn. */
+export function tableIncome(s: GameState): number {
+  return s.players.filter((p) => p.alive).reduce((n, p) => n + incomeOf(s, p.id), 0)
+}
+
+/**
+ * True once the next set is worth more than everything the table's ground pays.
+ * Past this point the game's economy has left the map: holding territory decides
+ * who is ahead *this* turn, but the cash-in ladder decides who wins. The recorded
+ * human games all turn on this line being crossed unnoticed — see BOTS.md.
+ */
+export const setsDominate = (s: GameState): boolean => cashValue(s.setsTraded) >= tableIncome(s)
+
 /** Our score minus the strongest rival's — negative means we're behind. */
 export function relativeStanding(s: GameState, me: PlayerId): number {
   let best = 0
@@ -194,17 +207,28 @@ export function rivals(s: GameState, me: PlayerId): Rival[] {
  * against the force we have adjacent — because the real check is whether the
  * attacks actually succeed, and the bot finds that out by trying.
  */
-export function killableRival(s: GameState, me: PlayerId, reach = 2.2): Rival | null {
+export function killableRival(s: GameState, me: PlayerId, reach = 2.2, extra = 0): Rival | null {
   const mine = territoriesOf(s, me)
   for (const r of rivals(s, me)) {
     const theirs = territoriesOf(s, r.id)
-    // a sweep of more than a handful of territories in one turn is fantasy
-    if (!theirs.length || theirs.length > 5) continue
+    // A sweep of more than a handful of territories in one turn is fantasy — but
+    // the ceiling scales with the prize. A three-card hand under an escalating
+    // sequence is routinely worth more than the ground being crossed to take it,
+    // and the recorded human games were lost to players holding six to eight
+    // tiles whom this cap declared unkillable on principle.
+    const cap = r.cards >= 3 ? 8 : 5
+    if (!theirs.length || theirs.length > cap) continue
     const defence = theirs.reduce((n, t) => n + s.troops[t], 0)
     const theirSet = new Set(theirs)
-    const force = mine
-      .filter((t) => ADJACENCY[t].some((n) => theirSet.has(n)))
-      .reduce((n, t) => n + Math.max(0, s.troops[t] - 1), 0)
+    // `extra` is force in hand rather than on the board — armies mid-deploy, or a
+    // set about to be cashed. Counting it is what lets a bot see the kill *before*
+    // trading, which is the trade the recorded human games are built on: cash,
+    // land it on the right border, take the hand.
+    const force =
+      extra +
+      mine
+        .filter((t) => ADJACENCY[t].some((n) => theirSet.has(n)))
+        .reduce((n, t) => n + Math.max(0, s.troops[t] - 1), 0)
     if (force > defence * reach) return r
   }
   return null
@@ -216,6 +240,48 @@ export function primaryThreat(s: GameState, me: PlayerId): Rival | null {
   if (!rs.length) return null
   const weight = (x: Rival) => x.score * (x.adjacent ? 1 : 0.55)
   return rs.reduce((best, r) => (weight(r) > weight(best) ? r : best))
+}
+
+/**
+ * How much a rival's position reads as the set-race strategy: one dominant
+ * stack, little ground, and a hand that keeps growing. All of it is public, and
+ * none of it needs history — the signature *is* the position, which keeps
+ * agents pure functions of state.
+ *
+ * Gated on a real hand first: without cards there is no race being run, however
+ * compact the position — a camper is concentrated and small too, and attacking
+ * a camper's fortress is a measured mistake.
+ */
+export function sharkLikeness(s: GameState, p: PlayerId): number {
+  const cards = s.players[p].cards.length
+  if (cards < 2) return 0
+  const theirs = territoriesOf(s, p)
+  if (!theirs.length) return 0
+  let armies = 0
+  let biggest = 0
+  for (const t of theirs) {
+    armies += s.troops[t]
+    biggest = Math.max(biggest, s.troops[t])
+  }
+  const concentration = biggest / Math.max(1, armies)
+  const compact = 1 - Math.min(1, theirs.length / 12)
+  const hand = Math.min(1, cards / HAND_LIMIT)
+  return concentration * 0.45 + compact * 0.25 + hand * 0.3
+}
+
+/**
+ * The set-racer worth reacting to before the bank pact can fire — the pact
+ * needs the escalation to already outweigh the map, and a racer noticed only
+ * then has already banked the win. Profiling reads the signature earlier.
+ */
+export function profiledShark(s: GameState, me: PlayerId): { id: PlayerId; likeness: number } | null {
+  let best: { id: PlayerId; likeness: number } | null = null
+  for (const q of s.players) {
+    if (!q.alive || q.id === me) continue
+    const likeness = sharkLikeness(s, q.id)
+    if (likeness >= 0.6 && (!best || likeness > best.likeness)) best = { id: q.id, likeness }
+  }
+  return best
 }
 
 /**
@@ -262,6 +328,13 @@ export interface Coalition {
    * piles on afterwards.
    */
   joined: boolean
+  /**
+   * Fired by the bank path rather than the ground path: the target is winning the
+   * set race, not the map. Consumers that mass armies key off this — the ground
+   * pile-on was measured win-rate neutral as pure target redirection, and gets to
+   * keep the behaviour it was measured with.
+   */
+  bank: boolean
 }
 
 /**
@@ -279,28 +352,75 @@ export interface Coalition {
 export function coalition(s: GameState, me: PlayerId): Coalition | null {
   const live = s.players.filter((p) => p.alive)
   if (live.length < 3) return null
+  const ground = groundLeader(s, live)
+  const picked = ground ?? bankLeader(s, live)
+  if (!picked) return null
+  const { leader, lead } = picked
+  const theirs = territoriesOf(s, leader)
+  const mine = new Set<TerritoryId>(territoriesOf(s, me))
+  const joined = s.log.some(
+    (e) =>
+      s.turn - e.turn <= 2 &&
+      // somebody else is already taking ground off them...
+      ((e.victim === leader && e.player !== null && e.player !== me && e.player !== leader) ||
+        // ...or they came for us, in which case hitting back *is* joining
+        (e.victim === me && e.player === leader)),
+  )
+  return {
+    target: leader,
+    lead,
+    againstMe: leader === me,
+    canReach: leader !== me && theirs.some((t) => ADJACENCY[t].some((n) => mine.has(n))),
+    joined,
+    bank: !ground,
+  }
+}
+
+/** The classic pile-on: someone's *ground* has grown past the point of no return. */
+function groundLeader(
+  s: GameState,
+  live: GameState['players'],
+): { leader: PlayerId; lead: number } | null {
   const scored = live
     .map((p) => ({ id: p.id, score: assess(s, p.id).score }))
     .sort((a, b) => b.score - a.score)
   const [leader, runnerUp] = scored
   const lead = leader.score / Math.max(1, runnerUp.score)
   if (lead < GANG_UP_LEAD) return null
-  const theirs = territoriesOf(s, leader.id)
-  if (theirs.length / TERRITORY_IDS.length < GANG_UP_SHARE) return null
-  const mine = new Set<TerritoryId>(territoriesOf(s, me))
-  const joined = s.log.some(
-    (e) =>
-      s.turn - e.turn <= 2 &&
-      // somebody else is already taking ground off them...
-      ((e.victim === leader.id && e.player !== null && e.player !== me && e.player !== leader.id) ||
-        // ...or they came for us, in which case hitting back *is* joining
-        (e.victim === me && e.player === leader.id)),
-  )
-  return {
-    target: leader.id,
-    lead,
-    againstMe: leader.id === me,
-    canReach: leader.id !== me && theirs.some((t) => ADJACENCY[t].some((n) => mine.has(n))),
-    joined,
-  }
+  if (territoriesOf(s, leader.id).length / TERRITORY_IDS.length < GANG_UP_SHARE) return null
+  return { leader: leader.id, lead }
+}
+
+/**
+ * The pile-on the recorded human games say the tiers were missing: once the
+ * cash-in sequence outweighs the whole map's income, the table's real leader is
+ * whoever holds the biggest bank-plus-army total, however little ground they
+ * hold. The 45% board-share gate is the right test for a ground leader and
+ * exactly the wrong one here — a set-racer wins from eight tiles.
+ *
+ * The `cards >= 3` requirement is what keeps this from decaying into "attack
+ * whoever is nominally ahead" (the standing-policy failure that cost 8 points):
+ * without a bank there is no race being won, and the ground path's share gate
+ * still applies.
+ */
+function bankLeader(
+  s: GameState,
+  live: GameState['players'],
+): { leader: PlayerId; lead: number } | null {
+  if (!setsDominate(s)) return null
+  const scored = live
+    .map((p) => ({
+      id: p.id,
+      cards: p.cards.length,
+      v:
+        territoriesOf(s, p.id).reduce((n, t) => n + s.troops[t], 0) +
+        handValue(s, p.id) +
+        (p.cards.length >= HAND_LIMIT - 1 ? cashValue(s.setsTraded) * 0.5 : 0),
+    }))
+    .sort((a, b) => b.v - a.v)
+  const [leader, runnerUp] = scored
+  if (leader.cards < 3) return null
+  const lead = leader.v / Math.max(1, runnerUp.v)
+  if (lead < GANG_UP_LEAD) return null
+  return { leader: leader.id, lead }
 }

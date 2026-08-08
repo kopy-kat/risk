@@ -14,6 +14,7 @@
     "test": "tsx scripts/test.ts",
     "bench": "tsx scripts/bench.ts",
     "exploit": "tsx scripts/exploit.ts",
+    "fit-eval": "tsx scripts/fit-eval.ts",
     "study": "tsx scripts/study.ts",
     "review-check": "tsx scripts/review-check.ts",
     "smoke": "tsx scripts/smoke.mjs"

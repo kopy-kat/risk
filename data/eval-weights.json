@@ -1,0 +1,22 @@
+{
+  "features": [
+    "smoothIncome",
+    "armies",
+    "handValue",
+    "exposure",
+    "territories",
+    "concentration"
+  ],
+  "weights": {
+    "smoothIncome": 0.008463907416370995,
+    "armies": 0.00010773840864345287,
+    "handValue": 0.0019068472953769544,
+    "exposure": -0.0009317240616703571,
+    "territories": 0.017270061122335402,
+    "concentration": 0.010320187680491455
+  },
+  "intercept": 0.008501190118851929,
+  "games": 2500,
+  "rows": 57551,
+  "seed": 424242
+}

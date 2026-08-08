@@ -11,8 +11,11 @@
  * This exists because the benchmark can only measure the bots against each
  * other, and a recorded game against a person is the only evidence available of
  * a strategy none of them plays. What to look at first: the army column. A seat
- * carrying far more armies than territories is banking, and nothing in the
- * evaluation counts that as a threat.
+ * carrying far more armies than territories is banking — the signature
+ * `sharkLikeness` reads and the strategy the card-economy work answers. When a
+ * new export beats the tiers, the loop is: name what the winner is doing, make
+ * the pool's policy space express it, then fix the tiers until the exploit
+ * search comes back under an equal share.
  */
 import { readFileSync } from 'node:fs'
 import { TERRITORY_IDS } from '../src/engine/board'

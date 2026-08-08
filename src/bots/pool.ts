@@ -20,12 +20,14 @@ import type { Bot } from './types'
  *
  * They are one parameterised policy rather than several hand-written bots so
  * that `npm run exploit` can search the same space the named points sit in. A
- * new exploit arrives as seven numbers rather than as a new file.
+ * new exploit arrives as ten numbers rather than as a new file, and anything
+ * the search finds above an equal share lands in `data/exploiters.json`.
  *
- * `npm run exploit -- --report` scores every named point against a tier. Marshal
- * currently beats all of them well below an equal share, and `blitzer` — the
- * crudest of the four — is the strongest, which is the pool's first real result:
- * see "The opponent pool" in BOTS.md.
+ * `npm run exploit -- --report` scores every named point against a tier. The
+ * strongest point is `cardShark` — the strategy read out of recorded human
+ * games, which forced three axes onto this space (`bankSets`, `preyFocus`,
+ * `strikeScope`) and drove the card-economy work in the tiers: see "The
+ * opponent pool" and "The card economy, answered" in BOTS.md.
  */
 export interface Policy {
   /** armies left on each border tile before anything reaches the stack */
@@ -54,18 +56,54 @@ export interface Policy {
    * rule it out, not because it works.
    */
   homeFocus: number
+  /**
+   * Treat the hand as part of the army. At 1, sets are held until the hand limit
+   * forces the issue (`cashAt` goes inert), and a tradeable set's value counts
+   * toward the sweep trigger — the bank and the stack strike together. This is
+   * the axis the original seven-dimension space could not express, and it is the
+   * one the recorded human games are built on: the escalating sequence makes a
+   * banked set outgrow the whole board, so the win condition is the cash-in, not
+   * the ground. 0 or 1; a fraction behaves as 1.
+   */
+  bankSets: number
+  /**
+   * How strongly targets are picked for who owns them rather than what they cost.
+   * At 0 the cheapest qualifying tile wins; toward 1 the policy prefers tiles
+   * owned by players who are nearly dead and holding cards — elimination hunting
+   * for hands, which chains: each kill's spoils force a trade that funds the next.
+   */
+  preyFocus: number
+  /**
+   * What the strike has to outweigh before it fires: the whole board at 0, only
+   * the cheapest rival at 1. The recorded human games strike near 1 — kill the
+   * most affordable player, let the inherited hand force a trade, and let that
+   * trade decide whether the chain continues. Waiting to outweigh everyone at
+   * once is `banker`, and `banker` loses.
+   */
+  strikeScope: number
 }
 
 /** Named points in the space. Each is a strategy a person would recognise. */
 export const POLICIES: Record<string, Policy> = {
   /** Turtle in one continent, bank the surplus, cash it into one board-clearing turn. */
-  banker: { garrison: 3, expandTo: 10, perTurn: 2, safeOdds: 0.8, cashAt: 20, sweepRatio: 1.5, homeFocus: 0.9 },
+  banker: { garrison: 3, expandTo: 10, perTurn: 2, safeOdds: 0.8, cashAt: 20, sweepRatio: 1.5, homeFocus: 0.9, bankSets: 0, preyFocus: 0, strikeScope: 0 },
   /** Take everything that is better than a coin flip and never stop. */
-  blitzer: { garrison: 1, expandTo: 42, perTurn: 42, safeOdds: 0.5, cashAt: 4, sweepRatio: 99, homeFocus: 0 },
+  blitzer: { garrison: 1, expandTo: 42, perTurn: 42, safeOdds: 0.5, cashAt: 4, sweepRatio: 99, homeFocus: 0, bankSets: 0, preyFocus: 0, strikeScope: 0 },
   /** Hold one small continent very hard and refuse to leave it. */
-  camper: { garrison: 5, expandTo: 7, perTurn: 1, safeOdds: 0.95, cashAt: 8, sweepRatio: 2.5, homeFocus: 1 },
+  camper: { garrison: 5, expandTo: 7, perTurn: 1, safeOdds: 0.95, cashAt: 8, sweepRatio: 2.5, homeFocus: 1, bankSets: 0, preyFocus: 0, strikeScope: 0 },
   /** One territory a turn for the card, cashed the moment it is legal. */
-  farmer: { garrison: 2, expandTo: 42, perTurn: 1, safeOdds: 0.85, cashAt: 4, sweepRatio: 99, homeFocus: 0 },
+  farmer: { garrison: 2, expandTo: 42, perTurn: 1, safeOdds: 0.85, cashAt: 4, sweepRatio: 99, homeFocus: 0, bankSets: 0, preyFocus: 0, strikeScope: 0 },
+  /**
+   * The strategy from the recorded human games, stated as policy numbers: one
+   * capture a turn from a single walking stack, sets held until the limit forces
+   * them, and a strike that fires once the bank plus the stack outweighs the
+   * board — then chains eliminations for their hands, each one funding the next.
+   * `cashAt` is inert under `bankSets`; it is set high to say so out loud.
+   * `strikeScope` 0, measured: striking as soon as the cheapest rival was
+   * affordable (0.8) cost half its win rate — the bank opened before the
+   * escalation was worth the spend.
+   */
+  cardShark: { garrison: 1, expandTo: 42, perTurn: 1, safeOdds: 0.8, cashAt: 99, sweepRatio: 1.0, homeFocus: 0, bankSets: 1, preyFocus: 0.8, strikeScope: 0 },
 }
 
 const enemyNeighbours = (s: GameState, me: PlayerId, t: TerritoryId) =>
@@ -134,13 +172,39 @@ const enemyTroops = (s: GameState, me: PlayerId): number => {
   return sum
 }
 
+/** Treats the hand as armies-in-waiting. See `Policy.bankSets`. */
+const banking = (p: Policy) => p.bankSets >= 0.5
+
+/** What the hand would pay if cashed right now — the bank behind the stack. */
+const bankOf = (s: GameState, me: PlayerId, p: Policy): number =>
+  banking(p) ? (bestTradeIn(s, me)?.value ?? 0) : 0
+
+/** The smallest rival army total still on the board — the most affordable kill. */
+function cheapestRival(s: GameState, me: PlayerId): number {
+  let least = Infinity
+  for (const q of s.players) {
+    if (!q.alive || q.id === me) continue
+    let sum = 0
+    for (const t of territoriesOf(s, q.id)) sum += s.troops[t]
+    least = Math.min(least, sum)
+  }
+  return least === Infinity ? 0 : least
+}
+
 /**
  * Re-derived every call rather than latched, which is safe because it is
  * self-sustaining: a blitz at these odds costs the stack less than it removes
  * from the other side, so the ratio only climbs once the sweep has started.
+ * A banking policy counts its tradeable set too: the strike is stack plus cash.
+ * `strikeScope` slides what must be outweighed from the whole board down to the
+ * cheapest rival — mid-chain the cheapest rival is the next link, so a chain
+ * that can still afford its next kill keeps rolling.
  */
-const sweeping = (s: GameState, me: PlayerId, p: Policy): boolean =>
-  s.troops[stackOf(s, me, p)] - 1 >= p.sweepRatio * enemyTroops(s, me)
+function sweeping(s: GameState, me: PlayerId, p: Policy): boolean {
+  const all = enemyTroops(s, me)
+  const need = all + p.strikeScope * (cheapestRival(s, me) - all)
+  return s.troops[stackOf(s, me, p)] - 1 + bankOf(s, me, p) >= p.sweepRatio * need
+}
 
 /** Captures made this turn, read from the log so the policy stays a pure function. */
 const capturesThisTurn = (s: GameState, me: PlayerId): number =>
@@ -153,6 +217,30 @@ function targets(s: GameState, me: PlayerId) {
     for (const to of attackableFrom(s, from))
       out.push({ from, to, odds: winProb(s.troops[from] - 1, s.troops[to]) })
   return out.sort((a, b) => b.odds - a.odds)
+}
+
+/**
+ * How much this tile's owner is worth hunting: card-rich and nearly dead scores
+ * high. In the same 0-to-~1 range as `odds`, so `preyFocus` weighs the two
+ * directly against each other.
+ */
+function preyScore(s: GameState, t: TerritoryId): number {
+  const owner = s.players[s.owner[t]]
+  const held = territoriesOf(s, owner.id).length
+  return (owner.cards.length / HAND_LIMIT) * 0.6 + Math.min(1, 3 / Math.max(1, held)) * 0.4
+}
+
+/** The best capture by odds plus who it hurts. At `preyFocus` 0 this is pure odds. */
+function pickTarget(
+  s: GameState,
+  p: Policy,
+  options: Array<{ from: TerritoryId; to: TerritoryId; odds: number }>,
+): { from: TerritoryId; to: TerritoryId; odds: number } | null {
+  if (!options.length) return null
+  if (p.preyFocus <= 0) return options[0]
+  return options.reduce((best, o) =>
+    o.odds + p.preyFocus * preyScore(s, o.to) > best.odds + p.preyFocus * preyScore(s, best.to) ? o : best,
+  )
 }
 
 export function makePolicyBot(key: string, name: string, blurb: string, p: Policy): Bot {
@@ -191,7 +279,10 @@ export function makePolicyBot(key: string, name: string, blurb: string, p: Polic
         case 'deploy': {
           const trade = bestTradeIn(s, me)
           const forced = s.players[me].cards.length >= HAND_LIMIT
-          if (trade && (forced || trade.value >= p.cashAt || sweeping(s, me, p)))
+          // A banking policy ignores `cashAt`: the set is the war chest, and it opens
+          // only when the limit forces it or the strike is on.
+          const willing = banking(p) ? sweeping(s, me, p) : trade !== null && (trade.value >= p.cashAt || sweeping(s, me, p))
+          if (trade && (forced || willing))
             return { type: 'tradeCards', cards: trade.cards }
 
           const thin = territoriesOf(s, me)
@@ -219,7 +310,7 @@ export function makePolicyBot(key: string, name: string, blurb: string, p: Polic
           if (sweeping(s, me, p)) {
             const stack = stackOf(s, me, p)
             const fromStack = options.filter((o) => o.from === stack)
-            const pick = (fromStack.length ? fromStack : options)[0]
+            const pick = pickTarget(s, p, fromStack.length ? fromStack : options)!
             return { type: 'blitz', from: pick.from, to: pick.to }
           }
 
@@ -228,7 +319,7 @@ export function makePolicyBot(key: string, name: string, blurb: string, p: Polic
 
           const inside = TERRITORIES_IN[homeOf(s, me)]
           const athome = homebound(p) ? options.filter((o) => inside.includes(o.to)) : []
-          const pick = (athome.length ? athome : options).find((o) => o.odds >= p.safeOdds)
+          const pick = pickTarget(s, p, (athome.length ? athome : options).filter((o) => o.odds >= p.safeOdds))
           return pick ? { type: 'blitz', from: pick.from, to: pick.to } : { type: 'endAttack' }
         }
 
@@ -299,4 +390,11 @@ export const farmerBot = makePolicyBot(
   POLICIES.farmer,
 )
 
-export const POOL: Bot[] = [bankerBot, blitzerBot, camperBot, farmerBot]
+export const cardSharkBot = makePolicyBot(
+  'cardShark',
+  'Cartomancer',
+  'Farms a card a turn from one walking stack, banks sets, then cashes into a chain of eliminations',
+  POLICIES.cardShark,
+)
+
+export const POOL: Bot[] = [bankerBot, blitzerBot, camperBot, farmerBot, cardSharkBot]

@@ -117,9 +117,9 @@ blunders read as bugs, not as a weaker opponent.
 | --- | --- | --- | --- |
 | combat odds | exact | exact | exact |
 | plans | expand, consolidate | + deny, cycle | + decapitate |
-| cards | cashes as soon as able | holds with a purpose | plays the set race |
-| opponents | ignores them | tracks income and threat | tracks hands, predicts cash-ins |
-| the table | — | gangs up on a runaway leader | gangs up on a runaway leader |
+| cards | cashes as soon as able | holds with a purpose, banks once sets outweigh the map | + cashes a set *for* a kill |
+| opponents | ignores them | tracks income and threat | tracks hands, predicts cash-ins, profiles the set-racer |
+| the table | — | gangs up on a runaway leader or a runaway bank | gangs up on a runaway leader or a runaway bank |
 | attacking | one capture at a time | one capture at a time | plans a route three deep |
 | the opening | levels the ground it holds | levels the ground it holds | drafts the chokepoints |
 | overextending | tends to | avoids it | punishes yours |
@@ -180,24 +180,24 @@ four seats is 200 seeds × 4 rotations.
 
 ```
                     2 seats        4 seats
-marshal > general   66.6 ±3.8     57.5 ±3.4
-marshal > colonel   70.0 ±3.7     57.0 ±3.4
-general > colonel   53.2 ±4.0     56.6 ±3.5
+marshal > general   66.6 ±3.8     63.2 ±3.3
+marshal > colonel   70.0 ±3.7     58.0 ±3.4
+general > colonel   53.2 ±4.0     56.2 ±3.5
 
 against the fixed `easy` rung — the yardstick for absolute strength
-marshal > easy      80.5 ±3.2     94.0 ±1.6
+marshal > easy      80.5 ±3.2     95.5 ±1.4
 general > easy      71.7 ±3.6     88.3 ±2.2
 colonel > easy      68.4 ±3.7     94.2 ±1.6
 easy    > random    97.9 ±1.1
 ```
 
 Stalled games are 2% or below in every pairing. Mixed tables with random seat counts
-(`npm run sim -- 300`, seats drawn from `ALL_BOTS`, so the opponent pool is in the
-draw) put all three tiers in order and separate every step:
+(`npm run sim -- 300`, seats drawn from `ALL_BOTS`, so the opponent pool — `cardShark`
+included — is in the draw) put all three tiers in order and separate every step:
 
 ```
-marshal 30.4% · general 24.6% · colonel 19.2% · blitzer 11.9% · easy 8.1%
-farmer 3.5% · random 1.5% · banker 0.8% · camper 0%
+marshal 28.3% · general 24.9% · colonel 15.8% · blitzer 11.3% · cardShark 8.7%
+easy 8.3% · farmer 1.5% · random 1.1% · banker 0% · camper 0%
 ```
 
 That the middle of the ladder separates here and barely does heads-up is not a
@@ -219,11 +219,12 @@ is exactly what happened: Colonel gained the most from the shared occupy fix, wh
 why the heads-up General-over-Colonel step is the thinnest number on this page while
 every tier beats `easy` by more than it used to.
 
-**The ladder is uneven, and heads-up it is uneven in the wrong direction.** Marshal
-separates cleanly (66.6 / 70.0) because route planning and the chokepoint opening both
-pay in a duel; General over Colonel at 53.2 is barely outside chance. At four seats the
-three steps are level at 57 but all narrower than the top tier deserves. The honest
-summary is that the top of the ladder moved and the middle did not.
+**The ladder is uneven, and the thin step is the same at both sizes.** Marshal
+separates cleanly everywhere — 66.6 / 70.0 heads-up from route planning and the
+chokepoint opening, 63.2 / 58.0 at four seats where cash-then-kill pays (see "The card
+economy, answered") — while General over Colonel is 53.2 heads-up, barely outside
+chance, and 56.2 at four. The honest summary is that the top of the ladder keeps
+finding structural gains and the middle has not.
 
 ### What the bench cannot see
 
@@ -232,46 +233,84 @@ answer "is there a strategy none of these has a reply to?". A bot only ever face
 opponents that think the way it does, so a hole shared by all three tiers is invisible
 to every pairing at once.
 
-Four recorded games against a person say what that misses. Marshal filled every other
-seat; the person won three of them — at six, five and four seats. `npm run study`
-replays an exported game and prints territories, armies and largest stack per seat per
-turn, which is the shape that makes the pattern visible: in each win they hold four to
-fourteen territories and carry between two and seven times the armies per territory any
-tier does, while Marshal's largest stack sits at two to five for the whole game.
+Nine recorded games against a person say what that misses. The person won eight —
+every one by the same strategy, and `npm run study` makes its shape visible:
 
-**But banking is the symptom, and the card economy is the cause.** In the six-seat game
-the leader reached turn 53 holding 40 of 42 territories against the person's two, and
-the log for the last four turns reads:
+- **Hold almost nothing, take exactly one territory a turn.** The person sits on 2–14
+  tiles all game with a card-earning capture on 100% of turns, keeps one walking stack
+  carrying most of their armies, and lets the spare tiles be taken back.
+- **Bank sets until the limit forces them.** The person trades at a full hand 70–100%
+  of the time; the tiers traded below it on most of theirs. Every early trade a bot
+  makes walks the global ladder toward the values the banker is waiting for.
+- **Cash into a chain of eliminations.** Endgames read: cash → kill → inherit the hand
+  → forced re-cash → next kill. One six-seat game ends with +45 +50 +55 +60 deployed on
+  a single turn — 210 armies against a whole-table map income of about 21 — and four
+  seats swept.
+- **Nobody contests any of it.** In the eight losses, 12–36% of bot attacks touch the
+  person, and the combined force the whole table keeps on their border runs 0–17
+  armies against a stack of 20–90. Between 45% and 83% of every army the person
+  deploys arrives from trades.
 
-```
-t53  leader  +11 · holds North America, South America
-t53  leader  traded a set · +45      (then +50, and 20 territories taken)
-t54  person  +3 · traded a set · +55
-t55  leader  +33 · holds five continents
-t56  person  +3 · traded a set · +65  → took all 42
-```
+The one game a bot won is the template for the fix: that Marshal put 44% of its
+attacks into the person, killed a rival for its hand mid-game, and took the person's
+five-card hand with the cash — the person's own strategy, played back at them.
 
 `CASH_VALUES` runs 4, 6, 8, 10, 12, 15, 20, 25 and then **+5 forever**, so in a long
-game a set outgrows the entire board. The leader's 40 territories and five continent
-bonuses paid 33 a turn; the person's one set paid 65. Holding ground stopped being how
-income works around turn 45 and no tier noticed, because in self-play games end before
-the sequence gets there — the four-seat tier-vs-tier games above average 49 turns.
+game a set outgrows the entire board. Holding ground stops being how income works
+around turn 45, and self-play never notices because tier-vs-tier games average 49
+turns. The through-line: **elimination hunting and card timing were both priced
+against map income, and late in a long game map income is the smaller number.** The
+answer to it is spread across "The card economy, answered" below, the `cardShark`
+pool point, and the exploitability number that now gates the loop.
 
-**And the tiers do not close games out.** Marshal left a two-territory player alive for
-three consecutive turns while holding 40 territories. That is not a one-off: across 60
-six-seat Marshal self-play games, 339 turns end with a rival that could have been
-wiped out still standing — 5.6 a game — and 2 of those 60 games are won by a player who
-was spared. (The test is crude and reads as an upper bound: it asks whether every one of
-the rival's territories borders one of ours at 80%+ odds, not whether one stack can
-actually chain through them all.) Eliminating a player takes their hand, and a hand is
-worth more than the board late, so declining is not the small mistake it looks like.
+### The card economy, answered
 
-The through-line: **elimination hunting and card timing are both priced against map
-income, and late in a long game map income is the smaller number.**
+Five mechanisms, all measured against `cardShark` (the recorded strategy as a pool
+point, below) with the ladder re-benched after each to confirm nothing was paid for
+them. Together they cut the shark from 20.1 ±7.0 to 6.1 ±2.9 at four seats while the
+ladder held or improved everywhere.
+
+- **`setsDominate`** (`evaluate.ts`) — the line the human games turn on, as a
+  predicate: the next cash-in is worth more than every live player's ground income
+  combined. Cheap enough to gate anything.
+- **Trade timing caps its own backstop.** `shouldTrade` still cashes at the
+  PATIENCE_CEILING for tempo while sets are small — but once `setsDominate`, a set is
+  spent on a kill or held until the limit forces it. Mid-game cashing with nothing to
+  buy walks the ladder for whoever is banking.
+- **The bank pact.** `coalition` gains a second trigger: once sets dominate, the
+  leader is whoever holds the biggest armies-plus-bank total *with an actual bank*
+  (three-plus cards), however little ground they hold — the 45% board-share gate is
+  the right test for a ground leader and exactly the wrong one for a set-racer.
+  Reciprocity and the truce carry over unchanged. A bank pact also masses: joined
+  bots deploy onto their strongest tile on the target's border, where a ground pact
+  keeps its measured behaviour (attack redirection only).
+- **Kills price the hand, in advance.** `killableRival`'s territory cap scales with
+  the prize (8 tiles when the hand is 3+ cards), and it accepts force still in hand —
+  so `shouldTrade` sees the kill a cash would buy *before* trading, and the deploy
+  phase lands those armies on the prey's border. This is cash-then-kill, the human
+  endgame, and it is the single most valuable change of the set: Marshal over General
+  at four seats went from 57.5 ±3.4 to 63.2 ±3.3 on it, because closing games out
+  pays against everyone, not just against sharks.
+- **Profiling** (Marshal only, `profilesOpponents`). The set-racer's signature is
+  public and needs no history: one dominant stack, little ground, a growing hand
+  (`sharkLikeness`, gated on cards so a camper never matches). A profiled racer is
+  treated as the primary threat and massed against turns before the bank pact's own
+  trigger can fire.
+
+Measured as a staged sequence against the shark at four seats: 20.1 ±7.0 before any
+of it, 15.3 ±6.2 after trade timing, the bank pact and the kill re-pricing, 8.6 ±3.5
+with profiling on top, 6.1 ±2.9 with cash-then-kill. The steps overlap pairwise at
+these sample sizes; the end-to-end drop does not. `blitzer` fell from 11.2 ±5.4 to
+6.9 ±3.1 over the same changes without being targeted by any of them — closing out
+kills is just worth points against anything that fights.
+
+What the ladder said about the bundle, same protocol as Results above: Marshal over
+`easy` 95.5 ±1.4 at four seats, over General 63.2 ±3.3, over Colonel 58.0 ±3.4,
+heads-up over General 66.6 ±3.8 — nothing regressed, stalls stayed at 2–4 per 800.
 
 ### The opponent pool
 
-`src/bots/pool.ts`. One parameterised policy, four named points, none of them a tier and
+`src/bots/pool.ts`. One parameterised policy, five named points, none of them a tier and
 none of them offered as a difficulty. They are outside `BENCH_LADDER` on purpose —
 ranking a tier against them would be reading a diagnostic as a score.
 
@@ -281,36 +320,70 @@ ranking a tier against them would be reading a diagnostic as a score.
 | `blitzer` | takes anything better than a coin flip and never stops |
 | `camper` | holds one small continent very hard and refuses to leave it |
 | `farmer` | one territory a turn for the card, cashed on sight |
+| `cardShark` | the recorded human strategy: farm a card a turn from one walking stack, bank sets until forced, strike into a chain of eliminations |
+
+`cardShark` needed three axes the original seven-dimension space could not express,
+which is exactly why the search never found the human strategy on its own:
+**`bankSets`** treats the hand as armies-in-waiting (sets held until forced, and a
+tradeable set's value counts toward the strike trigger), **`preyFocus`** picks targets
+for who owns them — card-rich and nearly dead — rather than what they cost, and
+**`strikeScope`** slides what the strike must outweigh from the whole board down to
+the cheapest rival. Measured: the shark strikes best at scope 0 — firing as soon as
+the cheapest rival was affordable (0.8) cost half its win rate, because the bank
+opened before the escalation made it worth spending.
 
 `npm run exploit -- --report` scores each against a table of the target. One candidate
-against three or five of the tier, so the number to beat is an equal share:
+against three or five of the tier, so the number to beat is an equal share.
+**Before the card-economy work, `cardShark` scored 20.1 ±7.0 at four seats — double
+the best exploit the old points ever managed, from the first policy family member
+that plays the card game.** Against the fixed tiers, 240 games per cell:
 
 ```
                   4 seats (25.0%)   6 seats (16.7%)
-banker                1.2 ±1.2          1.2 ±1.2
-blitzer               9.7 ±4.4          6.4 ±3.7
-camper                1.2 ±1.2          1.2 ±1.2
-farmer                1.2 ±1.2          1.3 ±1.3
+banker                0.8 ±0.8          0.8 ±0.8
+blitzer               6.9 ±3.1          1.6 ±1.4
+camper                0.8 ±0.8          0.8 ±0.8
+farmer                0.8 ±0.8          0.8 ±0.8
+cardShark             6.1 ±2.9          8.2 ±3.4
 ```
 
-**None of them is an exploit, and the crude one is the best of them.** Every point that
-banks armies is beaten worse than the one that just attacks, which is the first useful
-thing the pool produced: banking without the card economy behind it is a pile of armies
-behind a border that is too long to hold. `homeFocus` — sit in one continent and
-garrison only its chokepoints — was added precisely to fix that and made `banker` and
-`camper` *worse*, which is worth stating plainly rather than tuning away.
+`cardShark` is the only point that scores *better* with more seats — more players
+means more trades walking the ladder and more hands to chain through, which is the
+shape of the recorded human games too (their biggest wins were the six-seat tables).
+It is why every card-economy change was judged at both sizes, and it is the residual
+to watch: at six seats half its equal share is still standing after the fixes.
+
+**Of the four original points, none is an exploit, and the crude one is the best of
+them.** Every point that banks *armies* is beaten worse than the one that just
+attacks: banking without the card economy behind it is a pile of armies behind a
+border that is too long to hold. `homeFocus` — sit in one continent and garrison only
+its chokepoints — was added precisely to fix that and made `banker` and `camper`
+*worse*, which is worth stating plainly rather than tuning away. Banking *sets* is
+the version of patience that works, and it took `bankSets` to express it.
 
 The one thing they are one policy family for: `npm run exploit` searches the space they
-sit in, so a new exploit arrives as seven numbers rather than as a new file.
+sit in, so a new exploit arrives as ten numbers rather than as a new file.
 
 ### Searching for exploits
 
 `scripts/exploit.ts`. Cross-entropy over the policy space, maximising win rate against a
-tier: sample candidates, keep the best third, refit, repeat. Seven dimensions of mixed
+tier: sample candidates, keep the best third, refit, repeat. Ten dimensions of mixed
 integers and reals, a noisy objective and no gradient, which is what CEM is for. The
-named points seed the first generation, so it starts from the strategies a person would
-have written by hand rather than from noise, and the search seed is reported so a run
-that finds something replays exactly.
+named points — and every archived exploiter, below — seed the first generation, so it
+starts from the strategies a person would have written by hand plus everything any
+previous run found, and the search seed is reported so a run that finds something
+replays exactly.
+
+**The number the search exists to produce is the exploitability line**: the best edge
+over an equal share found at a fixed budget. It is the KPI for "did this change make
+the bots harder to exploit?", which a win rate against fixed opponents cannot answer.
+Anything that beats its share outside the interval is written to
+`data/exploiters.json` with the seed and budget that found it; the archive seeds
+future searches (so old holes stay found) and supplies seats to `npm run fit-eval`'s
+training population (so the fitted evaluation learns from strategies that actually
+win). Fix the tier, run the search again, and the loop is the double-oracle
+iteration: each pass either certifies the current bots at that budget or hands back
+the next hole as ten numbers.
 
 Two things keep the noise survivable. **Common random numbers**: every candidate in a
 generation plays the same seeds in the same rotations, so selection compares strategies
@@ -325,31 +398,31 @@ among three Marshals. Two exploiters divide a tier's attention and prop each oth
 which is a fact about the seating rather than about the strategy. `--report` is the
 number to quote.
 
-**No exploit, and the way it fails is the useful part.** 14 candidates × 8 generations
-× 120 games against Marshal at four seats:
+**The current number: exploitability of Marshal at four seats is −8.9 ±6.4.**
+14 candidates × 8 generations × 120 games, search seed 12345, against the tier with
+the card-economy fixes in:
 
 ```
-gen 0   11.2 ±5.4     garrison 1  expandTo 42  perTurn 42  safeOdds 0.50  cashAt  4  sweepRatio 99.00  homeFocus 0.00
-gen 3   14.5 ±6.1     garrison 2  expandTo 35  perTurn 37  safeOdds 0.64  cashAt 26  sweepRatio  5.02  homeFocus 0.22
-gen 7   16.1 ±6.4     garrison 2  expandTo 40  perTurn 40  safeOdds 0.76  cashAt 17  sweepRatio  5.50  homeFocus 0.18
+gen 0   11.2 ±5.4     the blitzer — best of the hand-written seeds on this footing
+gen 3   16.1 ±6.4     garrison 1  expandTo 37  safeOdds 0.69  cashAt 81  sweepRatio 1.76  bankSets 1  preyFocus 0.89  strikeScope 0.57
+gen 7   16.1 ±6.4     garrison 1  expandTo 32  safeOdds 0.73  cashAt 62  sweepRatio 1.41  bankSets 1  preyFocus 0.71  strikeScope 0.67
 ```
 
-It gains five points on the best hand-written point and still lands well under the 25%
-an equal share is worth. **Every knob that makes a policy turtle is driven to its
-inactive end**: `expandTo` and `perTurn` to their ceilings, so neither cap ever binds;
-`sweepRatio` to 5.5, so the sweep never fires; `homeFocus` to 0.18, below the threshold
-at which it does anything. What survives is an unbounded expander with a raised odds
-threshold and mild card patience — a better-tuned `blitzer`.
+The search converges *into* the shark family — `bankSets` pinned on, `preyFocus` near
+one, a live strike trigger — which says the widened space is pulling toward the right
+strategy, and the strategy still lands nine points under an equal share. Nothing gets
+archived. That is the double-oracle loop closing its first iteration: the recorded
+human games supplied the hole, the axes made it expressible, the tier fixes answered
+it, and the re-run certifies the answer at this budget.
 
-That is the same conclusion as the tuning sweeps in "Things that measure worse than they
-sound", reached from the other side of the board: **tempo beats position**, and an
-adversary given a free hand to be patient declines to be.
-
-It is also a finding about the space rather than about Marshal. The strategy that
-actually beat Marshal depends on *surviving on two territories while the leader declines
-to finish*, and no setting of these seven parameters steers a game into that — it is the
-opponent's omission, not the policy's choice. Fixing the omission and re-running is the
-measurement that says whether the omission was what mattered.
+Two earlier findings from this search survive restating. On the original seven
+dimensions, **every knob that made a policy turtle was driven to its inactive end**
+and the winner was a better-tuned `blitzer` — because banking *armies* is genuinely
+bad, and army-banking was the only patience that space could express. Banking *sets*
+is the patience that works, and it took `bankSets` to say so. And the strategy that
+beat Marshal in the recorded games was never findable as seven numbers, which is the
+standing lesson: **when the search says "no exploit", first ask whether the space can
+express the exploit you are worried about.**
 
 ### The bench runs on every core
 
@@ -872,14 +945,23 @@ is there for — not a fine-grained ranking.
 7. **Plan layer** — done (`plans.ts`), gated to duels.
 8. **Route planning** — done (`sweep.ts`), Marshal only, three deep.
 9. **Coalitions** — done (`coalition` in `evaluate.ts`), General and Marshal.
-10. **Learned leaf evaluation** — stage B below, and now the *blocking* item rather
-    than an optional one: search cannot be validated against hand-picked weights.
+10. **Learned leaf evaluation** — stage B below, still the item blocking search.
+    The data half is done: `npm run fit-eval` harvests a mixed population and its
+    least-squares fit adjudicates the hand calibration (armies at 0.06 against the
+    calibrated 0.5 is the headline). The linear model ranks winners no better than
+    the hand weights, so the model half — the part a search could lean on — is open.
 11. **Opponent pool and exploiter search** — done (`src/bots/pool.ts`,
-    `scripts/exploit.ts`). The search returns a negative result on the current space;
-    see "Searching for exploits".
-12. **Still open** — pricing the card economy against map income late (below),
-    closing games out, personality/posture variation so two Marshals don't play
-    identically, and a plan layer that survives a full table.
+    `scripts/exploit.ts`), and closed into a loop: the space carries the axes the
+    recorded human games demanded, the search reports exploitability as one number,
+    and finds land in `data/exploiters.json` to seed the next run. Current reading:
+    −8.9 ±6.4 against Marshal at four seats.
+12. **The card economy** — done; see "The card economy, answered". Trade timing,
+    the bank pact, prize-scaled kills, cash-then-kill and profiling took the
+    recorded human strategy from 20.1 ±7.0 against Marshal to 6.1 ±2.9 and lifted
+    Marshal over General at four seats from 57.5 to 63.2.
+13. **Still open** — personality/posture variation so two Marshals don't play
+    identically, a plan layer that survives a full table, and the six-seat shark
+    residual in Open questions.
 
 ## The search layer
 
@@ -938,12 +1020,49 @@ the leaf for it to maximise. See "The lookahead that didn't work" above for the
 measurements.
 
 **B — learned leaf evaluation.** Replace hand-picked weights with weights fitted to
-outcomes: harvest `(position, eventual winner)` from self-play, regress, ship as
-JSON. **Zero dependencies** — plain least squares first, a small MLP only if linear
-clearly underfits. The data half pays off before the model half, because fitting
-weights independently adjudicates the hand-calibration above: if `ARMY_WEIGHT`
-comes back near 0.5 that confirms it, and if it comes back near 0.15 that is a
-finding.
+outcomes: harvest `(position, eventual winner)`, regress, ship as JSON. **Zero
+dependencies** — plain least squares first, a small MLP only if linear clearly
+underfits. The data half pays off before the model half, because fitting weights
+independently adjudicates the hand-calibration above: if `ARMY_WEIGHT` comes back
+near 0.5 that confirms it, and if it comes back near 0.15 that is a finding.
+
+The data half is `npm run fit-eval` (`scripts/fit-eval.ts`): mixed 4–6 seat tables
+over the tiers, every pool point and every archived exploiter — **population, not
+self-play**, because a fit on tier self-play inherits self-play's blind spots (games
+end near turn 49, nobody farms, nobody banks, so hands and concentration never get
+the chance to predict anything). It writes `data/eval-weights.json`, prints the
+fitted coefficients rescaled against the hand calibration, and scores both on
+held-out games by the check that matches how `assess` is actually used: which
+scoring ranks the eventual winner first.
+
+The adjudication, from 2,500 games and 57,551 position rows, rescaled so the
+handValue coefficients match:
+
+```
+                fitted   hand-picked
+smoothIncome      4.44        6
+armies            0.06        0.5
+handValue         1.00        1
+exposure         -0.49       -0.25
+territories       9.06        0
+concentration     5.41        0
+```
+
+Three findings and one verdict. **Armies are worth a tenth of what the calibration
+says** — 0.06 against 0.5 — which is the strongest data yet for "armies are a means":
+across a population including bankers and sharks, standing armies barely predict
+winning at all. **Exposure hurts twice as much as calibrated**, exactly the term the
+stage-B note above predicted would move, since it is the one that only matters
+compared globally. **Raw territory count carries nine hand-units of weight beyond
+the income it generates** — tile count is a proxy for card flow and board presence
+that `assess` credits only at a third of an army a turn. And the verdict: for all
+that, the pooled linear fit ranks the eventual winner first on held-out games *no
+better than the hand calibration* — 47.0% against 48.1%. Win probability is not
+linear in these features across game phases, so plain least squares underfits, which
+is the outcome the "small MLP only if linear clearly underfits" clause was written
+for. The constants in `assess` stay as they are on this evidence; the model half —
+logistic, per-phase, or the small MLP — is the open item, and the harvest pipeline
+it needs now exists.
 
 The specific thing to look for: `assess` is calibrated as a comparator for *small local
 changes*, so a fitted version should differ most in the terms that only matter when
@@ -981,28 +1100,25 @@ in order wastes nothing.
 
 ## Open questions
 
-- **Income stops being about territory, and no tier notices.** `CASH_VALUES` escalates
-  without bound while the whole board pays at most 14 plus continent bonuses, so past
-  roughly turn 45 a set is worth more than everything anyone holds. Tier-vs-tier games
-  average 49 turns and rarely reach it, which is exactly why the bench cannot see it.
-  Two things follow and neither is implemented: hold cards when the sequence is about to
-  overtake the map, and treat a player who can still take one territory a turn as
-  dangerous regardless of how little they hold.
-- **The tiers do not close games out.** 5.6 turns a game end with a rival that could
-  have been wiped out still standing. The fix is cheap and the measurement is already
-  written; what is unknown is whether forcing it costs anything elsewhere, since
-  "pressing an advantage" measured mildly harmful and this looks like the same shape
-  from the outside.
-- **"Top 1%" is unverifiable from here.** The real acceptance test is a human, and the
-  strongest available evidence says the heuristics are near their ceiling: of roughly a
-  dozen plausible improvements measured in the last round, two paid, one was neutral and
-  kept for human-likeness, and the rest were negative. Getting materially past here
-  means stage B, not another flag — though the two items above are ordinary bugs rather
-  than ceiling, and come first.
+- **The shark's six-seat residual.** After the card-economy fixes, `cardShark` still
+  takes 8.2 ±3.4 at six seats against a 16.7 share — half its share, and the one cell
+  where the fixes bought least. More seats mean more free-riders per pact and later
+  kills; whether the answer is an earlier profile threshold or a cheaper join rule is
+  a measurement nobody has run.
+- **The exploitability budget is modest.** −8.9 ±6.4 at 14×8×120 certifies the tiers
+  against this space at this budget, no further. The interval is wide, the space is
+  ten dimensions, and the next strategy a person invents may need an eleventh — when
+  the search says "no exploit", first ask whether the space can express the exploit
+  you are worried about.
+- **"Top 1%" is unverifiable from here.** The real acceptance test is the next set of
+  recorded human games, now that the loop — record, study, express as a pool axis,
+  fix, certify — exists to consume them. The `study` pipeline reads the exports; the
+  interesting question is which strategy shows up once the card race stops working.
 - **The middle of the ladder is thin heads-up.** General over Colonel is 53.2%, because
   every shared fix helps Colonel at least as much as General. Widening it needs a
   General-only capability that holds up at four seats, and chokepoint drafting — the
-  obvious candidate — does not.
+  obvious candidate — does not. The card-economy work did not move it either: the
+  mechanisms that paid are Marshal's.
 - **Personality vs strength.** Two Marshals play near-identically. Varying *posture*
   (aggressive / turtle / opportunist) on top of tier would make multiplayer games feel
   less uniform — worth doing after the tiers work.
