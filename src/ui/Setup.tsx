@@ -100,7 +100,13 @@ export function Setup({ onStart, onReview }: Props) {
 
         {past.length > 0 && (
           <div className="field pastgames">
-            <span className="mono-label">Past games</span>
+            <span className="mono-label">
+              Past games
+              {/* Games live in localStorage, so without this the only way to get one
+                  out for analysis is the devtools console. It is the whole export
+                  path on purpose: `npm run study <file>` reads what this writes. */}
+              <button className="export" onClick={() => downloadGames(past)}>Export</button>
+            </span>
             <div className="games">
               {past.map((g) => (
                 <PastGame
@@ -159,6 +165,24 @@ function PastGame({
       </button>
     </div>
   )
+}
+
+/**
+ * Write every stored game to a file the scripts can read.
+ *
+ * A seed and a move list replay a game exactly, so this is the whole record —
+ * one file is enough for `npm run study` to reconstruct every board, and small
+ * enough (~30 kB a game) that dumping all of them is the right granularity.
+ */
+function downloadGames(games: GameRecord[]): void {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(games, null, 2)], { type: 'application/json' }),
+  )
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `risk-games-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function ago(ts: number): string {

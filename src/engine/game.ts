@@ -48,6 +48,8 @@ export interface SeatConfig {
 export interface NewGameOptions {
   seats: SeatConfig[]
   seed?: number
+  /** Keep the move list. Defaults on; see `GameState.record`. */
+  record?: boolean
 }
 
 // ─────────────────────────── queries ───────────────────────────
@@ -140,7 +142,7 @@ const nextAlive = (s: GameState, after: PlayerId): PlayerId => {
 
 // ─────────────────────────── setup ───────────────────────────
 
-export function createGame({ seats, seed = 1 }: NewGameOptions): GameState {
+export function createGame({ seats, seed = 1, record = true }: NewGameOptions): GameState {
   if (seats.length < 2 || seats.length > 6) throw new Error('Risk supports 2–6 players')
   const rng = rngFrom(seed)
 
@@ -186,6 +188,7 @@ export function createGame({ seats, seed = 1 }: NewGameOptions): GameState {
     lastBlitz: null,
     log: [],
     moves: [],
+    record,
     rngState: rng.state,
     winner: null,
   }
@@ -269,7 +272,8 @@ function clone(s: GameState): GameState {
     deck: s.deck.slice(),
     discard: s.discard.slice(),
     log: s.log.slice(),
-    moves: s.moves.slice(),
+    // Never recorded means never appended to, so the empty list is safe to share.
+    moves: s.record ? s.moves.slice() : s.moves,
     pendingOccupation: s.pendingOccupation ? { ...s.pendingOccupation } : null,
     lastBattle: s.lastBattle ? { ...s.lastBattle } : null,
     lastBlitz: s.lastBlitz ? { ...s.lastBlitz } : null,
@@ -463,7 +467,7 @@ export function applyMove(state: GameState, move: Move): GameState {
   // Recorded only once the move has validated — every `expect` above throws before
   // reaching here, so the list never contains a move the engine rejected. That's
   // what lets a replay assume the whole list applies cleanly.
-  s.moves.push(move)
+  if (s.record) s.moves.push(move)
   s.rngState = rng.state
   return s
 }

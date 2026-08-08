@@ -59,7 +59,8 @@ label carries its own hint, so nothing needs memorising.
 - **Every game replays from one number.** One seed drives the turn order, the deal, the
   dice and the bots, and it is stored with the move list.
 - **Review your games.** Finished games are stored locally as a seed and a move list,
-  and played back with the bot's opinion of every move — see below.
+  and played back with the bot's opinion of every move — see below. **Export** on the
+  setup screen writes them all to a file, which `npm run study` reads.
 
 ## Bots
 
@@ -95,6 +96,18 @@ points heads-up and an unrotated comparison measures position rather than skill.
 [`BOTS.md`](BOTS.md) has the design, the full results, and the substantial list of
 plausible improvements that measured worse — including four attempts at lookahead.
 
+**They are also measured against strategies they would never play.** A ladder of tiers
+answers "is this stronger?" and cannot answer "is there a strategy this has no reply
+to?" — a bot only ever has to beat opponents that think the way it does. So there is a
+second set of opponents in `src/bots/pool.ts`: a turtle that banks every army in one
+stack and cashes it into a single sweep, one that attacks anything better than a coin
+flip, and two more. None of them is good at Risk and none is selectable as an opponent;
+their whole job is to be different. They are one parameterised policy rather than four
+hand-written bots, because `npm run exploit` hill-climbs that same space for the point
+that beats a tier hardest — so an exploit arrives as seven numbers rather than as a
+hunch. Marshal currently beats every point in the space, and `BOTS.md` records what
+reading recorded games against a person found that the search did not.
+
 **The reviewer prices moves before the dice.** Attack at 75%, lose the roll, and a
 naive reviewer calls it a blunder — it wasn't. So each decision is scored by
 integrating over the outcome distribution with the same exact combat tables, giving
@@ -126,8 +139,8 @@ export const myBot: Bot = {
 ```
 
 Add it to `BOTS` in `src/bots/index.ts` (weakest first) and it appears as a difficulty
-rung in setup. Then
-`npm run bench -- mine general 300`.
+rung in setup; add it to `BENCH_LADDER` instead to have it ranked without offering it to
+anyone. Then `npm run bench -- mine general 300`.
 
 ## Development
 
@@ -141,6 +154,8 @@ built on.
 | `npm test` | assertions over the rules (cards, combat, reinforcement, placement) |
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
+| `npm run exploit` | searches for a strategy a tier has no answer to |
+| `npm run study` | replays exported games and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
 | `npm run typecheck` | `tsc --noEmit` |
