@@ -34,4 +34,5 @@ export const marshalBot = makeStrategist({
   formsCoalitions: true,
   sweepDepth: 3,
   draftsChokepoints: true,
+  profilesOpponents: true,
 })

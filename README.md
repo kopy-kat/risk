@@ -84,6 +84,15 @@ elimination hunting, reading who is about to be forced to cash, attack routes pl
 three captures deep, and an opening spent on the chokepoints that will have to hold its
 continent.
 
+**They play the card race.** With escalating cash-ins a late set outgrows the whole
+board, and that is where long games are decided. Once the next set is worth more than
+every player's ground income combined, General and Marshal stop cashing for tempo and
+bank — a set is spent on an elimination or held until the limit forces it. Marshal
+also cashes *for* the kill: if trading a set makes wiping a player affordable, it
+trades, lands the armies on their border, and takes the hand. And it profiles: a
+player farming cards from one big stack on a handful of territories is treated as the
+table's real threat long before their bank pays out.
+
 **They gang up.** General and Marshal both watch for a runaway leader — 45% of the board
 and pulling clear of the runner-up — and turn on them together, easing off each other
 while it lasts. Nobody negotiates: the board is public, so everyone reads it the same
@@ -100,13 +109,16 @@ plausible improvements that measured worse — including four attempts at lookah
 answers "is this stronger?" and cannot answer "is there a strategy this has no reply
 to?" — a bot only ever has to beat opponents that think the way it does. So there is a
 second set of opponents in `src/bots/pool.ts`: a turtle that banks every army in one
-stack and cashes it into a single sweep, one that attacks anything better than a coin
-flip, and two more. None of them is good at Risk and none is selectable as an opponent;
-their whole job is to be different. They are one parameterised policy rather than four
-hand-written bots, because `npm run exploit` hill-climbs that same space for the point
-that beats a tier hardest — so an exploit arrives as seven numbers rather than as a
-hunch. Marshal currently beats every point in the space, and `BOTS.md` records what
-reading recorded games against a person found that the search did not.
+stack, a card shark that farms a card a turn and cashes a banked hand into a chain of
+eliminations, one that attacks anything better than a coin flip, and two more. None of
+them is good at Risk and none is selectable as an opponent; their whole job is to be
+different. They are one parameterised policy rather than five hand-written bots,
+because `npm run exploit` hill-climbs that same space for the point that beats a tier
+hardest and reports the result as one number — **exploitability**, the best edge over
+an equal table share a fixed search budget can find. Anything that beats its share is
+archived to `data/exploiters.json`, seeds the next search, and joins the training
+population of `npm run fit-eval`. `BOTS.md` records the whole loop, including the
+recorded human games that forced it.
 
 **The reviewer prices moves before the dice.** Attack at 75%, lose the roll, and a
 naive reviewer calls it a blunder — it wasn't. So each decision is scored by
@@ -154,7 +166,8 @@ built on.
 | `npm test` | assertions over the rules (cards, combat, reinforcement, placement) |
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
-| `npm run exploit` | searches for a strategy a tier has no answer to |
+| `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
+| `npm run fit-eval` | fits the evaluation's weights to outcomes over a mixed population of strategies |
 | `npm run study` | replays exported games and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |

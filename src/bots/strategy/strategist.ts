@@ -25,7 +25,7 @@ import {
   pressure,
   stagingFor,
 } from './board-sense'
-import { coalition, exposure, killableRival, primaryThreat, rivals } from './evaluate'
+import { coalition, exposure, killableRival, primaryThreat, profiledShark, rivals, setsDominate } from './evaluate'
 import type { Coalition } from './evaluate'
 import { selectIntent } from './plans'
 import type { Intent } from './plans'
@@ -102,6 +102,14 @@ export interface Doctrine {
    * rather than levelling every territory near it. See the setup phase.
    */
   draftsChokepoints?: boolean
+  /**
+   * Read *how* each opponent is playing, not just how big they are. Currently one
+   * profile is recognised: the set-racer (one stack, little ground, growing hand
+   * — see `sharkLikeness`). A profiled racer is treated as the primary threat and
+   * massed against before the escalation makes them unstoppable, which is turns
+   * earlier than the bank pact can fire.
+   */
+  profilesOpponents?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
@@ -232,19 +240,26 @@ function shouldTrade(
   const value = cashValue(s.setsTraded)
   // cash when it actually buys something: enough to finish the continent we're on
   if (goal && value >= goal.resistance * 1.3) return true
-  // or when it turns a near-elimination into a certain one
-  if (d.huntsEliminations && killableRival(s, me, 1.4)) return true
-  return value >= PATIENCE_CEILING
+  // or when it turns a near-elimination into a certain one — counting the set
+  // itself and the armies already in hand, because the kill it buys is the
+  // whole reason to cash it
+  if (d.huntsEliminations && killableRival(s, me, 1.4, s.toDeploy + value)) return true
+  // Tempo while a set is still small next to the map; a war chest once it is not.
+  // Every trade walks the global ladder, so a mid-game cash with nothing to buy
+  // hands the bigger rungs to whoever is banking — which is exactly how the
+  // recorded human games were lost. Once the sequence outweighs the whole
+  // table's ground income, a set is spent on a kill or held until forced.
+  return value >= PATIENCE_CEILING && !setsDominate(s)
 }
 
 /**
  * Cash unconditionally once a set is worth this much, however little else is going on.
  *
- * A backstop that almost never fires. Sweeping it over 6 / 10 / 15 / 20 / 25 returns
- * *identical* win rates from 10 upwards: the rules above it decide first, and a game
- * rarely runs long enough for the escalating sequence to reach here anyway. Card
- * timing in this engine is therefore entirely "cash when it buys the objective" —
- * which is worth knowing before anyone tunes this number again.
+ * A backstop that almost never fires in self-play — sweeping it over 6 / 10 / 15 /
+ * 20 / 25 returns *identical* win rates from 10 upwards, because the rules above it
+ * decide first and self-play games rarely run long enough for the sequence to reach
+ * here. It is capped by `setsDominate` rather than unconditional because a long
+ * game is precisely where "cash because it's big" becomes a donation.
  */
 const PATIENCE_CEILING = 15
 
@@ -325,6 +340,48 @@ export function makeStrategist(doctrine: Doctrine): Bot {
             return { type: 'deploy', territory: t, count: clamp(need, 1, s.toDeploy) }
           }
 
+          // A kill the pool in hand can pay for outranks everything else the
+          // turn could buy: the armies land on the prey's border, and the
+          // attack phase collects the hand. This is the other half of the
+          // trade-for-the-kill clause in `shouldTrade` — cashing was only
+          // worth it if the cash arrives where the kill is.
+          if (doctrine.huntsEliminations && s.toDeploy > 0) {
+            const prey = killableRival(s, me, 1.4, s.toDeploy)
+            if (prey) {
+              const theirs = new Set(territoriesOf(s, prey.id))
+              const doors = mine.filter((t) => ADJACENCY[t].some((n) => theirs.has(n)))
+              if (doors.length) {
+                const door = doors.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
+                return { type: 'deploy', territory: door, count: s.toDeploy }
+              }
+            }
+          }
+
+          // A bank pact is different from a ground one: the target is winning the
+          // set race from a handful of tiles, so redirecting attacks we could
+          // already make is not enough — the armies have to *arrive* at their
+          // border before any kill is real. Ground pacts keep the behaviour they
+          // were measured with (attack redirection only, no massing). A profiling
+          // doctrine masses a turn earlier: the racer's signature is readable
+          // before the escalation makes the pact's own trigger true.
+          if (doctrine.formsCoalitions) {
+            const pact = coalition(s, me)
+            const mark =
+              pact?.bank && !pact.againstMe && pact.joined && pact.canReach
+                ? pact.target
+                : doctrine.profilesOpponents
+                  ? (profiledShark(s, me)?.id ?? null)
+                  : null
+            if (mark !== null) {
+              const theirs = new Set(territoriesOf(s, mark))
+              const doors = mine.filter((t) => ADJACENCY[t].some((n) => theirs.has(n)))
+              if (doors.length) {
+                const door = doors.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
+                return { type: 'deploy', territory: door, count: s.toDeploy }
+              }
+            }
+          }
+
           // otherwise mass for the push: one stack takes continents, many don't
           const plan = planApplies(s, me, doctrine) ? selectIntent(s, me, doctrine.plans) : null
           if (plan && plan.staging.length) {
@@ -347,7 +404,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
         case 'attack': {
           let best: { from: TerritoryId; to: TerritoryId; score: number } | null = null
           const threat = doctrine.modelsOpponents ? primaryThreat(s, me) : null
-          const threatId = threat?.id ?? null
+          // A profiled set-racer outranks the biggest position: the biggest
+          // position is losing to them too, it just doesn't know it yet.
+          const threatId = (doctrine.profilesOpponents ? profiledShark(s, me)?.id : null) ?? threat?.id ?? null
           const grudges = doctrine.retaliates
             ? aggressorsAgainst(s, me)
             : new Map<PlayerId, number>()
