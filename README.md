@@ -194,8 +194,9 @@ built on.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `oxlint` over `src` and `scripts` |
 
-CI runs `lint`, `typecheck`, `test`, `sim -- 300` and `build` on every pull request
-(`.github/workflows/ci.yml`) — nothing it checks is unreproducible locally.
+CI runs `lint`, `typecheck`, `test`, `sim -- 300`, `build` and `review-check -- 8`
+on every pull request (`.github/workflows/ci.yml`) — nothing it checks is
+unreproducible locally.
 
 ## Licensing
 
