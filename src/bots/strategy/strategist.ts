@@ -26,7 +26,7 @@ import {
   stagingFor,
 } from './board-sense'
 import { coalition, exposure, killableRival, primaryThreat, rivals } from './evaluate'
-import type { Coalition } from './evaluate'
+import type { Coalition, Rival } from './evaluate'
 import { selectIntent } from './plans'
 import type { Intent } from './plans'
 import { bestSweep } from './sweep'
@@ -127,6 +127,42 @@ const liveOpponents = (s: GameState, me: PlayerId): number =>
   Math.max(1, s.players.filter((p) => p.alive && p.id !== me).length)
 
 /**
+ * What a decision knows about the table, read once and shared by every target it
+ * then scores.
+ *
+ * None of it varies with the target and all of it walks the whole board —
+ * `coalition` and `killableRival` assess every live player — so computed inside
+ * the per-target loop it costs more than everything else the bot does. The review
+ * feels it hardest: it prices a deploy by playing the turn out behind each of a
+ * hundred alternatives, so one board read is a hundred thousand.
+ */
+interface TableRead {
+  /** the rival worth concentrating on, if the doctrine models opponents */
+  threatId: PlayerId | null
+  /** who has taken ground from us lately */
+  grudges: Map<PlayerId, number>
+  /** the turn's objective, when there is one */
+  intent: Intent | null
+  /** the pile-on on the leader, if the doctrine joins one */
+  pact: Coalition | null
+  /** a rival we could wipe out this turn, if the doctrine hunts them */
+  prey: Rival | null
+  /** `exposure` by player, filled in as targets are scored */
+  sprawl: Map<PlayerId, number>
+}
+
+function readTable(s: GameState, me: PlayerId, d: Doctrine): TableRead {
+  return {
+    threatId: d.modelsOpponents ? primaryThreat(s, me)?.id ?? null : null,
+    grudges: d.retaliates ? aggressorsAgainst(s, me) : new Map<PlayerId, number>(),
+    intent: planApplies(s, me, d) ? selectIntent(s, me, d.plans) : null,
+    pact: d.formsCoalitions ? coalition(s, me) : null,
+    prey: d.huntsEliminations ? killableRival(s, me) : null,
+    sprawl: new Map<PlayerId, number>(),
+  }
+}
+
+/**
  * How much we want a territory, ignoring whether we can take it.
  *
  * The baseline matters more than it looks: every conquest is a third of an army
@@ -139,10 +175,7 @@ function targetValue(
   t: TerritoryId,
   goal: string | null,
   d: Doctrine,
-  threatId: PlayerId | null,
-  grudges: Map<PlayerId, number>,
-  intent: Intent | null,
-  pact: Coalition | null,
+  read: TableRead,
 ): number {
   let v = 1.5
   const completed = completesContinent(s, me, t)
@@ -163,20 +196,18 @@ function targetValue(
   // most of what separates good players from adequate ones
   if (d.plans.has('cycle') && !s.conqueredThisTurn) v += cashValue(s.setsTraded) / 3
 
-  if (d.modelsOpponents && threatId !== null && s.owner[t] === threatId) v *= 1.25
+  if (d.modelsOpponents && read.threatId !== null && s.owner[t] === read.threatId) v *= 1.25
 
-  const grudge = grudges.get(s.owner[t])
+  const grudge = read.grudges.get(s.owner[t])
   if (grudge) v *= 1 + Math.min(0.3, grudge * 0.12)
 
   // the turn's objective outranks whatever else happens to look tempting
-  if (intent && intent.targets.has(t)) v += 4
+  if (read.intent && read.intent.targets.has(t)) v += 4
 
-  if (d.huntsEliminations) {
-    const prey = killableRival(s, me)
-    // their hand comes with them, and an escalating cash-in makes that the single
-    // biggest swing available
-    if (prey && s.owner[t] === prey.id) v += 4 + prey.cards * (cashValue(s.setsTraded) / 3)
-  }
+  // their hand comes with them, and an escalating cash-in makes that the single
+  // biggest swing available
+  const prey = read.prey
+  if (prey && s.owner[t] === prey.id) v += 4 + prey.cards * (cashValue(s.setsTraded) / 3)
 
   if (d.readsTable) {
     const owner = s.players[s.owner[t]]
@@ -184,7 +215,8 @@ function targetValue(
       // someone about to be forced to cash is about to get dangerous
       if (owner.cards.length >= HAND_LIMIT - 1) v *= 1.3
       // and a sprawling position is the cheapest place to take ground
-      const sprawl = exposure(s, owner.id)
+      let sprawl = read.sprawl.get(owner.id)
+      if (sprawl === undefined) read.sprawl.set(owner.id, (sprawl = exposure(s, owner.id)))
       if (sprawl > 8) v *= 1.15
     }
   }
@@ -194,6 +226,7 @@ function targetValue(
   // peer while the player who is actually winning grows unchecked. Soft rather than
   // absolute, so a free elimination is still taken, and conditional on `canReach`:
   // declining to attack anyone we *can* reach is paralysis, not diplomacy.
+  const pact = read.pact
   if (pact && !pact.againstMe && pact.canReach && pact.joined) {
     if (s.owner[t] === pact.target) v *= 1 + clamp((pact.lead - 1) * 1.6, 0.2, 1)
     else v *= 0.6
@@ -346,15 +379,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
         // ── attack ──────────────────────────────────────────────
         case 'attack': {
           let best: { from: TerritoryId; to: TerritoryId; score: number } | null = null
-          const threat = doctrine.modelsOpponents ? primaryThreat(s, me) : null
-          const threatId = threat?.id ?? null
-          const grudges = doctrine.retaliates
-            ? aggressorsAgainst(s, me)
-            : new Map<PlayerId, number>()
-          const intent = planApplies(s, me, doctrine) ? selectIntent(s, me, doctrine.plans) : null
-          // hoisted: `coalition` assesses every live player, which is far too
-          // expensive to repeat inside the per-target loop below
-          const pact = doctrine.formsCoalitions ? coalition(s, me) : null
+          // Read once for the whole decision — see `TableRead`. Repeating any of it
+          // per target is a whole-board walk inside the innermost loop there is.
+          const read = readTable(s, me, doctrine)
 
           for (const from of territoriesOf(s, me)) {
             const a = s.troops[from]
@@ -379,7 +406,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const leftBehind = survivors - 1
               if (isBorder(s, me, from) && leftBehind < keep * 0.5) continue
 
-              let value = targetValue(s, me, to, goalId, doctrine, threatId, grudges, intent, pact)
+              let value = targetValue(s, me, to, goalId, doctrine, read)
 
               // Discipline: don't take what the neighbours will simply take back.
               // Scaled by table size for the mirror-image reason denial isn't —
@@ -416,7 +443,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
                 s,
                 me,
                 doctrine.sweepDepth,
-                (t) => targetValue(s, me, t, goalId, doctrine, threatId, grudges, intent, pact),
+                (t) => targetValue(s, me, t, goalId, doctrine, read),
                 { minStepOdds: doctrine.attackThreshold, lossAversion: doctrine.lossAversion },
               )
             : null

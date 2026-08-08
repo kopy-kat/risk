@@ -37,9 +37,18 @@ export const enemyNeighbours = (s: GameState, me: PlayerId, t: TerritoryId): Ter
 export const isBorder = (s: GameState, me: PlayerId, t: TerritoryId): boolean =>
   ADJACENCY[t].some((n) => s.owner[n] !== me)
 
-/** Total enemy armies that could hit this territory next turn. */
-export const pressure = (s: GameState, me: PlayerId, t: TerritoryId): number =>
-  enemyNeighbours(s, me, t).reduce((sum, n) => sum + s.troops[n], 0)
+/**
+ * Total enemy armies that could hit this territory next turn.
+ *
+ * Spelled out rather than over `enemyNeighbours`, which would allocate the list to
+ * throw it away: this runs for every border of every player at every step of every
+ * rollout the reviewer does, and it is the allocation that costs, not the addition.
+ */
+export function pressure(s: GameState, me: PlayerId, t: TerritoryId): number {
+  let sum = 0
+  for (const n of ADJACENCY[t]) if (s.owner[n] !== me) sum += s.troops[n]
+  return sum
+}
 
 /**
  * Border Security Ratio, from the Risk AI literature: enemy strength bearing on a
