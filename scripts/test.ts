@@ -14,8 +14,10 @@ import {
 } from '../src/engine/combat'
 import {
   applyMove, bestTradeIn, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn,
-  RULES_VERSION,
+  RULES_VERSION, rulesFor, suppliedOf,
 } from '../src/engine/game'
+import { isReplayable } from '../src/review/store'
+import type { GameRecord } from '../src/review/store'
 import { rngFrom } from '../src/engine/rng'
 import {
   CLEARS_UNDO, UNDOABLE, clickableFor, isHumanTurn, moveForClick, mustTrade, previewFor, primaryFor,
@@ -618,7 +620,7 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     `+${killRows[0].territories} territories · +${killRows[0].armies} armies · eliminated C`,
     'the line reads as a scoreline, ground first',
   )
-  eq(describeRow({ player: 0, armies: -1, territories: -1, killed: [] }, () => ''), '−1 territory · −1 army', 'losses read as losses, singular')
+  eq(describeRow({ player: 0, armies: -1, territories: -1, killed: [], capitals: [] }, () => ''), '−1 territory · −1 army', 'losses read as losses, singular')
 }
 
 // ── Replay: a bot stretch is a function of the board and the generator ──
@@ -782,6 +784,139 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
     const expected = (1 - winProb(a, d)) * expectedDefendersLeft(a, d)
     ok(expected > 0 && expected < d, `defenders left for ${a}v${d} is in range, got ${expected}`)
   }
+}
+
+// ── capitals mode: founded by the first placement, won by holding all ──
+{
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: null }]
+  let s = createGame({ seats, seed: 301, mode: 'capitals' })
+  const a0 = territoriesOf(s, 0)[0]
+  s = applyMove(s, { type: 'placeInitial', territory: a0 })
+  const b0 = territoriesOf(s, 1)[0]
+  s = applyMove(s, { type: 'placeInitial', territory: b0 })
+  eq(s.capitals[0], a0, "player 0's capital is their first placement")
+  eq(s.capitals[1], b0, "player 1's capital is their first placement")
+  s = applyMove(s, { type: 'placeInitial', territory: territoriesOf(s, 0)[1] })
+  eq(s.capitals[0], a0, 'the capital does not move on later placements')
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+
+  // Hand player 0 the other capital without eliminating anyone, then end the
+  // turn: the capitals win fires from checkWinner, not from conquest count.
+  const rigged: GameState = {
+    ...s,
+    owner: { ...s.owner, [b0]: 0 },
+    phase: 'attack',
+    current: 0,
+    conqueredThisTurn: false,
+  }
+  ok(territoriesOf(rigged, 1).length > 0, 'the rigged board leaves B alive')
+  const done = applyMove(rigged, { type: 'endTurn' })
+  eq(done.phase, 'gameOver', 'holding every capital ends the game')
+  eq(done.winner, 0, 'the capital holder wins')
+  ok(done.log.some((e) => e.text === 'holds every capital'), 'the win is announced as a capitals win')
+
+  // the same board under classic rules plays on
+  const classic = applyMove(
+    { ...rigged, mode: 'classic', capitals: {} },
+    { type: 'endTurn' },
+  )
+  eq(classic.phase, 'deploy', 'classic rules ignore capitals')
+}
+
+// ── supply mode: the largest group earns and reinforces; the rest withers ──
+{
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: null }]
+  let s = createGame({ seats, seed: 302, mode: 'supply' })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+
+  // A holds all of North America plus one cut-off tile in Australia; B the rest.
+  const na = TERRITORIES_IN.northAmerica
+  const outpost = TERRITORIES_IN.australia[0]
+  const rig: GameState = { ...s, owner: { ...s.owner }, troops: { ...s.troops } }
+  for (const t of TERRITORY_IDS) {
+    rig.owner[t] = na.includes(t) || t === outpost ? 0 : 1
+    rig.troops[t] = 4
+  }
+
+  const sup = suppliedOf(rig, 0)
+  eq(sup.size, na.length, 'the largest connected group is the supplied one')
+  ok(!sup.has(outpost), 'the outpost is cut off')
+  // floor(9/3) = 3 territories, plus North America's 5: the outpost pays nothing
+  eq(reinforcementFor(rig, 0), 8, 'cut-off ground earns nothing; a supplied continent still pays')
+
+  const deploying: GameState = { ...rig, phase: 'deploy', current: 0, toDeploy: 5 }
+  const targets = new Set(
+    legalMoves(deploying).flatMap((m) => (m.type === 'deploy' ? [m.territory] : [])),
+  )
+  ok(!targets.has(outpost), 'no deploys are offered into cut-off territory')
+  ok(targets.has(na[0]), 'supplied ground still takes deploys')
+  let rejected = false
+  try {
+    applyMove(deploying, { type: 'deploy', territory: outpost, count: 1 })
+  } catch {
+    rejected = true
+  }
+  ok(rejected, 'deploying out of supply is rejected')
+
+  // B ends their turn; A's turn starts and the outpost withers 4 -> 3
+  const turning: GameState = { ...rig, phase: 'attack', current: 1, conqueredThisTurn: false }
+  const next = applyMove(turning, { type: 'endTurn' })
+  eq(next.current, 0, "play passes to A")
+  eq(next.troops[outpost], 3, 'a cut-off stack loses a third of its armies above one')
+  eq(next.troops[na[0]], 4, 'supplied ground is untouched by attrition')
+  eq(next.toDeploy, 8, 'the new turn deploys supplied income only')
+  ok(
+    next.log.some((e) => e.text.includes('out of supply')),
+    'attrition is announced in the log',
+  )
+}
+
+// ── modes carry their own rules fingerprint ───────────────────────
+{
+  eq(rulesFor('classic'), RULES_VERSION, 'classic keeps the bare fingerprint, so old records still replay')
+  ok(rulesFor('supply').endsWith('|mode:supply'), 'supply appends a mode token')
+  ok(rulesFor('capitals').endsWith('|mode:capitals'), 'capitals appends a mode token')
+
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: 'easy' }]
+  const base: GameRecord = {
+    id: 'x', schema: 1, rules: rulesFor('supply'), seed: 1, botSeed: 1, seats,
+    mode: 'supply', moves: [], assisted: [], winner: null, turns: 0, finished: false, savedAt: 0,
+  }
+  ok(isReplayable(base), 'a supply record replays under supply rules')
+  ok(!isReplayable({ ...base, mode: undefined }), 'a supply record does not replay as classic')
+  ok(
+    isReplayable({ ...base, rules: RULES_VERSION, mode: undefined }),
+    'a record from before modes existed replays as classic',
+  )
+}
+
+// ── bot games in each mode stay legal and replay exactly ──────────
+for (const mode of ['capitals', 'supply'] as const) {
+  const seats = [
+    { name: 'A', bot: 'colonel' },
+    { name: 'B', bot: 'general' },
+    { name: 'C', bot: 'marshal' },
+  ]
+  const rng = rngFrom(4243)
+  let s = createGame({ seats, seed: 778, mode })
+  // strict: a bot that emits an illegal move in a mode fails here, rather than
+  // quietly playing random fallbacks that only the bench would notice
+  while (s.phase !== 'gameOver' && s.turn < 80) {
+    s = stepBot(s, BOT_BY_KEY[s.players[s.current].bot!], () => rng.next(), { strict: true })
+  }
+  if (mode === 'capitals') {
+    eq(
+      s.players.map((p) => s.capitals[p.id] !== undefined),
+      [true, true, true],
+      'every bot founded a capital',
+    )
+  }
+  let r = createGame({ seats, seed: 778, mode })
+  for (const m of s.moves) r = applyMove(r, m)
+  eq(r.owner, s.owner, `${mode}: replay reproduces every owner`)
+  eq(r.troops, s.troops, `${mode}: replay reproduces every troop count`)
+  eq(r.rngState, s.rngState, `${mode}: the dice matched`)
+  eq(r.winner, s.winner, `${mode}: replay reproduces the result`)
 }
 
 console.log(`\n${passed} assertions passed`)

@@ -1,14 +1,30 @@
 import { useMemo, useState } from 'react'
 import { BOTS, DEFAULT_BOT } from '../bots'
 import type { SeatConfig } from '../engine/game'
+import type { GameMode } from '../engine/types'
 import { deleteGame, isReplayable, listGames } from '../review/store'
 import type { GameRecord } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[]): void
+  onStart(seats: SeatConfig[], mode: GameMode): void
   onReview(id: string): void
 }
+
+const MODES: Array<{ key: GameMode; name: string; blurb: string }> = [
+  { key: 'classic', name: 'Classic', blurb: 'World domination — hold all 42 territories.' },
+  {
+    key: 'capitals',
+    name: 'Capitals',
+    blurb: 'Your first placement founds your capital. Hold every capital at once to win.',
+  },
+  {
+    key: 'supply',
+    name: 'Supply',
+    blurb:
+      'Only your largest connected group is in supply. Cut-off territories earn nothing, take no reinforcements, and wither.',
+  },
+]
 
 /** A seat as the picker holds it: difficulty is global, so a seat is only ever human or not. */
 interface Seat {
@@ -20,6 +36,7 @@ export function Setup({ onStart, onReview }: Props) {
   const [count, setCount] = useState(4)
   const [past, setPast] = useState<GameRecord[]>(() => listGames())
   const [difficulty, setDifficulty] = useState(DEFAULT_BOT)
+  const [mode, setMode] = useState<GameMode>('classic')
   const [seats, setSeats] = useState<Seat[]>(
     PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
@@ -85,11 +102,24 @@ export function Setup({ onStart, onReview }: Props) {
           </div>
         )}
 
+        <div className="field">
+          <span className="mono-label">Mode</span>
+          <div className="tiers">
+            {MODES.map((m) => (
+              <button key={m.key} className={m.key === mode ? 'on' : ''} onClick={() => setMode(m.key)}>
+                {m.name}
+              </button>
+            ))}
+          </div>
+          <span className="mode-blurb">{MODES.find((m) => m.key === mode)!.blurb}</span>
+        </div>
+
         <button
           className="go"
           onClick={() =>
             onStart(
               active.map((s) => ({ name: s.name.trim() || 'Player', bot: s.isBot ? difficulty : null })),
+              mode,
             )
           }
         >
@@ -154,7 +184,9 @@ function PastGame({
         <span className="what">
           {/* a game played under different rules is kept but can't be replayed —
               its move list no longer applies to the engine as it stands */}
-          {stale ? 'different rules — cannot replay' : `${outcome} · ${game.turns} turns`}
+          {stale
+            ? 'different rules — cannot replay'
+            : `${outcome} · ${game.turns} turns${game.mode && game.mode !== 'classic' ? ` · ${game.mode}` : ''}`}
         </span>
         <span className="when">{ago(game.savedAt)}</span>
       </button>

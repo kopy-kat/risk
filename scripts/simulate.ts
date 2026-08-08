@@ -11,13 +11,17 @@
 import { TERRITORY_IDS } from '../src/engine/board'
 import { findSets } from '../src/engine/cards'
 import { HAND_LIMIT, applyMove, createGame, legalMoves, territoriesOf } from '../src/engine/game'
-import type { GameState } from '../src/engine/types'
+import type { GameMode, GameState } from '../src/engine/types'
 import { rngFrom } from '../src/engine/rng'
 import { ALL_BOTS, BOT_BY_KEY } from '../src/bots'
 import { stepBot } from '../src/bots/play'
 
-const GAMES = Number(process.argv[2] ?? 400)
-const FORCE_BOT = process.argv[3]
+// `npm run sim -- 300 easy --mode=supply` soaks a mode; bare runs stay classic.
+const flags = process.argv.slice(2).filter((a) => a.startsWith('--'))
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'))
+const MODE = (flags.find((a) => a.startsWith('--mode='))?.slice(7) ?? 'classic') as GameMode
+const GAMES = Number(args[0] ?? 400)
+const FORCE_BOT = args[1]
 const TURN_CAP = 800
 
 function check(s: GameState, ctx: string) {
@@ -51,6 +55,13 @@ function check(s: GameState, ctx: string) {
   const cur = s.players[s.current]
   if ((s.phase === 'attack' || s.phase === 'fortify') && cur.cards.length >= HAND_LIMIT && findSets(cur.cards).length)
     throw new Error(`${ctx}: ${cur.name} is acting on ${cur.cards.length} cards`)
+
+  // Once setup ends in capitals mode, everyone has founded — a hole here means
+  // the first-placement hook missed a path through applyMove.
+  if (s.mode === 'capitals' && s.phase !== 'setup') {
+    for (const p of s.players)
+      if (s.capitals[p.id] === undefined) throw new Error(`${ctx}: ${p.name} has no capital`)
+  }
 }
 
 const wins = new Map<string, number>()
@@ -66,7 +77,7 @@ for (let g = 0; g < GAMES; g++) {
     bot: FORCE_BOT ?? ALL_BOTS[Math.floor(rng.next() * ALL_BOTS.length)].key,
   }))
 
-  let s = createGame({ seats, seed: g * 104729 + 7 })
+  let s = createGame({ seats, seed: g * 104729 + 7, mode: MODE })
   check(s, `game ${g} init`)
 
   let moves = 0

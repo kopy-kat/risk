@@ -1,6 +1,6 @@
 import { ADJACENCY } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
-import { attackableFrom, connectedOwn, legalMoves, territoriesOf } from '../engine/game'
+import { attackableFrom, connectedOwn, legalMoves, suppliedOf, territoriesOf } from '../engine/game'
 import type { GameState, Move, PlayerId } from '../engine/types'
 import { findSets } from '../engine/cards'
 import type { Bot } from './types'
@@ -23,8 +23,10 @@ const borders = (s: GameState, me: PlayerId) =>
   territoriesOf(s, me).filter((t) => enemyNeighbours(s, me, t).length > 0)
 
 function pickDeployTarget(s: GameState, me: PlayerId): TerritoryId {
-  const front = borders(s, me)
-  const pool = front.length ? front : territoriesOf(s, me)
+  // supply mode: reinforcements can only land on supplied ground
+  const supplied = s.mode === 'supply' ? suppliedOf(s, me) : null
+  const front = borders(s, me).filter((t) => !supplied || supplied.has(t))
+  const pool = front.length ? front : supplied ? [...supplied] : territoriesOf(s, me)
   return pool.reduce((best, t) => (threat(s, me, t) > threat(s, me, best) ? t : best), pool[0])
 }
 

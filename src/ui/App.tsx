@@ -4,7 +4,7 @@ import type { TerritoryId } from '../engine/board'
 import { bestTradeIn, createGame, applyMove, territoriesOf } from '../engine/game'
 import type { SeatConfig } from '../engine/game'
 import { rngFrom, shuffle } from '../engine/rng'
-import type { GameState, Move } from '../engine/types'
+import type { GameMode, GameState, Move } from '../engine/types'
 import { BOT_BY_KEY } from '../bots'
 import { easyBot } from '../bots/easy'
 import { stepBot } from '../bots/play'
@@ -87,7 +87,7 @@ export function App() {
   /** the game being reviewed, or null while playing */
   const [reviewing, setReviewing] = useState<string | null>(null)
 
-  const start = useCallback((seats: SeatConfig[]) => {
+  const start = useCallback((seats: SeatConfig[], mode: GameMode = 'classic') => {
     const s = Math.floor(Math.random() * 1e9)
     // one number reproduces the whole game: the deal, the dice, and the bots
     botSeed.current = s ^ 0x9e3779b9
@@ -96,7 +96,7 @@ export function App() {
     assisted.current = []
     savedTurn.current = -1
     setSeed(s)
-    setGame(createGame({ seats: drawForTurnOrder(seats, s), seed: s }))
+    setGame(createGame({ seats: drawForTurnOrder(seats, s), seed: s, mode }))
     setSelected(null)
     setFortifyTo(null)
     setAutoSetup(false)
@@ -189,6 +189,7 @@ export function App() {
       botSeed: botSeed.current,
       // colour travels with the seat, since turn order is drawn rather than fixed
       seats: game.players.map((p) => ({ name: p.name, bot: p.bot, color: p.color })),
+      mode: game.mode,
       moves: game.moves,
       assisted: assisted.current,
       winner: game.winner,
@@ -516,8 +517,9 @@ export function App() {
               <h1 style={{ margin: 0 }}>{game.players[game.winner].name}</h1>
             </div>
             <div className="sub">
-              takes the world in {game.turn} turns ·{' '}
-              {territoriesOf(game, game.winner).length}/{TERRITORY_IDS.length} territories
+              {game.mode === 'capitals' && territoriesOf(game, game.winner).length < TERRITORY_IDS.length
+                ? `holds every capital after ${game.turn} turns`
+                : `takes the world in ${game.turn} turns · ${territoriesOf(game, game.winner).length}/${TERRITORY_IDS.length} territories`}
             </div>
             <div className="endgame-actions">
               {game.players.some((p) => !p.bot) && (

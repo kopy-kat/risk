@@ -181,6 +181,16 @@ svg.map { width: 100%; height: 100%; display: block; }
 
 .arc { fill: none; stroke: var(--ink); stroke-width: 1.1; opacity: .4; stroke-dasharray: 3 3; pointer-events: none; }
 
+/* capitals mode: the star keeps the founder's colour however often the tile changes hands */
+.capital {
+  fill: var(--c); font-size: 14px; text-anchor: middle; font-weight: 700;
+  paint-order: stroke; stroke: var(--paper); stroke-width: 2.6px; stroke-linejoin: round;
+}
+
+/* supply mode: hatching over any territory cut off from its owner's main body */
+.oos { opacity: .5; pointer-events: none; }
+.oos-line { stroke: var(--ink); stroke-width: 1; opacity: .55; }
+
 /* transient bot-turn recap — appears when control returns, clears on your next move */
 .recap {
   position: absolute; top: 16px; right: 18px; z-index: 5;
@@ -442,6 +452,8 @@ kbd {
   font-family: inherit; font-size: 13px; outline: none; width: 100%; min-width: 0;
 }
 .tiers { display: flex; gap: 7px; }
+/* one line under the mode row saying what the chosen rules change */
+.mode-blurb { display: block; margin-top: 9px; font-size: 11.5px; color: var(--ink-2); line-height: 1.45; }
 .tiers button {
   flex: 1; padding: 13px 0; border: 1px solid var(--border); background: transparent;
   color: var(--ink-2); font-family: 'Instrument Serif', serif; font-size: 19px;

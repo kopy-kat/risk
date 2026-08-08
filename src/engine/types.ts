@@ -83,6 +83,18 @@ export interface LogEntry {
   victim?: PlayerId
 }
 
+/**
+ * Optional rule sets, chosen once at setup.
+ *
+ * - `classic` — the rules in README's Rules section, unmodified.
+ * - `capitals` — each player's first setup placement founds their capital;
+ *   holding every capital at once wins. Nothing else changes.
+ * - `supply` — only a player's largest connected group of territories is in
+ *   supply. Cut-off territories earn no income, take no deploys, and lose a
+ *   third of their armies at their owner's turn start.
+ */
+export type GameMode = 'classic' | 'capitals' | 'supply'
+
 export interface GameState {
   players: Player[]
   owner: Record<TerritoryId, PlayerId>
@@ -129,6 +141,14 @@ export interface GameState {
   record: boolean
   rngState: number
   winner: PlayerId | null
+  mode: GameMode
+  /**
+   * Capitals mode only, empty otherwise. Filled during setup: a player's first
+   * placement founds their capital, so it is derivable from the move list and
+   * needs no new move type. The tile keeps counting after its founder dies —
+   * the capitals win is "hold all of them", not "hold the live ones".
+   */
+  capitals: Partial<Record<PlayerId, TerritoryId>>
 }
 
 export type Move =

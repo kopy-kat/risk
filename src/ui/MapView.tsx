@@ -11,6 +11,7 @@ import {
   WRAP_STUBS,
 } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
+import { suppliedOf } from '../engine/game'
 import type { GameState, PlayerId } from '../engine/types'
 import { playerColor } from './colors'
 
@@ -84,6 +85,23 @@ export function MapView({
 
   const dimmed = (t: TerritoryId) => focus !== null && state.owner[t] !== focus
 
+  /**
+   * Supply mode: every territory cut off from its owner's main body, hatched so
+   * the front line reads at a glance. Shown during setup too — where the opening
+   * armies can actually be supplied is the whole placement decision.
+   */
+  const unsupplied = useMemo(() => {
+    if (state.mode !== 'supply') return null
+    const cut = new Set<TerritoryId>()
+    for (const p of state.players) {
+      if (!p.alive) continue
+      const sup = suppliedOf(state, p.id)
+      for (const g of GEOMETRY)
+        if (state.owner[g.id] === p.id && !sup.has(g.id)) cut.add(g.id)
+    }
+    return cut
+  }, [state])
+
   const arcs = selected && targets.size ? [...targets].map((t) => arcPath(selected, t)) : []
 
   const readout = hover ?? selected
@@ -98,6 +116,9 @@ export function MapView({
         <defs>
           <pattern id="grat" x={10} y={0} width={60} height={60} patternUnits="userSpaceOnUse">
             <path className="grat" d="M 30 0 V 60 M 0 30 H 60" />
+          </pattern>
+          <pattern id="oos" width={5} height={5} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <path className="oos-line" d="M 0 0 V 5" />
           </pattern>
         </defs>
         <rect x={-3000} y={-3000} width={6500} height={6500} fill="url(#grat)" pointerEvents="none" />
@@ -133,6 +154,15 @@ export function MapView({
             />
           ))}
         </g>
+
+        {/* cut-off ground wears its status on the map, not in a tooltip */}
+        {unsupplied && unsupplied.size > 0 && (
+          <g pointerEvents="none">
+            {GEOMETRY.filter((t) => unsupplied.has(t.id)).map((t) => (
+              <path key={t.id} className="oos" d={t.d} fill="url(#oos)" />
+            ))}
+          </g>
+        )}
 
         {/* Outlines are their own layer, above every fill. Drawn per-territory they
             would be half-covered by whichever neighbour paints next. */}
@@ -194,6 +224,30 @@ export function MapView({
             )
           })}
         </g>
+
+        {/* Capitals wear their founder's colour for the whole game — whose capital
+            a tile is matters more than who holds it right now, and the badge
+            underneath already says the latter. */}
+        {state.mode === 'capitals' && (
+          <g pointerEvents="none">
+            {state.players.map((p) => {
+              const cap = state.capitals[p.id]
+              if (!cap) return null
+              const g = BY_ID[cap]
+              return (
+                <text
+                  key={p.id}
+                  className="capital"
+                  x={g.cx}
+                  y={g.cy - 14}
+                  style={{ ['--c' as string]: playerColor(p.color) }}
+                >
+                  ★
+                </text>
+              )
+            })}
+          </g>
+        )}
       </svg>
 
       {readout && readoutOwner && (
@@ -202,6 +256,10 @@ export function MapView({
           <div className="s">
             {CONTINENTS[BY_ID[readout].continent].name} · {readoutOwner.name} ·{' '}
             {state.troops[readout]} {state.troops[readout] === 1 ? 'army' : 'armies'}
+            {state.mode === 'capitals' &&
+              state.players.some((p) => state.capitals[p.id] === readout) &&
+              ` · ${state.players.find((p) => state.capitals[p.id] === readout)!.name}'s capital`}
+            {unsupplied?.has(readout) && ' · out of supply'}
           </div>
         </div>
       )}

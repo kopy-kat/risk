@@ -11,11 +11,12 @@ import { ADJACENCY } from '../../engine/board'
 import type { TerritoryId } from '../../engine/board'
 import { findSets } from '../../engine/cards'
 import { expectedLoss, expectedSurvivors, winProb } from '../../engine/combat'
-import { HAND_LIMIT, attackableFrom, connectedOwn, legalMoves, territoriesOf } from '../../engine/game'
+import { HAND_LIMIT, attackableFrom, connectedOwn, legalMoves, suppliedOf, territoriesOf } from '../../engine/game'
 import type { GameState, Move, PlayerId } from '../../engine/types'
 import {
   aggressorsAgainst,
   CONTINENT_BORDERS,
+  CONTINENT_EFFICIENCY,
   borderSecurityRatio,
   breaksContinent,
   chooseGoal,
@@ -216,6 +217,12 @@ function targetValue(
   // the turn's objective outranks whatever else happens to look tempting
   if (read.intent && read.intent.targets.has(t)) v += 4
 
+  // Capitals are the win condition, so any of them in enemy hands is a prize —
+  // our own most of all, since every rival's route to victory runs through it.
+  if (s.mode === 'capitals' && Object.values(s.capitals).includes(t)) {
+    v += s.capitals[me] === t ? 8 : 6
+  }
+
   // their hand comes with them, and an escalating cash-in makes that the single
   // biggest swing available
   const prey = read.prey
@@ -315,6 +322,28 @@ export function makeStrategist(doctrine: Doctrine): Bot {
         case 'setup': {
           const mine = territoriesOf(s, me)
 
+          // Capitals mode: the first placement founds the capital, so it is the
+          // most consequential army of the opening. A defensible tile — fewest
+          // doors an attack can come through, ties to the continent that is
+          // cheapest to hold — beats a central one: the capital wins by standing,
+          // not by projecting.
+          if (s.mode === 'capitals') {
+            if (s.capitals[me] === undefined) {
+              const doors = (t: TerritoryId) => ADJACENCY[t].filter((n) => s.owner[n] !== me).length
+              const worth = (t: TerritoryId) =>
+                -doors(t) + CONTINENT_EFFICIENCY[CONTINENT_OF[t]] * 0.5
+              return {
+                type: 'placeInitial',
+                territory: mine.reduce((a, b) => (worth(a) >= worth(b) ? a : b)),
+              }
+            }
+            // ...and it doesn't stay a single army while everything else is levelled
+            const cap = s.capitals[me]
+            if (cap !== undefined && s.owner[cap] === me && s.troops[cap] < 4) {
+              return { type: 'placeInitial', territory: cap }
+            }
+          }
+
           // The opening is the one phase where every tier used to play identically,
           // and it is not a small phase: 20–40 armies, placed before a shot is fired.
           // A continent is held at its doors — Australia has exactly one — so the
@@ -335,7 +364,16 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           // placement wastes the whole opening
           const pool = mine.filter((t) => staging.has(t) || (goalId && goalContains(t, goalId)))
           const candidates = pool.length ? pool : mine.filter((t) => isBorder(s, me, t))
-          const final = candidates.length ? candidates : mine
+          let final = candidates.length ? candidates : mine
+          // Supply mode: armies dropped on scattered singles will never earn or be
+          // reinforced, so the opening goes into the main body and what touches it.
+          if (s.mode === 'supply') {
+            const supplied = suppliedOf(s, me)
+            const near = final.filter(
+              (t) => supplied.has(t) || ADJACENCY[t].some((n) => supplied.has(n)),
+            )
+            if (near.length) final = near
+          }
           const pick = final.reduce((best, t) => {
             const a = s.troops[t] - borderSecurityRatio(s, me, t)
             const b = s.troops[best] - borderSecurityRatio(s, me, best)
@@ -352,6 +390,21 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           }
 
           const mine = territoriesOf(s, me)
+          // Supply mode: reinforcements only reach supplied ground. Every deploy
+          // below goes through `place`, which redirects a cut-off pick to the
+          // strongest supplied border — the armies still mass, just where the
+          // rules allow them to arrive.
+          const supplied = s.mode === 'supply' ? suppliedOf(s, me) : null
+          const place = (territory: TerritoryId, count: number): Move => {
+            if (supplied && !supplied.has(territory)) {
+              const pool = [...supplied]
+              const front = pool.filter((t) => isBorder(s, me, t))
+              territory = (front.length ? front : pool).reduce((a, b) =>
+                s.troops[a] >= s.troops[b] ? a : b,
+              )
+            }
+            return { type: 'deploy', territory, count }
+          }
           // A rival forced to cash next turn arrives with a pile of armies, so the
           // border facing them is more dangerous than its current troop count says.
           const surging = doctrine.readsTable
@@ -366,7 +419,9 @@ export function makeStrategist(doctrine: Doctrine): Bot {
             return (pressure(s, me, t) + extra) / Math.max(1, s.troops[t])
           }
           // defend anything about to fall, before thinking about expansion
-          const atRisk = mine.filter((t) => risk(t) > 1.1).sort((a, b) => risk(b) - risk(a))
+          const atRisk = mine
+            .filter((t) => (!supplied || supplied.has(t)) && risk(t) > 1.1)
+            .sort((a, b) => risk(b) - risk(a))
 
           // The `goal?.held` gate is load-bearing: defending a threatened border that
           // carries no bonus costs 8–16 points at every table size, because the armies
@@ -374,7 +429,19 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           if (doctrine.plans.has('consolidate') && atRisk.length && goal?.held) {
             const t = atRisk[0]
             const need = Math.ceil(pressure(s, me, t) * 0.6) - s.troops[t]
-            return { type: 'deploy', territory: t, count: clamp(need, 1, s.toDeploy) }
+            return place(t, clamp(need, 1, s.toDeploy))
+          }
+
+          // Capitals mode: the capital is the one border whose fall can hand
+          // somebody the game, so its garrison is topped up before anything is
+          // spent on ambition. Partial on purpose — the engine re-enters for the
+          // rest of the pool, so the turn's plans still get the remainder.
+          if (s.mode === 'capitals') {
+            const cap = s.capitals[me]
+            if (cap !== undefined && s.owner[cap] === me && (!supplied || supplied.has(cap))) {
+              const shortfall = garrisonFor(s, me, cap) - s.troops[cap]
+              if (shortfall > 0) return place(cap, clamp(shortfall, 1, s.toDeploy))
+            }
           }
 
           // A kill the pool in hand can pay for outranks everything else the
@@ -389,7 +456,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const doors = mine.filter((t) => ADJACENCY[t].some((n) => theirs.has(n)))
               if (doors.length) {
                 const door = doors.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
-                return { type: 'deploy', territory: door, count: s.toDeploy }
+                return place(door, s.toDeploy)
               }
             }
           }
@@ -414,7 +481,7 @@ export function makeStrategist(doctrine: Doctrine): Bot {
               const doors = mine.filter((t) => ADJACENCY[t].some((n) => theirs.has(n)))
               if (doors.length) {
                 const door = doors.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
-                return { type: 'deploy', territory: door, count: s.toDeploy }
+                return place(door, s.toDeploy)
               }
             }
           }
@@ -424,17 +491,17 @@ export function makeStrategist(doctrine: Doctrine): Bot {
           if (plan && plan.staging.length) {
             const door = plan.staging.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
             // everything goes to the objective, on the strongest door into it
-            return { type: 'deploy', territory: door, count: s.toDeploy }
+            return place(door, s.toDeploy)
           }
           const wanted = goal && !goal.held ? goal.missing : []
           const staging = [...stagingFor(s, me, wanted)]
           if (doctrine.plans.has('expand') && staging.length) {
             const best = staging.reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
-            return { type: 'deploy', territory: best, count: s.toDeploy }
+            return place(best, s.toDeploy)
           }
 
           const fallback = (atRisk[0] ?? mine.filter((t) => isBorder(s, me, t))[0] ?? mine[0])
-          return { type: 'deploy', territory: fallback, count: s.toDeploy }
+          return place(fallback, s.toDeploy)
         }
 
         // ── attack ──────────────────────────────────────────────
