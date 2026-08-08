@@ -6,10 +6,10 @@
  * number for a position, and it has to be in comparable units. Everything here is
  * denominated in **armies**, with per-turn income converted at `INCOME_HORIZON`.
  */
-import { ADJACENCY, CONTINENTS, TERRITORY_IDS } from '../../engine/board'
+import { ADJACENCY, CONTINENTS, TERRITORIES_IN, TERRITORY_IDS } from '../../engine/board'
 import type { TerritoryId } from '../../engine/board'
 import { cashValue, findSets } from '../../engine/cards'
-import { HAND_LIMIT, continentsHeldBy, territoriesOf } from '../../engine/game'
+import { HAND_LIMIT, continentsHeldBy, suppliedOf, territoriesOf } from '../../engine/game'
 import type { GameState, PlayerId } from '../../engine/types'
 import { incomeOf } from './board-sense'
 
@@ -128,21 +128,30 @@ export function assess(s: GameState, p: PlayerId, exposureCap = Infinity): Asses
   const mine = territoriesOf(s, p)
   let armies = 0
   for (const t of mine) armies += s.troops[t]
+  // In supply mode income flows from supplied ground only — cut-off tiles and
+  // cut-off continents pay nothing, and a bot scoring them as income defends
+  // ground the rules have already written off. Armies and exposure still count
+  // everywhere: a cut-off stack fights fine, it just doesn't earn.
+  const counted = s.mode === 'supply' ? suppliedOf(s, p) : null
+  const earning = counted ? counted.size : mine.length
   let bonus = 0
-  for (const c of continentsHeldBy(s, p)) bonus += CONTINENTS[c].bonus
+  for (const c of continentsHeldBy(s, p)) {
+    if (counted && !TERRITORIES_IN[c].every((t) => counted.has(t))) continue
+    bonus += CONTINENTS[c].bonus
+  }
   const hand = handValue(s, p)
   const exposed = exposureOver(s, p, mine, exposureCap)
   return {
     territories: mine.length,
     armies,
-    income: Math.max(3, Math.floor(mine.length / 3)) + bonus,
+    income: Math.max(3, Math.floor(earning / 3)) + bonus,
     cards: s.players[p].cards.length,
     handValue: hand,
     exposure: exposed.total,
     cappedExposure: exposed.capped,
     // exposure is discounted: defending every border is never actually correct
     score:
-      smoothIncome(mine.length, bonus) * INCOME_HORIZON +
+      smoothIncome(earning, bonus) * INCOME_HORIZON +
       armies * ARMY_WEIGHT +
       hand -
       exposed.total * EXPOSURE_WEIGHT,

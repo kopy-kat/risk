@@ -19,7 +19,7 @@
 import { ADJACENCY } from '../engine/board'
 import type { TerritoryId } from '../engine/board'
 import { findSets } from '../engine/cards'
-import { HAND_LIMIT, attackableFrom, connectedOwn, territoriesOf } from '../engine/game'
+import { HAND_LIMIT, attackableFrom, connectedOwn, suppliedOf, territoriesOf } from '../engine/game'
 import type { GameState, Move } from '../engine/types'
 
 /** Deterministic moves — safe to rewind past. */
@@ -84,9 +84,16 @@ export function clickableFor(
     case 'setup':
       if (me.reserve > 0 && !autoSetup) mine.forEach((t) => out.add(t))
       break
-    case 'deploy':
-      if (s.toDeploy > 0 && !mustTrade(s)) mine.forEach((t) => out.add(t))
+    case 'deploy': {
+      if (s.toDeploy > 0 && !mustTrade(s)) {
+        // supply mode: reinforcements can only land on supplied ground
+        const supplied = s.mode === 'supply' ? suppliedOf(s, s.current) : null
+        mine.forEach((t) => {
+          if (!supplied || supplied.has(t)) out.add(t)
+        })
+      }
       break
+    }
     case 'attack':
       mine.forEach((t) => { if (attackableFrom(s, t).length) out.add(t) })
       targets.forEach((t) => out.add(t))

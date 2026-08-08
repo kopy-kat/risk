@@ -234,10 +234,17 @@ function phaseSlots(props: DockProps): Slots {
  * carries what they don't — "Took Peru", or the key that backs out of here.
  */
 function setupSlots({ state }: DockProps): Slots {
+  // capitals mode: the first placement is a bigger decision than the rest of
+  // the opening put together, so it can't go unannounced
+  const founding = state.mode === 'capitals' && state.capitals[state.current] === undefined
   return {
     counter: <span className="counter">{state.players[state.current].reserve}</span>,
     hint: 'To place',
-    say: <>Click a territory · <b>1</b> at a time</>,
+    say: founding ? (
+      <>This placement founds <b>your capital</b> · lose it and the race is on</>
+    ) : (
+      <>Click a territory · <b>1</b> at a time</>
+    ),
   }
 }
 

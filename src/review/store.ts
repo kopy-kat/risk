@@ -6,9 +6,9 @@
  * replay the whole game exactly, dice and all. A 300-move game is about 20 kB of
  * JSON; the same game as 300 board snapshots would be several megabytes.
  */
-import { RULES_VERSION } from '../engine/game'
+import { rulesFor } from '../engine/game'
 import type { SeatConfig } from '../engine/game'
-import type { Move, PlayerId } from '../engine/types'
+import type { GameMode, Move, PlayerId } from '../engine/types'
 
 const KEY = 'risk.games.v1'
 /** Bump when the record shape changes incompatibly. */
@@ -29,6 +29,8 @@ export interface GameRecord {
    */
   botSeed: number
   seats: SeatConfig[]
+  /** Rule set the game was played under. Absent on records that predate modes: classic. */
+  mode?: GameMode
   moves: Move[]
   /**
    * Indices of moves the app played on a human's behalf, i.e. "auto-place rest".
@@ -49,7 +51,7 @@ export interface GameRecord {
  * that looks plausible and is wrong.
  */
 export const isReplayable = (r: GameRecord): boolean =>
-  r.schema === SCHEMA && r.rules === RULES_VERSION
+  r.schema === SCHEMA && r.rules === rulesFor(r.mode)
 
 function read(): GameRecord[] {
   try {
@@ -96,7 +98,7 @@ export function saveGame(record: Omit<GameRecord, 'schema' | 'rules' | 'savedAt'
   const full: GameRecord = {
     ...record,
     schema: SCHEMA,
-    rules: RULES_VERSION,
+    rules: rulesFor(record.mode),
     savedAt: Date.now(),
   }
   const rest = read().filter((g) => g.id !== full.id)

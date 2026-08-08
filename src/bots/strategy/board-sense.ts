@@ -11,7 +11,7 @@ import {
   TERRITORIES_IN,
 } from '../../engine/board'
 import type { ContinentId, TerritoryId } from '../../engine/board'
-import { territoriesOf } from '../../engine/game'
+import { reinforcementFor, territoriesOf } from '../../engine/game'
 import type { GameState, PlayerId } from '../../engine/types'
 
 /** Territories in a continent that touch anything outside it — what you must garrison. */
@@ -69,8 +69,11 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
  * from the way the bot would actually play them.
  */
 export function garrisonFor(s: GameState, me: PlayerId, t: TerritoryId): number {
-  if (!isBorder(s, me, t)) return 1
-  return clamp(Math.ceil(pressure(s, me, t) * 0.55), 2, 12)
+  // A capital is the one tile whose loss can hand somebody the game outright,
+  // so its floor is higher than any ordinary border's.
+  const capital = s.mode === 'capitals' && s.capitals[me] === t
+  if (!isBorder(s, me, t)) return capital ? 2 : 1
+  return clamp(Math.ceil(pressure(s, me, t) * 0.55), capital ? 4 : 2, 12)
 }
 
 export interface ContinentStanding {
@@ -181,12 +184,9 @@ export function aggressorsAgainst(s: GameState, me: PlayerId, sinceTurns = 2): M
   return out
 }
 
-/** Income a player is collecting right now — territories plus continent bonuses. */
-export function incomeOf(s: GameState, p: PlayerId): number {
-  const base = Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
-  const bonus = CONTINENT_IDS.filter((c) => TERRITORIES_IN[c].every((t) => s.owner[t] === p)).reduce(
-    (n, c) => n + CONTINENTS[c].bonus,
-    0,
-  )
-  return base + bonus
-}
+/**
+ * Income a player is collecting right now. The engine's own calculation, so it
+ * stays honest in every mode — in supply mode cut-off ground pays nothing, and a
+ * bot pricing it as income would defend the wrong tiles.
+ */
+export const incomeOf = (s: GameState, p: PlayerId): number => reinforcementFor(s, p)

@@ -1098,6 +1098,40 @@ hands mean a net reading full `GameState` would train as a cheater. Revisit only
 A and B both land and plateau; A is a prerequisite for C regardless, so taking them
 in order wastes nothing.
 
+## The modes
+
+Capitals and Supply (see README for the rules) run on the same brain with mode
+hooks, not on separate bots — the tiers keep their identities in every mode.
+
+What the hooks are, all of them shared across tiers:
+
+- **Capitals.** The first placement founds the capital on a defensible tile —
+  fewest doors an attack can come through, ties to the continent that is
+  cheapest to hold — and setup keeps it garrisoned to 4. In play, `garrisonFor`
+  gives the capital a higher floor, the deploy phase tops it up before spending
+  on ambition, and `targetValue` prices any capital in enemy hands at +6 (our
+  own at +8), which is what makes the tiers race capitals rather than ground.
+- **Supply.** `incomeOf` delegates to the engine's `reinforcementFor`, so every
+  income read — evaluation, `setsDominate`, the reviewer — counts supplied
+  ground only. `assess` scores income over the supplied set. Deploys route
+  through a redirect that lands cut-off picks on the strongest supplied border,
+  and the opening confines placement to the main body and what touches it. The
+  pool points and `easy` get deploy legality only, on purpose: they are
+  diagnostics, and rewriting their judgement would change what they measure.
+
+Soaked, not benched. 250 mixed-bot games per mode with invariants checked after
+every move: zero violations, and the tiers beat the pool in both (capitals:
+General/Marshal/Colonel at 27.1/25.8/18.8; supply: Marshal/General/Colonel at
+29.8/23.4/17.9). `cardShark`
+falls to 3.8% in capitals — a win condition on tiles blunts the card race.
+Supply's mixed tables cap at 32/250 games, but that is the diagnostic pool
+grinding: all-Marshal supply tables average 39 turns with zero stalls in 150.
+
+What has *not* been done: no paired-seed, seat-rotated bench per mode, so the
+size of the tier gaps under each mode is unmeasured; `assess` carries no
+capitals term, so the reviewer prices capitals games by ground and cards alone;
+and no exploit search has run against either mode's rule set.
+
 ## Open questions
 
 - **The shark's six-seat residual.** After the card-economy fixes, `cardShark` still

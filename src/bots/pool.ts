@@ -1,7 +1,7 @@
 import { ADJACENCY, CONTINENT_IDS, TERRITORIES_IN } from '../engine/board'
 import type { ContinentId, TerritoryId } from '../engine/board'
 import { winProb } from '../engine/combat'
-import { HAND_LIMIT, attackableFrom, bestTradeIn, connectedOwn, legalMoves, territoriesOf } from '../engine/game'
+import { HAND_LIMIT, attackableFrom, bestTradeIn, connectedOwn, legalMoves, suppliedOf, territoriesOf } from '../engine/game'
 import type { GameState, Move, PlayerId } from '../engine/types'
 import { CONTINENT_BORDERS, CONTINENT_EFFICIENCY } from './strategy/board-sense'
 import type { Bot } from './types'
@@ -285,11 +285,16 @@ export function makePolicyBot(key: string, name: string, blurb: string, p: Polic
           if (trade && (forced || willing))
             return { type: 'tradeCards', cards: trade.cards }
 
+          // supply mode: reinforcements can only land on supplied ground
+          const supplied = s.mode === 'supply' ? suppliedOf(s, me) : null
           const thin = territoriesOf(s, me)
-            .filter((t) => s.troops[t] < garrisonTarget(s, me, t, p))
+            .filter((t) => (!supplied || supplied.has(t)) && s.troops[t] < garrisonTarget(s, me, t, p))
             .sort((a, b) => s.troops[a] - s.troops[b])
           if (thin.length) return { type: 'deploy', territory: thin[0], count: 1 }
-          return { type: 'deploy', territory: stackOf(s, me, p), count: s.toDeploy }
+          let stack = stackOf(s, me, p)
+          if (supplied && !supplied.has(stack))
+            stack = [...supplied].reduce((a, b) => (s.troops[a] >= s.troops[b] ? a : b))
+          return { type: 'deploy', territory: stack, count: s.toDeploy }
         }
 
         /**
