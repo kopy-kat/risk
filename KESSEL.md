@@ -25,7 +25,8 @@ this map carries no share-alike terms.
 142 provinces, average degree 4.38, diameter 17, from Iberia to the Volga. Seeds are
 real cities at real coordinates, so density follows settlement: the west is dense and
 grinding, the east deep and open. Provinces carry terrain, depot capacity and
-objective value; edges carry shared border length, which sets attack frontage.
+objective value; edges carry shared border length, which narrows engagement across
+the tightest crossings.
 
 Topology is the main tuning surface. Edit `data/maps/europe.seeds.json` and
 regenerate — it takes under a second — rather than patching geometry.
@@ -68,7 +69,7 @@ Degradation is graded, never deletion:
 | 3 supplied | full |
 | 2 strained | may not attack |
 | 1 failing | combat halved, cohesion decays |
-| 0 cut off | strength attrition each turn |
+| 0 cut off | strength attrition each turn, while an enemy is pressing the pocket |
 
 Capturing a depot resets chain depth, which is why offensives are aimed at them.
 Encircling a force sends its depth to infinity and the pocket collapses without a
@@ -76,6 +77,9 @@ frontal assault.
 
 Depot count is the lever that decides whether any of this matters. At 24 depots every
 province sat within one hop of a railhead and the chain rules could never bite.
+
+Starvation needs an enemy adjacent to the pocket. Ungated, severing one rear province
+kills an army the enemy has walked away from, and cordoning beats fighting.
 
 ## Combat
 
@@ -87,11 +91,16 @@ Attack value is `Σ strength × cohesion × supply × type`, defence the same ×
 entrenchment. The ratio drives cohesion loss on both sides, the loser losing more.
 A defender at zero cohesion retreats one province.
 
-**A formation ordered to retreat with no friendly-reachable province surrenders.**
+**A formation ordered to retreat with no friendly-reachable province surrenders.** A
+province already packed to what its terrain holds is not a way out either.
 
-Frontage is the sum of shared border length across every province attacking, capped at
-four. Converging on a province from several directions brings more to bear than piling
-onto one border, and no province can absorb an unlimited stack.
+Two formations can engage across open ground and one across anything that funnels, so
+concentration has to be *aimed* rather than merely amassed. Converging from several
+directions brings more to bear than piling onto one border, to a ceiling of four.
+
+Death is asymmetric, and this is the incentive gradient the whole design rests on: a
+formation beaten down in a stand-up fight leaves a cadre behind that plugs the gap, and
+one destroyed in a pocket leaves nothing.
 
 ## War aims
 
@@ -107,9 +116,9 @@ value held breaking ties.
 
 So you can win a war you did not conquer, and lose one in which you took ground.
 
-Two things this got wrong and now doesn't: formations lost in combat cost no will at
-all, so the track measured only starvation; and weariness was steep enough to decide
-every game, which made each war end on the same turn regardless of what happened in it.
+Weariness is deliberately small. It is the backstop that stops a stalemate running
+forever, and anything large enough to decide games ends every war on the same turn
+regardless of what happened in it.
 
 ## Bots
 
@@ -122,10 +131,9 @@ the same worker pool as Risk's benchmark. It prints Wilson intervals and says so
 one spans 50%, because a hundred games cannot tell a real edge from a coin flip and
 reporting the raw score as settled is how you end up tuning against noise.
 
-Maneuver beats Attrition, and both beat Elastic. Attrition beats Elastic by a wider
-margin than Maneuver does, so the three are a matchup structure rather than a straight
-ladder. The wars look different too: Maneuver settles Attrition in about a third of
-the turns Attrition needs to grind down Elastic.
+Maneuver beats Attrition, and both beat Elastic. The wars look different, which is the
+more interesting half: Maneuver settles its games in a quarter of the turns Attrition
+needs to grind Elastic down.
 
 `npm run sim:kessel` is the soak — bot games with invariants checked after every move,
 for the states nobody thought to write an assertion for.
