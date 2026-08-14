@@ -217,6 +217,7 @@ export interface ReviewOptions {
 }
 
 export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameReview {
+  if ((record.game ?? 'risk') !== 'risk') throw new Error(`not a Risk game: ${record.game}`)
   const r = replay(record)
   const bot = opts.bot ?? marshalBot
   const reviewed =
@@ -243,7 +244,9 @@ export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameRe
 
   for (let i = 0; i < r.states.length - 1; i++) {
     const s = r.states[i]
-    const played = record.moves[i]
+    // The record's game tag decides whose moves these are; this reviewer only
+    // ever handles Risk, and `reviewGame` refuses anything else up front.
+    const played = record.moves[i] as Move
     const me = s.current
     if (!wanted.has(me) || assisted.has(i)) continue
     opts.onProgress?.(++done, total)

@@ -8,7 +8,11 @@
  */
 import type { SeatConfig } from '../engine/game'
 import { rulesFor } from '../games'
-import type { Move, PlayerId } from '../engine/types'
+import type { Move as RiskMove, PlayerId } from '../engine/types'
+import type { Move as KesselMove } from '../games/kessel/types'
+
+/** A move of whichever game the record names — never a mixture. */
+export type RecordedMove = RiskMove | KesselMove
 
 const KEY = 'risk.games.v1'
 /** Bump when the record shape changes incompatibly. */
@@ -31,7 +35,7 @@ export interface GameRecord {
   seats: SeatConfig[]
   /** Which game was played. Absent means `'risk'`. */
   game?: string
-  moves: Move[]
+  moves: RecordedMove[]
   /**
    * Indices of moves the app played on a human's behalf, i.e. "auto-place rest".
    * Reviewing someone for a move they didn't make is worse than not reviewing it.

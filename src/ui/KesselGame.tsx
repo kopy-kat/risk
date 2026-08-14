@@ -6,6 +6,7 @@ import { WILL_FLOOR, applyMove, createGame, legalMoves } from '../games/kessel/g
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
 import { retreatOptions } from '../games/kessel/supply'
+import { newGameId, saveGame } from '../review/store'
 import type { FormationId, KesselState, LogEntry, Move, Order } from '../games/kessel/types'
 import { playerColor } from './colors'
 import type { PrimaryAction } from './Dock'
@@ -72,6 +73,7 @@ const aimReport = (m: GameMap, s: KesselState, p: PlayerId) => {
 
 export function KesselGame({ seats, onExit }: Props) {
   const [seed] = useState(() => Math.floor(Math.random() * 1e9))
+  const recordId = useRef(newGameId(Math.floor(Math.random() * 1e9)))
   const [state, setState] = useState<KesselState>(() => createGame({ seats, seed }))
   const [selected, setSelected] = useState<FormationId | null>(null)
   const [hover, setHover] = useState<ProvinceId | null>(null)
@@ -86,6 +88,29 @@ export function KesselGame({ seats, onExit }: Props) {
   const rng = useRef(rngFrom(seed ^ 0x9e3779b9))
   const wasBot = useRef(false)
   const logMark = useRef(0)
+  const savedTurn = useRef(-1)
+
+  // Saved as a seed and a move list, the same as Risk — the whole record is what
+  // it takes to replay the war exactly.
+  useEffect(() => {
+    if (!state.moves.length) return
+    if (!state.sides.some((x) => !x.bot)) return
+    const over = state.phase === 'gameOver'
+    if (!over && state.turn === savedTurn.current) return
+    savedTurn.current = state.turn
+    saveGame({
+      id: recordId.current,
+      game: 'kessel',
+      seed,
+      botSeed: seed ^ 0x9e3779b9,
+      seats: state.sides.map((x) => ({ name: x.name, bot: x.bot, color: x.color })),
+      moves: state.moves,
+      assisted: [],
+      winner: state.winner,
+      turns: state.turn,
+      finished: over,
+    })
+  }, [state, seed])
 
   const m = mapOf(state.mapId)
   const me = state.current

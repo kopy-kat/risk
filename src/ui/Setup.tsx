@@ -35,12 +35,15 @@ const defaultBot = (game: string) => {
 export function Setup({ onStart, onReview }: Props) {
   const [game, setGame] = useState(DEFAULT_GAME)
   const [count, setCount] = useState(4)
-  const [past, setPast] = useState<GameRecord[]>(() => listGames())
+  const [saved, setPast] = useState<GameRecord[]>(() => listGames())
   const [difficulty, setDifficulty] = useState(() => defaultBot(DEFAULT_GAME))
   const [seats, setSeats] = useState<Seat[]>(
     PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
 
+  // Only games of the kind you're picking — a Risk record under the Kessel
+  // heading is a game you cannot open from there anyway.
+  const past = useMemo(() => saved.filter((g) => (g.game ?? DEFAULT_GAME) === game), [saved, game])
   const def = GAME_BY_KEY[game]
   const counts = SEAT_COUNTS[game] ?? [2]
 
