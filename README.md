@@ -36,26 +36,6 @@ Standard Risk, as implemented in `src/engine`:
 When a set pictures more than one territory you hold, the +2 goes to one in contact
 with an enemy rather than asking you — armies behind the lines do nothing.
 
-## Modes
-
-Picked once in setup, next to difficulty. Games record their mode, so saving,
-replay and review work in every mode — and exports from before modes existed
-replay as Classic.
-
-- **Classic** — the rules above, unchanged.
-- **Capitals** — your first setup placement founds your capital, starred on the
-  map in your colour for the whole game. Hold every capital at once — your own
-  included — and you win on the spot. Losing yours doesn't knock you out, and a
-  dead player's capital still counts. Games turn on garrisons, feints and
-  decapitation strikes.
-- **Supply** — only your largest connected group of territories is in supply.
-  Cut-off territories (hatched on the map) earn no income, take no
-  reinforcements, and lose a third of their armies above one at the start of
-  your turn; a continent pays its bonus only while every tile of it is
-  supplied. Encirclement is a weapon: split an empire and the smaller half
-  starves. Initial placement is unrestricted — consolidating a scattered deal
-  into one body is the opening puzzle.
-
 ## Features
 
 **One key does everything.** `Space` presses the one dark button in the bottom bar —
@@ -191,6 +171,7 @@ built on.
 | `npm run study` | replays exported games and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
+| `npm run gen-map` | builds `data/maps/europe.json` — province shapes, adjacency and label anchors — from seed points and the coastline |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `oxlint` over `src` and `scripts` |
 

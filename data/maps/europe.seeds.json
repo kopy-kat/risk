@@ -1,0 +1,1539 @@
+{
+  "id": "europe",
+  "name": "Europe",
+  "bounds": {
+    "lonMin": -10.5,
+    "lonMax": 45,
+    "latMin": 35.5,
+    "latMax": 62
+  },
+  "seeds": [
+    {
+      "id": "london",
+      "name": "London",
+      "nation": "england",
+      "lon": -0.13,
+      "lat": 51.51,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 3
+    },
+    {
+      "id": "dover",
+      "name": "Dover",
+      "nation": "england",
+      "lon": 1.31,
+      "lat": 51.13,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "portsmouth",
+      "name": "Portsmouth",
+      "nation": "england",
+      "lon": -1.09,
+      "lat": 50.8,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "birmingham",
+      "name": "Birmingham",
+      "nation": "england",
+      "lon": -1.9,
+      "lat": 52.48,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "manchester",
+      "name": "Manchester",
+      "nation": "england",
+      "lon": -2.24,
+      "lat": 53.48,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "edinburgh",
+      "name": "Edinburgh",
+      "nation": "scotland",
+      "lon": -3.19,
+      "lat": 55.95,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "inverness",
+      "name": "Inverness",
+      "nation": "scotland",
+      "lon": -4.22,
+      "lat": 57.48,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "belfast",
+      "name": "Belfast",
+      "nation": "ulster",
+      "lon": -5.93,
+      "lat": 54.6,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dublin",
+      "name": "Dublin",
+      "nation": "ireland",
+      "lon": -6.26,
+      "lat": 53.35,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lisbon",
+      "name": "Lisbon",
+      "nation": "portugal",
+      "lon": -9.14,
+      "lat": 38.72,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "porto",
+      "name": "Porto",
+      "nation": "portugal",
+      "lon": -8.61,
+      "lat": 41.15,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "seville",
+      "name": "Seville",
+      "nation": "andalusia",
+      "lon": -5.98,
+      "lat": 37.39,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "granada",
+      "name": "Granada",
+      "nation": "andalusia",
+      "lon": -3.6,
+      "lat": 37.18,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "madrid",
+      "name": "Madrid",
+      "nation": "spain",
+      "lon": -3.7,
+      "lat": 40.42,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 2
+    },
+    {
+      "id": "valencia",
+      "name": "Valencia",
+      "nation": "spain",
+      "lon": -0.38,
+      "lat": 39.47,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zaragoza",
+      "name": "Zaragoza",
+      "nation": "spain",
+      "lon": -0.88,
+      "lat": 41.65,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bilbao",
+      "name": "Bilbao",
+      "nation": "spain",
+      "lon": -2.93,
+      "lat": 43.26,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "barcelona",
+      "name": "Barcelona",
+      "nation": "catalonia",
+      "lon": 2.17,
+      "lat": 41.39,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "calais",
+      "name": "Calais",
+      "nation": "france",
+      "lon": 1.86,
+      "lat": 50.95,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "paris",
+      "name": "Paris",
+      "nation": "france",
+      "lon": 2.35,
+      "lat": 48.86,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 3
+    },
+    {
+      "id": "nancy",
+      "name": "Nancy",
+      "nation": "france",
+      "lon": 6.18,
+      "lat": 48.69,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "orleans",
+      "name": "Orleans",
+      "nation": "france",
+      "lon": 1.9,
+      "lat": 47.9,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "nantes",
+      "name": "Nantes",
+      "nation": "france",
+      "lon": -1.55,
+      "lat": 47.22,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lyon",
+      "name": "Lyon",
+      "nation": "france",
+      "lon": 4.83,
+      "lat": 45.76,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "clermont",
+      "name": "Clermont-Ferrand",
+      "nation": "france",
+      "lon": 3.09,
+      "lat": 45.78,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "grenoble",
+      "name": "Grenoble",
+      "nation": "france",
+      "lon": 5.72,
+      "lat": 45.19,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bordeaux",
+      "name": "Bordeaux",
+      "nation": "france",
+      "lon": -0.58,
+      "lat": 44.84,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "toulouse",
+      "name": "Toulouse",
+      "nation": "france",
+      "lon": 1.44,
+      "lat": 43.6,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "perpignan",
+      "name": "Perpignan",
+      "nation": "france",
+      "lon": 2.9,
+      "lat": 42.7,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "marseille",
+      "name": "Marseille",
+      "nation": "france",
+      "lon": 5.37,
+      "lat": 43.3,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "lille",
+      "name": "Lille",
+      "nation": "france",
+      "lon": 3.06,
+      "lat": 50.63,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "brussels",
+      "name": "Brussels",
+      "nation": "belgium",
+      "lon": 4.35,
+      "lat": 50.85,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "antwerp",
+      "name": "Antwerp",
+      "nation": "belgium",
+      "lon": 4.42,
+      "lat": 51.26,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "liege",
+      "name": "Liege",
+      "nation": "belgium",
+      "lon": 5.57,
+      "lat": 50.63,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bastogne",
+      "name": "Bastogne",
+      "nation": "belgium",
+      "lon": 5.72,
+      "lat": 50,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rotterdam",
+      "name": "Rotterdam",
+      "nation": "netherlands",
+      "lon": 4.48,
+      "lat": 51.92,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "amsterdam",
+      "name": "Amsterdam",
+      "nation": "netherlands",
+      "lon": 4.9,
+      "lat": 52.37,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "cologne",
+      "name": "Cologne",
+      "nation": "rhineland",
+      "lon": 6.96,
+      "lat": 50.94,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "essen",
+      "name": "Essen",
+      "nation": "rhineland",
+      "lon": 7.01,
+      "lat": 51.46,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 2
+    },
+    {
+      "id": "frankfurt",
+      "name": "Frankfurt",
+      "nation": "hesse",
+      "lon": 8.68,
+      "lat": 50.11,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "hanover",
+      "name": "Hanover",
+      "nation": "germany",
+      "lon": 9.73,
+      "lat": 52.37,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bremen",
+      "name": "Bremen",
+      "nation": "germany",
+      "lon": 8.81,
+      "lat": 53.08,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "hamburg",
+      "name": "Hamburg",
+      "nation": "germany",
+      "lon": 10,
+      "lat": 53.55,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "berlin",
+      "name": "Berlin",
+      "nation": "prussia",
+      "lon": 13.4,
+      "lat": 52.52,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 3
+    },
+    {
+      "id": "stettin",
+      "name": "Stettin",
+      "nation": "pomerania",
+      "lon": 14.55,
+      "lat": 53.43,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "leipzig",
+      "name": "Leipzig",
+      "nation": "saxony",
+      "lon": 12.37,
+      "lat": 51.34,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "dresden",
+      "name": "Dresden",
+      "nation": "saxony",
+      "lon": 13.74,
+      "lat": 51.05,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "nuremberg",
+      "name": "Nuremberg",
+      "nation": "bavaria",
+      "lon": 11.08,
+      "lat": 49.45,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "munich",
+      "name": "Munich",
+      "nation": "bavaria",
+      "lon": 11.58,
+      "lat": 48.14,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "stuttgart",
+      "name": "Stuttgart",
+      "nation": "swabia",
+      "lon": 9.18,
+      "lat": 48.78,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "freiburg",
+      "name": "Freiburg",
+      "nation": "baden",
+      "lon": 7.85,
+      "lat": 48,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "basel",
+      "name": "Basel",
+      "nation": "switzerland",
+      "lon": 7.59,
+      "lat": 47.56,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bern",
+      "name": "Bern",
+      "nation": "switzerland",
+      "lon": 7.45,
+      "lat": 46.95,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zurich",
+      "name": "Zurich",
+      "nation": "switzerland",
+      "lon": 8.54,
+      "lat": 47.38,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "innsbruck",
+      "name": "Innsbruck",
+      "nation": "tyrol",
+      "lon": 11.4,
+      "lat": 47.27,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "salzburg",
+      "name": "Salzburg",
+      "nation": "austria",
+      "lon": 13.05,
+      "lat": 47.8,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "linz",
+      "name": "Linz",
+      "nation": "austria",
+      "lon": 14.29,
+      "lat": 48.31,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "vienna",
+      "name": "Vienna",
+      "nation": "austria",
+      "lon": 16.37,
+      "lat": 48.21,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 3
+    },
+    {
+      "id": "turin",
+      "name": "Turin",
+      "nation": "piedmont",
+      "lon": 7.69,
+      "lat": 45.07,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "milan",
+      "name": "Milan",
+      "nation": "lombardy",
+      "lon": 9.19,
+      "lat": 45.46,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "genoa",
+      "name": "Genoa",
+      "nation": "liguria",
+      "lon": 8.93,
+      "lat": 44.41,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "verona",
+      "name": "Verona",
+      "nation": "veneto",
+      "lon": 10.99,
+      "lat": 45.44,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "venice",
+      "name": "Venice",
+      "nation": "veneto",
+      "lon": 12.26,
+      "lat": 45.47,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "podelta",
+      "name": "Po Delta",
+      "nation": "emilia",
+      "lon": 12.15,
+      "lat": 44.72,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bologna",
+      "name": "Bologna",
+      "nation": "emilia",
+      "lon": 11.34,
+      "lat": 44.49,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "florence",
+      "name": "Florence",
+      "nation": "tuscany",
+      "lon": 11.26,
+      "lat": 43.77,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rome",
+      "name": "Rome",
+      "nation": "lazio",
+      "lon": 12.5,
+      "lat": 41.9,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 3
+    },
+    {
+      "id": "naples",
+      "name": "Naples",
+      "nation": "campania",
+      "lon": 14.27,
+      "lat": 40.85,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bari",
+      "name": "Bari",
+      "nation": "apulia",
+      "lon": 16.87,
+      "lat": 41.12,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "reggio",
+      "name": "Reggio Calabria",
+      "nation": "calabria",
+      "lon": 15.65,
+      "lat": 38.11,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "palermo",
+      "name": "Palermo",
+      "nation": "sicily",
+      "lon": 13.36,
+      "lat": 38.12,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "cagliari",
+      "name": "Cagliari",
+      "nation": "sardinia",
+      "lon": 9.12,
+      "lat": 39.22,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stavanger",
+      "name": "Stavanger",
+      "nation": "norway",
+      "lon": 5.73,
+      "lat": 58.97,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bergen",
+      "name": "Bergen",
+      "nation": "norway",
+      "lon": 5.32,
+      "lat": 60.39,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "oslo",
+      "name": "Oslo",
+      "nation": "norway",
+      "lon": 10.75,
+      "lat": 59.91,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "gothenburg",
+      "name": "Gothenburg",
+      "nation": "sweden",
+      "lon": 11.97,
+      "lat": 57.71,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "jonkoping",
+      "name": "Jonkoping",
+      "nation": "sweden",
+      "lon": 14.16,
+      "lat": 57.78,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stockholm",
+      "name": "Stockholm",
+      "nation": "sweden",
+      "lon": 18.07,
+      "lat": 59.33,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "malmo",
+      "name": "Malmo",
+      "nation": "sweden",
+      "lon": 13,
+      "lat": 55.6,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "copenhagen",
+      "name": "Copenhagen",
+      "nation": "denmark",
+      "lon": 12.57,
+      "lat": 55.68,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "aarhus",
+      "name": "Aarhus",
+      "nation": "denmark",
+      "lon": 10.2,
+      "lat": 56.16,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "helsinki",
+      "name": "Helsinki",
+      "nation": "finland",
+      "lon": 24.94,
+      "lat": 60.17,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tallinn",
+      "name": "Tallinn",
+      "nation": "estonia",
+      "lon": 24.75,
+      "lat": 59.44,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "riga",
+      "name": "Riga",
+      "nation": "latvia",
+      "lon": 24.11,
+      "lat": 56.95,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "klaipeda",
+      "name": "Klaipeda",
+      "nation": "lithuania",
+      "lon": 21.13,
+      "lat": 55.71,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "vilnius",
+      "name": "Vilnius",
+      "nation": "lithuania",
+      "lon": 25.28,
+      "lat": 54.69,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "konigsberg",
+      "name": "Konigsberg",
+      "nation": "prussia",
+      "lon": 20.51,
+      "lat": 54.71,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "gdansk",
+      "name": "Gdansk",
+      "nation": "poland",
+      "lon": 18.65,
+      "lat": 54.35,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "poznan",
+      "name": "Poznan",
+      "nation": "poland",
+      "lon": 16.93,
+      "lat": 52.41,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "warsaw",
+      "name": "Warsaw",
+      "nation": "poland",
+      "lon": 21.01,
+      "lat": 52.23,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "bialowieza",
+      "name": "Bialowieza",
+      "nation": "poland",
+      "lon": 23.87,
+      "lat": 52.7,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "wroclaw",
+      "name": "Wroclaw",
+      "nation": "silesia",
+      "lon": 17.04,
+      "lat": 51.11,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "katowice",
+      "name": "Katowice",
+      "nation": "silesia",
+      "lon": 19.03,
+      "lat": 50.26,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "krakow",
+      "name": "Krakow",
+      "nation": "poland",
+      "lon": 19.94,
+      "lat": 50.06,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "prague",
+      "name": "Prague",
+      "nation": "bohemia",
+      "lon": 14.42,
+      "lat": 50.08,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 2
+    },
+    {
+      "id": "brno",
+      "name": "Brno",
+      "nation": "moravia",
+      "lon": 16.61,
+      "lat": 49.2,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bratislava",
+      "name": "Bratislava",
+      "nation": "slovakia",
+      "lon": 17.11,
+      "lat": 48.15,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kosice",
+      "name": "Kosice",
+      "nation": "slovakia",
+      "lon": 21.26,
+      "lat": 48.72,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "budapest",
+      "name": "Budapest",
+      "nation": "hungary",
+      "lon": 19.04,
+      "lat": 47.5,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 2
+    },
+    {
+      "id": "debrecen",
+      "name": "Debrecen",
+      "nation": "hungary",
+      "lon": 21.63,
+      "lat": 47.53,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ljubljana",
+      "name": "Ljubljana",
+      "nation": "slovenia",
+      "lon": 14.51,
+      "lat": 46.06,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zagreb",
+      "name": "Zagreb",
+      "nation": "croatia",
+      "lon": 15.98,
+      "lat": 45.81,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "split",
+      "name": "Split",
+      "nation": "croatia",
+      "lon": 16.44,
+      "lat": 43.51,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sarajevo",
+      "name": "Sarajevo",
+      "nation": "bosnia",
+      "lon": 18.41,
+      "lat": 43.86,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "belgrade",
+      "name": "Belgrade",
+      "nation": "serbia",
+      "lon": 20.46,
+      "lat": 44.79,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "cluj",
+      "name": "Cluj",
+      "nation": "romania",
+      "lon": 23.6,
+      "lat": 46.77,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ploiesti",
+      "name": "Ploiesti",
+      "nation": "romania",
+      "lon": 26.02,
+      "lat": 44.94,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "bucharest",
+      "name": "Bucharest",
+      "nation": "romania",
+      "lon": 26.1,
+      "lat": 44.43,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sofia",
+      "name": "Sofia",
+      "nation": "bulgaria",
+      "lon": 23.32,
+      "lat": 42.7,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "varna",
+      "name": "Varna",
+      "nation": "bulgaria",
+      "lon": 27.91,
+      "lat": 43.21,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ioannina",
+      "name": "Ioannina",
+      "nation": "greece",
+      "lon": 20.85,
+      "lat": 39.67,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "thessaloniki",
+      "name": "Thessaloniki",
+      "nation": "greece",
+      "lon": 22.94,
+      "lat": 40.64,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "athens",
+      "name": "Athens",
+      "nation": "greece",
+      "lon": 23.73,
+      "lat": 37.98,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "istanbul",
+      "name": "Istanbul",
+      "nation": "turkey",
+      "lon": 28.98,
+      "lat": 41.01,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 2
+    },
+    {
+      "id": "ankara",
+      "name": "Ankara",
+      "nation": "turkey",
+      "lon": 32.86,
+      "lat": 39.93,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "minsk",
+      "name": "Minsk",
+      "nation": "belarus",
+      "lon": 27.56,
+      "lat": 53.9,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "pinsk",
+      "name": "Pinsk",
+      "nation": "belarus",
+      "lon": 26.1,
+      "lat": 52.12,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lviv",
+      "name": "Lviv",
+      "nation": "ukraine",
+      "lon": 24.03,
+      "lat": 49.84,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kyiv",
+      "name": "Kyiv",
+      "nation": "ukraine",
+      "lon": 30.52,
+      "lat": 50.45,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 2
+    },
+    {
+      "id": "odessa",
+      "name": "Odessa",
+      "nation": "ukraine",
+      "lon": 30.73,
+      "lat": 46.48,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sevastopol",
+      "name": "Sevastopol",
+      "nation": "crimea",
+      "lon": 33.53,
+      "lat": 44.62,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dnipro",
+      "name": "Dnipro",
+      "nation": "ukraine",
+      "lon": 35.05,
+      "lat": 48.47,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kharkiv",
+      "name": "Kharkiv",
+      "nation": "ukraine",
+      "lon": 36.23,
+      "lat": 49.99,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "donetsk",
+      "name": "Donetsk",
+      "nation": "ukraine",
+      "lon": 37.8,
+      "lat": 48,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "stpetersburg",
+      "name": "St Petersburg",
+      "nation": "russia",
+      "lon": 30.31,
+      "lat": 59.94,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "pskov",
+      "name": "Pskov",
+      "nation": "russia",
+      "lon": 28.33,
+      "lat": 57.82,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "smolensk",
+      "name": "Smolensk",
+      "nation": "russia",
+      "lon": 32.05,
+      "lat": 54.78,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "moscow",
+      "name": "Moscow",
+      "nation": "russia",
+      "lon": 37.62,
+      "lat": 55.75,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 3
+    },
+    {
+      "id": "yaroslavl",
+      "name": "Yaroslavl",
+      "nation": "russia",
+      "lon": 39.87,
+      "lat": 57.63,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "nizhny",
+      "name": "Nizhny Novgorod",
+      "nation": "russia",
+      "lon": 44,
+      "lat": 56.33,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "arzamas",
+      "name": "Arzamas",
+      "nation": "russia",
+      "lon": 43.82,
+      "lat": 55.39,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "voronezh",
+      "name": "Voronezh",
+      "nation": "russia",
+      "lon": 39.2,
+      "lat": 51.67,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "volgograd",
+      "name": "Volgograd",
+      "nation": "russia",
+      "lon": 44.52,
+      "lat": 48.71,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rostov",
+      "name": "Rostov-on-Don",
+      "nation": "russia",
+      "lon": 39.72,
+      "lat": 47.23,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "krasnodar",
+      "name": "Krasnodar",
+      "nation": "russia",
+      "lon": 38.98,
+      "lat": 45.04,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "pyatigorsk",
+      "name": "Pyatigorsk",
+      "nation": "russia",
+      "lon": 43.06,
+      "lat": 44.05,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "corsica",
+      "name": "Corsica",
+      "nation": "corsica",
+      "lon": 9.15,
+      "lat": 42.25,
+      "terrain": "mountain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tangier",
+      "name": "Tangier",
+      "nation": "morocco",
+      "lon": -5.8,
+      "lat": 35.79,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "oran",
+      "name": "Oran",
+      "nation": "algeria",
+      "lon": -0.64,
+      "lat": 35.7,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "algiers",
+      "name": "Algiers",
+      "nation": "algeria",
+      "lon": 3.06,
+      "lat": 36.75,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "constantine",
+      "name": "Constantine",
+      "nation": "algeria",
+      "lon": 6.61,
+      "lat": 36.36,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tunis",
+      "name": "Tunis",
+      "nation": "tunisia",
+      "lon": 10.18,
+      "lat": 36.81,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 1
+    }
+  ],
+  "seaLinks": [
+    {
+      "a": "dover",
+      "b": "calais",
+      "name": "Strait of Dover"
+    },
+    {
+      "a": "london",
+      "b": "rotterdam",
+      "name": "North Sea Passage"
+    },
+    {
+      "a": "dublin",
+      "b": "manchester",
+      "name": "Irish Sea"
+    },
+    {
+      "a": "belfast",
+      "b": "edinburgh",
+      "name": "North Channel"
+    },
+    {
+      "a": "copenhagen",
+      "b": "malmo",
+      "name": "Oresund"
+    },
+    {
+      "a": "copenhagen",
+      "b": "aarhus",
+      "name": "Great Belt"
+    },
+    {
+      "a": "gothenburg",
+      "b": "aarhus",
+      "name": "Kattegat"
+    },
+    {
+      "a": "helsinki",
+      "b": "tallinn",
+      "name": "Gulf of Finland"
+    },
+    {
+      "a": "stockholm",
+      "b": "riga",
+      "name": "Baltic Crossing"
+    },
+    {
+      "a": "reggio",
+      "b": "palermo",
+      "name": "Strait of Messina"
+    },
+    {
+      "a": "cagliari",
+      "b": "rome",
+      "name": "Tyrrhenian Crossing"
+    },
+    {
+      "a": "split",
+      "b": "bari",
+      "name": "Adriatic Crossing"
+    },
+    {
+      "a": "istanbul",
+      "b": "ankara",
+      "name": "Bosphorus"
+    },
+    {
+      "a": "odessa",
+      "b": "sevastopol",
+      "name": "Perekop Approaches"
+    },
+    {
+      "a": "tangier",
+      "b": "granada",
+      "name": "Strait of Gibraltar"
+    },
+    {
+      "a": "tunis",
+      "b": "palermo",
+      "name": "Sicilian Narrows"
+    },
+    {
+      "a": "corsica",
+      "b": "cagliari",
+      "name": "Strait of Bonifacio"
+    },
+    {
+      "a": "corsica",
+      "b": "genoa",
+      "name": "Ligurian Sea"
+    },
+    {
+      "a": "bari",
+      "b": "ioannina",
+      "name": "Strait of Otranto"
+    },
+    {
+      "a": "sevastopol",
+      "b": "krasnodar",
+      "name": "Kerch Strait"
+    },
+    {
+      "a": "naples",
+      "b": "palermo",
+      "name": "Tyrrhenian Crossing"
+    }
+  ]
+}
