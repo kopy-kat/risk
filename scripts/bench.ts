@@ -21,20 +21,9 @@
 import { ALL_BOTS, BENCH_LADDER, BOT_BY_KEY } from '../src/bots'
 import type { Job } from './match'
 import { defaultWorkers, playGames } from './parallel'
+import { wilson } from './stats'
 
 const TURN_CAP = 600
-const Z = 1.96 // 95%
-
-/** Wilson score interval — honest at small n, unlike the normal approximation. */
-function wilson(wins: number, n: number): { p: number; half: number } {
-  if (!n) return { p: 0, half: 0 }
-  const p = wins / n
-  const d = 1 + (Z * Z) / n
-  const centre = (p + (Z * Z) / (2 * n)) / d
-  const half = (Z * Math.sqrt((p * (1 - p)) / n + (Z * Z) / (4 * n * n))) / d
-  return { p: centre, half }
-}
-
 /** Every rotation of the seat order, so each bot plays each position equally. */
 function rotations<T>(xs: T[]): T[][] {
   return xs.map((_, i) => [...xs.slice(i), ...xs.slice(0, i)])

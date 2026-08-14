@@ -15,6 +15,7 @@
 import { cpus } from 'node:os'
 import { Worker } from 'node:worker_threads'
 import { fallbacks, resetFallbacks } from '../src/bots/play'
+import { fallbacks as kesselFallbacks, resetFallbacks as resetKessel } from '../src/games/kessel/play'
 import { playMatch } from './match'
 import type { Job, Outcome } from './match'
 
@@ -32,7 +33,9 @@ export async function playGames(jobs: Job[], workers = defaultWorkers()): Promis
   // as there is more than a batch or two of work, and not before.
   if (workers <= 1 || jobs.length < workers * 2) {
     resetFallbacks()
-    return { outcomes: jobs.map(playMatch), fallbacks: { ...fallbacks } }
+    resetKessel()
+    const outcomes = jobs.map(playMatch)
+    return { outcomes, fallbacks: { ...fallbacks, ...kesselFallbacks } }
   }
 
   const outcomes: Outcome[] = Array.from({ length: jobs.length })

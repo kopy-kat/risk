@@ -13,6 +13,7 @@ register()
 
 const { playMatch } = await import('./match')
 const { fallbacks, resetFallbacks } = await import('../src/bots/play')
+const kessel = await import('../src/games/kessel/play')
 
 export interface Batch {
   /** indices into the parent's job list, so outcomes can be reassembled in order */
@@ -22,9 +23,11 @@ export interface Batch {
 
 parentPort!.on('message', (batch: Batch) => {
   resetFallbacks()
+  kessel.resetFallbacks()
+  const outcomes = batch.jobs.map(playMatch)
   parentPort!.postMessage({
     at: batch.at,
-    outcomes: batch.jobs.map(playMatch),
-    fallbacks: { ...fallbacks },
+    outcomes,
+    fallbacks: { ...fallbacks, ...kessel.fallbacks },
   })
 })
