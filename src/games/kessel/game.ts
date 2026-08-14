@@ -307,7 +307,13 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
     const fallback = depthMap(m, s, defenders[0].owner)
     for (const f of defenders) {
       if (f.strength <= 0) {
+        // Beaten down in a stand-up fight, a formation leaves a remnant that plugs
+        // the gap behind it. Beaten in a pocket it leaves nothing — which is what
+        // makes encirclement categorically worse than attrition rather than merely
+        // a better exchange rate.
+        const rear = retreatTargets(m, s, f, fallback)
         remove(m, s, f, 'is destroyed')
+        if (rear.length > 0) cadre(s, f, rear[0])
         continue
       }
       if (f.cohesion > 0) continue
@@ -343,6 +349,22 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
   s.orders = {}
   s.rngState = rng.state
   return updateWill(m, s, me, mineBefore, theirsBefore, standingBefore)
+}
+
+const CADRE_COHESION = 30
+
+function cadre(s: KesselState, f: Formation, at: ProvinceId) {
+  s.formations.push({
+    id: s.nextFormationId++,
+    owner: f.owner,
+    type: f.type,
+    at,
+    strength: 1,
+    cohesion: CADRE_COHESION,
+    wear: 0,
+    dug: 0,
+    supply: f.supply,
+  })
 }
 
 function remove(m: GameMap, s: KesselState, f: Formation, why: string) {
@@ -389,7 +411,13 @@ function endTurn(m: GameMap, s: KesselState): KesselState {
   for (const f of s.formations) {
     if (f.owner !== next) continue
     f.supply = states[f.id] ?? 0
-    if (f.supply === 0) {
+    // A pocket only starves while somebody is pressing it. Without this gate,
+    // severing one rear province once quietly kills an army the enemy has walked
+    // away from, and cordoning beats fighting.
+    const pressed = (m.adjacency[f.at] ?? []).some((n) =>
+      s.formations.some((x) => x.at === n && x.owner !== next && x.supply >= 2),
+    )
+    if (f.supply === 0 && pressed) {
       Object.assign(f, applyLoss(f, STARVE_WEAR))
       f.cohesion = Math.max(0, f.cohesion - STARVE_COHESION)
     } else if (f.supply >= 2) {

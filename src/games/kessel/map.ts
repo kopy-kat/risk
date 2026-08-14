@@ -72,15 +72,28 @@ export function mapOf(id: string): GameMap {
 }
 
 /**
- * How many formations can attack across a border at once. Mass still wins, but it
- * has to fit — without this a single province absorbs an unlimited stack and the
- * game degenerates into one moving pile.
+ * How many formations can engage across a border at once — two over open ground,
+ * one over anything that funnels. Mass still wins, but it has to be *aimed*: this
+ * is what stops a province absorbing an unlimited stack, and it does the job
+ * without a stacking rule.
  */
+const ENGAGEMENT_LIMIT: Record<Terrain, number> = {
+  plain: 2,
+  urban: 1,
+  hill: 1,
+  forest: 1,
+  marsh: 1,
+  mountain: 1,
+}
+
 export function frontage(m: GameMap, a: ProvinceId, b: ProvinceId): number {
   const e = m.edge(a, b)
   if (!e) return 0
   if (e.sea) return 1
-  return Math.max(1, Math.min(3, Math.round(e.len / 28)))
+  // The narrower of the two sides governs — a broad plain reached through a pass
+  // is still reached through a pass.
+  const limit = Math.min(ENGAGEMENT_LIMIT[m.province[a].terrain], ENGAGEMENT_LIMIT[m.province[b].terrain])
+  return e.len < 18 ? 1 : limit
 }
 
 /** Supply traces slower through country that has no roads worth the name. */
