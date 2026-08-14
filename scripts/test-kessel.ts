@@ -8,7 +8,7 @@
 import { applyMove, createGame, legalMoves, view } from '../src/games/kessel/game'
 import { STACK_LIMIT, registerMap } from '../src/games/kessel/map'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
-import { depthMap, retreatTargets, supplyStates } from '../src/games/kessel/supply'
+import { depthMap, retreatOptions, retreatTargets, supplyStates } from '../src/games/kessel/supply'
 import type { Formation, KesselState, UnitType } from '../src/games/kessel/types'
 import type { PlayerId } from '../src/engine/types'
 
@@ -283,6 +283,30 @@ function split(): Record<string, PlayerId> {
   ok(
     survivor !== undefined && survivor.strength === defender.strength,
     'and keeps its strength — combat pushes, encirclement kills',
+  )
+}
+
+// ── a packed province is no way out either ──────────────────────────
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const owner = split()
+  owner[id(3, 1)] = 0
+
+  // The only ground behind this defender is already holding all the terrain takes.
+  const defender = corps(1, id(4, 1), { cohesion: 20 })
+  const packed = [corps(1, id(4, 0)), corps(1, id(4, 2)), corps(1, id(5, 1))]
+  const crowd = packed.flatMap((f) => [f, corps(1, f.at), corps(1, f.at)])
+  const s = stateOn(m.id, owner, [defender, ...crowd, corps(0, id(3, 1))])
+
+  eq(retreatOptions(m, s, defender).length, 0, 'ground packed to the stack limit is not a line of retreat')
+
+  let g = s
+  const attacker = g.formations.find((f) => f.owner === 0) as Formation
+  g = applyMove(g, { type: 'order', formation: attacker.id, order: { type: 'attack', to: id(4, 1) } })
+  g = applyMove(g, { type: 'commit' })
+  ok(
+    !g.formations.some((f) => f.id === defender.id),
+    'so a formation with nowhere that will hold it surrenders like any other pocket',
   )
 }
 

@@ -1,5 +1,5 @@
 import type { PlayerId } from '../../engine/types'
-import { SUPPLY_COST } from './map'
+import { STACK_LIMIT, SUPPLY_COST } from './map'
 import type { GameMap, ProvinceId } from './map'
 import type { Formation, KesselState } from './types'
 
@@ -161,7 +161,14 @@ function nearestWithCapacity(
  */
 export function retreatOptions(m: GameMap, s: KesselState, f: Formation): ProvinceId[] {
   const enemyAt = new Set(s.formations.filter((x) => x.owner !== f.owner).map((x) => x.at))
-  return (m.adjacency[f.at] ?? []).filter((n) => !enemyAt.has(n) && s.owner[n] === f.owner)
+  return (m.adjacency[f.at] ?? []).filter(
+    (n) =>
+      !enemyAt.has(n) &&
+      s.owner[n] === f.owner &&
+      // Ground already packed to what the terrain will hold is no way out either.
+      s.formations.filter((x) => x.at === n && x.id !== f.id).length <
+        STACK_LIMIT[m.province[n].terrain],
+  )
 }
 
 /** The same options, nearest to supply first — which way a formation actually falls back. */

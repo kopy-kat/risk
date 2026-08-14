@@ -325,10 +325,11 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
 
     if (at(s, target).length === 0 || at(s, target).every((f) => f.owner === me)) {
       s.owner[target] = me
+      const room = STACK_LIMIT[m.province[target].terrain] - at(s, target).length
       const advancing = committed
-        .filter((f) => f.strength > 0)
+        .filter((f) => f.strength > 0 && f.at !== target)
         .sort((a, b) => b.cohesion - a.cohesion)
-        .slice(0, STACK_LIMIT[m.province[target].terrain])
+        .slice(0, Math.max(0, room))
       for (const f of advancing) {
         f.at = target
         f.dug = 0
