@@ -27,6 +27,12 @@ export interface Doctrine {
   objectivePull: number
   /** tolerance for standing where supply is already strained */
   overreach: number
+  /**
+   * Appetite for hitting what has outrun its own supply. This is what makes a
+   * defensive doctrine something other than passivity: yielding ground is only a
+   * plan if you take it back from an enemy who can no longer hold it.
+   */
+  counterattack: number
 }
 
 export const DOCTRINES: Doctrine[] = [
@@ -39,6 +45,7 @@ export const DOCTRINES: Doctrine[] = [
     refitBelow: 35,
     objectivePull: 0.6,
     overreach: 0.2,
+    counterattack: 0.3,
   },
   {
     key: 'maneuver',
@@ -49,16 +56,18 @@ export const DOCTRINES: Doctrine[] = [
     refitBelow: 30,
     objectivePull: 1,
     overreach: 0.5,
+    counterattack: 0.6,
   },
   {
     key: 'elastic',
     name: 'Elastic Defence',
     blurb: 'Yields ground to keep formations whole, then counterattacks what has outrun its supply.',
-    attackRatio: 1.7,
+    attackRatio: 1.3,
     encirclement: 0.9,
     refitBelow: 55,
-    objectivePull: 0.3,
+    objectivePull: 0.45,
     overreach: 0,
+    counterattack: 1.8,
   },
 ]
 
@@ -98,7 +107,17 @@ function chokePoints(m: GameMap, s: KesselState, me: PlayerId): Map<ProvinceId, 
   return out
 }
 
-function decide(doctrine: Doctrine, s: KesselState, me: PlayerId, rand: () => number): Move {
+/**
+ * The policy itself, for any settings — not just the three named ones. This is what
+ * the exploitability search plays: it hill-climbs these parameters looking for a
+ * setting the best doctrine has no answer to.
+ */
+export function decideFor(
+  doctrine: Doctrine,
+  s: KesselState,
+  me: PlayerId,
+  rand: () => number,
+): Move {
   if (s.phase === 'terms') return termsReply(s, me)
 
   if (s.sides[me].will <= WILL_FLOOR) return { type: 'offerTerms' }
@@ -160,7 +179,14 @@ function orderFor(
       if (ratio < d.attackRatio) continue
 
       const trapped = defenders.filter((x) => retreatOptions(m, s, x).length === 0).length
-      const score = ratio + provinceValue(m, n) * 0.4 + trapped * 4 * d.encirclement
+      // What the enemy's supply was when they last drew it — which is what you can
+      // see of them, and the moment a counterattack is aimed at.
+      const overextended = defenders.reduce((t, x) => t + (3 - x.supply), 0)
+      const score =
+        ratio +
+        provinceValue(m, n) * 0.4 +
+        trapped * 4 * d.encirclement +
+        overextended * d.counterattack
       if (score > best.score) best = { order: { type: 'attack', to: n }, score }
     }
   }
@@ -202,5 +228,5 @@ export const KESSEL_BOTS: GameBot<KesselState, Move>[] = DOCTRINES.map((d) => ({
   key: `kessel-${d.key}`,
   name: d.name,
   blurb: d.blurb,
-  decide: (state, me, rand) => decide(d, state, me, rand),
+  decide: (state, me, rand) => decideFor(d, state, me, rand),
 }))
