@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PlayerId } from '../engine/types'
 import { mapOf } from '../games/kessel/map'
 import type { Province, ProvinceId, Terrain } from '../games/kessel/map'
@@ -42,6 +43,25 @@ const STACK_DX = 4
  * unreachable — the map is fitted to the stage, and the stage runs under the bar.
  */
 const BAR_ROOM = 122
+
+/**
+ * Zoom range. Counters ride the same transform as the ground, so 4× is where a
+ * 27×18 counter stops being a counter and starts being a poster.
+ */
+const MIN_K = 1
+const MAX_K = 4
+const KEY_STEP = 1.35
+/** How far the pointer may travel between press and release and still be a click. */
+const DRAG_SLOP = 4
+/** How far the graticule and the off-map margin run past the plate, in map units. */
+const SHEET = 3000
+/**
+ * The plate edge, in map units at 1×: how far in the ground gives out, and the gap
+ * between the two rules. The zoom is of the map, not of the table it is lying on,
+ * so both are divided by the scale and the border reads the same at 1× and at 4×.
+ */
+const FADE = 32
+const RULE = 7
 
 const TEXTURE: Partial<Record<Terrain, string>> = {
   mountain: 'kt-mountain',
@@ -88,6 +108,13 @@ function seaPath(pa: [number, number], pb: [number, number]) {
   return `M ${x1},${y1} Q ${mx},${my} ${x2},${y2}`
 }
 
+/** A client point in the svg's own coordinates, which is where the view transform lives. */
+function atPointer(svg: SVGSVGElement, cx: number, cy: number) {
+  const inv = svg.getScreenCTM()?.inverse()
+  if (!inv) return null
+  return { x: cx * inv.a + cy * inv.c + inv.e, y: cx * inv.b + cy * inv.d + inv.f }
+}
+
 /** An order arrow, pulled back at both ends so it starts and finishes clear of the counters. */
 function orderPath(a: Province, b: Province) {
   const dx = b.cx - a.cx
@@ -103,10 +130,137 @@ export function KesselMap({
   const m = mapOf(state.mapId)
   const colorOf = (p: PlayerId) => playerColor(state.sides[p]?.color ?? p)
 
-  const viewBox = useMemo(() => {
+  /** The clipped plate: the ground the map actually covers, before the bar's room. */
+  const plate = useMemo(() => {
     const [x, y, w, h] = m.viewBox.split(/\s+/).map(Number)
-    return `${x} ${y} ${w} ${h + BAR_ROOM}`
+    return { x, y, w, h }
   }, [m])
+  const frameH = plate.h + BAR_ROOM
+  const viewBox = `${plate.x} ${plate.y} ${plate.w} ${frameH}`
+
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 })
+  const [panning, setPanning] = useState(false)
+  const fade = FADE / view.k
+  const rule = RULE / view.k
+
+  /**
+   * A zoom and a pan that between them can't show anything but the map: at 1×
+   * the fit is the only view, and no zoom can leave a strip of blank frame.
+   */
+  const fit = useCallback(
+    (k: number, x: number, y: number) => {
+      const kk = Math.min(MAX_K, Math.max(MIN_K, k))
+      return {
+        k: kk,
+        x: Math.min(plate.x * (1 - kk), Math.max((plate.x + plate.w) * (1 - kk), x)),
+        y: Math.min(plate.y * (1 - kk), Math.max((plate.y + frameH) * (1 - kk), y)),
+      }
+    },
+    [plate, frameH],
+  )
+
+  /** Zoom about a fixed point of the frame, so what is under it stays under it. */
+  const zoomAt = useCallback(
+    (step: number, ax: number, ay: number) =>
+      setView((v) => {
+        const k = Math.min(MAX_K, Math.max(MIN_K, v.k * step))
+        return fit(k, ax - (k / v.k) * (ax - v.x), ay - (k / v.k) * (ay - v.y))
+      }),
+    [fit],
+  )
+
+  // React attaches wheel handlers passively, and a trackpad pinch that isn't
+  // swallowed here zooms the browser instead of the map.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const at = atPointer(svg, e.clientX, e.clientY)
+      // a pinch arrives as ctrl+wheel, with a delta an order of magnitude smaller
+      if (at) zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0022)), at.x, at.y)
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [zoomAt])
+
+  const drag = useRef<
+    { id: number; sx: number; sy: number; x: number; y: number; unit: number; moved: boolean } | null
+  >(null)
+  /** Raised by a drag that actually moved, so the release doesn't also pick a province. */
+  const swallow = useRef(false)
+
+  const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    // one pointer drives the pan; a second finger must not take the map with it
+    if (e.button !== 0 || drag.current) return
+    swallow.current = false
+    drag.current = {
+      id: e.pointerId,
+      sx: e.clientX,
+      sy: e.clientY,
+      x: view.x,
+      y: view.y,
+      // screen pixels per map unit, so a pan follows the cursor exactly
+      unit: svgRef.current?.getScreenCTM()?.a || 1,
+      moved: false,
+    }
+  }
+
+  // On the window rather than the svg: a pan that runs off the map still has to
+  // follow the cursor, and still has to end when the button comes up.
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || e.pointerId !== d.id) return
+      const dx = e.clientX - d.sx
+      const dy = e.clientY - d.sy
+      if (!d.moved) {
+        if (Math.hypot(dx, dy) < DRAG_SLOP) return
+        d.moved = true
+        setPanning(true)
+      }
+      setView((v) => fit(v.k, d.x + dx / d.unit, d.y + dy / d.unit))
+    }
+    const onUp = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || e.pointerId !== d.id) return
+      swallow.current = d.moved
+      if (d.moved) setPanning(false)
+      drag.current = null
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [fit])
+
+  // The view is the map's own business, so its keys are bound here. None of them
+  // is one the bar wants: it takes Space, the arrows, H, R, ⌫, Esc and ⌘Z.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (e.key === '0') {
+        e.preventDefault()
+        setView({ k: 1, x: 0, y: 0 })
+        return
+      }
+      const step = e.key === '+' || e.key === '=' ? KEY_STEP
+        : e.key === '-' || e.key === '_' ? 1 / KEY_STEP
+        : 0
+      if (!step) return
+      e.preventDefault()
+      zoomAt(step, plate.x + plate.w / 2, plate.y + frameH / 2)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoomAt, plate, frameH])
 
   const sea = useMemo(
     () =>
@@ -215,7 +369,13 @@ export function KesselMap({
 
   return (
     <>
-      <svg className="map kmap" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
+      <svg
+        ref={svgRef}
+        className={`map kmap ${panning ? 'panning' : ''}`}
+        viewBox={viewBox}
+        preserveAspectRatio="xMidYMid meet"
+        onPointerDown={onPointerDown}
+      >
         <defs>
           <pattern id="kgrat" x={10} y={0} width={60} height={60} patternUnits="userSpaceOnUse">
             <path className="grat" d="M 30 0 V 60 M 0 30 H 60" />
@@ -276,88 +436,149 @@ export function KesselMap({
           >
             <path className="khead move" d="M0 1 L10 5 L0 9 L2.5 5 Z" />
           </marker>
+
+          {/* The sheet the plate is printed on — everything past the theatre. The
+              zoom is of the map, not of the table it is lying on, so the ruling
+              holds its weight and the margin looks the same at 1× and at 4×. */}
+          <pattern
+            id="k-off" width={8} height={8} patternUnits="userSpaceOnUse"
+            patternTransform={`rotate(45) scale(${1 / view.k})`}
+          >
+            <rect className="koff-bg" width={8} height={8} />
+            <path className="koff-line" d="M0 0 V8" />
+          </pattern>
+
+          {/* each vector points inwards, so stop 0 is always the plate edge */}
+          {([['w', 0, 0, 1, 0], ['e', 1, 0, 0, 0], ['n', 0, 0, 0, 1], ['s', 0, 1, 0, 0]] as const).map(
+            ([side, x1, y1, x2, y2]) => (
+              <linearGradient key={side} id={`k-fade-${side}`} x1={x1} y1={y1} x2={x2} y2={y2}>
+                <stop className="kfade-edge" offset="0" />
+                <stop className="kfade-in" offset="1" />
+              </linearGradient>
+            ),
+          )}
         </defs>
 
-        <rect x={-3000} y={-3000} width={7500} height={7500} fill="url(#kgrat)" pointerEvents="none" />
+        <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
+          <rect
+            x={-SHEET} y={-SHEET} width={SHEET * 2 + plate.w} height={SHEET * 2 + frameH}
+            fill="url(#kgrat)" pointerEvents="none"
+          />
 
-        {/* The real coastline under the provinces: the parts of Europe nobody is
-            fighting over still have to be there, or the front line floats. */}
-        <path className="kcoast" d={m.coast} />
+          {/* The real coastline under the provinces: the parts of Europe nobody is
+              fighting over still have to be there, or the front line floats. */}
+          <path className="kcoast" d={m.coast} />
 
-        <g className="sea-layer">
-          {sea.map((r) => <path key={r.key} className="searoute" d={r.d} />)}
-        </g>
+          <g className="sea-layer">
+            {sea.map((r) => <path key={r.key} className="searoute" d={r.d} />)}
+          </g>
 
-        <g>
-          {m.provinces.map((p) => (
-            <path
-              key={p.id}
-              className={`kterr ${state.owner[p.id] === undefined ? 'neutral' : 'owned'}`}
-              style={
-                state.owner[p.id] === undefined
-                  ? undefined
-                  : { ['--c' as string]: colorOf(state.owner[p.id]) }
-              }
-              d={p.d}
-              onClick={() => onPick(p.id)}
-              onMouseEnter={() => onHover(p.id)}
-              onMouseLeave={() => onHover(null)}
-            />
-          ))}
-        </g>
-
-        <g pointerEvents="none">{terrain}</g>
-        <g pointerEvents="none">{claimed}</g>
-
-        {/* Outlines are their own layer above every fill, so a stroke isn't
-            half-painted over by whichever neighbour draws next. */}
-        <g pointerEvents="none">
-          {m.provinces.map((p) => {
-            const kind = targets.get(p.id)
-            return (
+          <g>
+            {m.provinces.map((p) => (
               <path
                 key={p.id}
-                className={[
-                  'kedge',
-                  selectedAt === p.id ? 'sel' : '',
-                  kind === 'attack' ? 'attack' : kind ? 'target' : '',
-                  pockets.has(p.id) ? 'pocket' : '',
-                  hover === p.id ? 'hot' : '',
-                ].join(' ')}
+                className={`kterr ${state.owner[p.id] === undefined ? 'neutral' : 'owned'}`}
+                style={
+                  state.owner[p.id] === undefined
+                    ? undefined
+                    : { ['--c' as string]: colorOf(state.owner[p.id]) }
+                }
                 d={p.d}
+                onClick={() => !swallow.current && onPick(p.id)}
+                onMouseEnter={() => onHover(p.id)}
+                onMouseLeave={() => onHover(null)}
               />
-            )
-          })}
-        </g>
+            ))}
+          </g>
 
-        <g pointerEvents="none">{marks}</g>
+          <g pointerEvents="none">{terrain}</g>
+          <g pointerEvents="none">{claimed}</g>
 
-        <g pointerEvents="none">
-          {arrows.map((a) => (
+          {/* Outlines are their own layer above every fill, so a stroke isn't
+              half-painted over by whichever neighbour draws next. */}
+          <g pointerEvents="none">
+            {m.provinces.map((p) => {
+              const kind = targets.get(p.id)
+              return (
+                <path
+                  key={p.id}
+                  className={[
+                    'kedge',
+                    selectedAt === p.id ? 'sel' : '',
+                    kind === 'attack' ? 'attack' : kind ? 'target' : '',
+                    pockets.has(p.id) ? 'pocket' : '',
+                    hover === p.id ? 'hot' : '',
+                  ].join(' ')}
+                  d={p.d}
+                />
+              )
+            })}
+          </g>
+
+          <g pointerEvents="none">{marks}</g>
+
+          {/* The ground gives out before the neatline instead of meeting it at full
+              saturation — an ownership colour cut square is what read as a bug.
+              Above the ground and under the counters: a formation on the last
+              province is still a formation you have to be able to read. */}
+          <g pointerEvents="none">
+            <rect fill="url(#k-fade-w)" x={plate.x} y={plate.y} width={fade} height={plate.h} />
+            <rect fill="url(#k-fade-e)" x={plate.x + plate.w - fade} y={plate.y} width={fade} height={plate.h} />
+            <rect fill="url(#k-fade-n)" x={plate.x} y={plate.y} width={plate.w} height={fade} />
+            <rect fill="url(#k-fade-s)" x={plate.x} y={plate.y + plate.h - fade} width={plate.w} height={fade} />
+          </g>
+
+          <g pointerEvents="none">
+            {arrows.map((a) => (
+              <path
+                key={a.key}
+                className={`korder ${a.kind}`}
+                d={a.d}
+                markerEnd={`url(#k-head-${a.kind})`}
+              />
+            ))}
+          </g>
+
+          <g pointerEvents="none">
+            {[...garrison].map(([at, all]) =>
+              all.map((f, i) => (
+                <Counter
+                  key={f.id}
+                  f={f}
+                  x={m.province[at].cx + (i - (all.length - 1) / 2) * STACK_DX}
+                  y={m.province[at].cy + (i - (all.length - 1) / 2) * STACK_DY}
+                  color={colorOf(f.owner)}
+                  selected={f.id === selected}
+                  pending={f.owner === acting && !state.orders[f.id]}
+                  order={state.orders[f.id]}
+                />
+              )),
+            )}
+          </g>
+
+          {/* The theatre is a plate, not the world. The coastline is clipped to a
+              box, so the land is cut whichever way it is drawn — and an atlas cuts
+              geography at a neatline with the off-map sheet showing beyond it,
+              which is the difference between an edge and an unfinished render. */}
+          <g pointerEvents="none">
             <path
-              key={a.key}
-              className={`korder ${a.kind}`}
-              d={a.d}
-              markerEnd={`url(#k-head-${a.kind})`}
+              fillRule="evenodd"
+              fill="url(#k-off)"
+              d={
+                `M${-SHEET} ${-SHEET} h${SHEET * 2 + plate.w} v${SHEET * 2 + frameH} h${-(SHEET * 2 + plate.w)} Z` +
+                `M${plate.x} ${plate.y} h${plate.w} v${plate.h} h${-plate.w} Z`
+              }
             />
-          ))}
-        </g>
-
-        <g pointerEvents="none">
-          {[...garrison].map(([at, all]) =>
-            all.map((f, i) => (
-              <Counter
-                key={f.id}
-                f={f}
-                x={m.province[at].cx + (i - (all.length - 1) / 2) * STACK_DX}
-                y={m.province[at].cy + (i - (all.length - 1) / 2) * STACK_DY}
-                color={colorOf(f.owner)}
-                selected={f.id === selected}
-                pending={f.owner === acting && !state.orders[f.id]}
-                order={state.orders[f.id]}
-              />
-            )),
-          )}
+            <rect
+              className="kneat outer" vectorEffect="non-scaling-stroke"
+              x={plate.x - rule} y={plate.y - rule}
+              width={plate.w + 2 * rule} height={plate.h + 2 * rule}
+            />
+            <rect
+              className="kneat" vectorEffect="non-scaling-stroke"
+              x={plate.x} y={plate.y} width={plate.w} height={plate.h}
+            />
+          </g>
         </g>
       </svg>
 

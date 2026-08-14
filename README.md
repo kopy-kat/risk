@@ -204,6 +204,13 @@ attacks, anything else moves. `H` holds and digs in, `R` refits, `⌫` clears th
 order, `Esc` deselects, `⌘Z` undoes, and `Space` presses the one dark button —
 `Commit turn`, or `Offer terms` once your will is spent.
 
+**The map zooms.** Fifty-two counters over 142 provinces is crowded where it matters,
+so scroll or pinch to zoom about the pointer, drag to pan, `+` `−` to zoom about the
+middle and `0` to fit. It goes to 4×, and the counters grow with the ground rather
+than floating over it at a fixed size. Beyond the theatre the plate ends in a drawn
+neatline with the off-map sheet showing past it — the coastline is clipped to a
+lon/lat box, and that is where the box is.
+
 The map carries the things you can't play without:
 
 - **Supply, in four bands.** Supplied · strained · failing · cut off, on a strip down
