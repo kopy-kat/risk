@@ -21,6 +21,9 @@ import {
 import { describeRow, recapBetween } from './recap'
 import type { RecapRow } from './recap'
 import { newGameId, saveGame } from '../review/store'
+import { Coach } from './Coach'
+import type { Claim } from '../coach/claims'
+import { saveNote } from '../coach/store'
 
 const BOT_DELAY = { setup: 60, move: 260 }
 /** backstop so a misbehaving bot can't spin the skip button forever */
@@ -86,6 +89,10 @@ export function App() {
   const savedTurn = useRef(-1)
   /** the game being reviewed, or null while playing */
   const [reviewing, setReviewing] = useState<string | null>(null)
+  /** whether the commander's log has the keyboard */
+  const [logOpen, setLogOpen] = useState(false)
+  /** the turn the log has already been answered or waved away for */
+  const [logQuiet, setLogQuiet] = useState('')
 
   const start = useCallback((seats: SeatConfig[], mode: GameMode = 'classic') => {
     const s = Math.floor(Math.random() * 1e9)
@@ -102,6 +109,8 @@ export function App() {
     setAutoSetup(false)
     setRecap(null)
     setReviewing(null)
+    setLogOpen(false)
+    setLogQuiet('')
     wasBot.current = false
     checkpoint.current = null
   }, [])
@@ -267,6 +276,59 @@ export function App() {
   const me = game ? game.players[game.current] : null
   const isHuman = !!game && isHumanTurn(game)
 
+  /**
+   * Where this turn began.
+   *
+   * Assigned during render because it is derived from the board being rendered
+   * rather than from anything happening: undo restores the move count with the
+   * board, so the log's offer comes back exactly when the decision does. An
+   * effect would run a paint late and flicker the strip on every rewind.
+   */
+  const turnKey = game ? `${game.turn}:${game.current}` : ''
+  const turnStart = useRef({ key: '', moves: 0 })
+  if (game && turnStart.current.key !== turnKey)
+    turnStart.current = { key: turnKey, moves: game.moves.length }
+
+  /**
+   * The log is offered once a turn, before your first move, and never on a bot's
+   * turn — which is what keeps an all-bot game from recording anything.
+   */
+  const logOffer =
+    !!game &&
+    isHuman &&
+    game.phase !== 'setup' &&
+    game.phase !== 'gameOver' &&
+    game.moves.length === turnStart.current.moves &&
+    logQuiet !== turnKey
+
+  /**
+   * The log holds the keyboard only while it is on screen. Clicking the map plays
+   * a move, which withdraws the offer — and the keys have to come back with it,
+   * or they stay hostage to a strip that isn't there any more.
+   */
+  const logHasKeys = logOffer && logOpen
+
+  const closeLog = useCallback(() => { setLogOpen(false); setLogQuiet(turnKey) }, [turnKey])
+  useEffect(() => { setLogOpen(false) }, [turnKey])
+
+  const logTurn = useCallback(
+    (intent: string, claim: Claim | null, confidence: number) => {
+      if (!game) return
+      // an empty form is a dismissal, not a note
+      if (intent || claim)
+        saveNote({
+          gameId: recordId.current,
+          player: game.current,
+          turn: game.turn,
+          intent,
+          claim,
+          confidence,
+        })
+      closeLog()
+    },
+    [game, closeLog],
+  )
+
   const sel = useMemo<TerritoryId | null>(
     () => (game ? validSelection(game, selected) : null),
     [game, selected],
@@ -373,10 +435,21 @@ export function App() {
       if (e.key === 'Escape') {
         e.preventDefault()
         if (showSettings) setShowSettings(false)
+        // the log is only ever offered before your first move of the turn, when
+        // there is no selection for Esc to drop — so this takes nothing away
+        else if (logOffer) closeLog()
         else cancel()
         return
       }
       if (showSettings || !game || game.phase === 'gameOver') return
+      // an open log owns the keyboard; it stops its own keys, and this is what
+      // keeps the ones it doesn't name from acting on the board behind it
+      if (logHasKeys) return
+      if ((e.key === 'l' || e.key === 'L') && logOffer) {
+        e.preventDefault()
+        setLogOpen(true)
+        return
+      }
 
       // Space is the whole keyboard surface for acting: it presses whatever the
       // bar's dark button says. Enter used to do the same thing, which only made
@@ -407,7 +480,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [game, primary, cancel, showSettings, undo, isHuman, range])
+  }, [game, primary, cancel, showSettings, undo, isHuman, range, logOffer, logHasKeys, closeLog])
 
   if (reviewing) return <Review id={reviewing} onExit={() => setReviewing(null)} />
   if (!game) return <Setup onStart={start} onReview={setReviewing} />
@@ -506,7 +579,18 @@ export function App() {
           settingsOpen={showSettings}
           seed={seed}
           onCloseSettings={() => setShowSettings(false)}
-        />
+        >
+          {logOffer && (
+            <Coach
+              key={turnKey}
+              state={game}
+              open={logOpen}
+              onOpen={() => setLogOpen(true)}
+              onDismiss={closeLog}
+              onSave={logTurn}
+            />
+          )}
+        </Dock>
       </main>
 
       {game.phase === 'gameOver' && game.winner !== null && (

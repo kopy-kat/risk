@@ -29,7 +29,14 @@ import { reviewGame } from '../src/review/review'
 import { BOT_BY_KEY } from '../src/bots'
 import { stepBot } from '../src/bots/play'
 import { evalMove, rivalCount } from '../src/review/price'
-import type { Card, GameState } from '../src/engine/types'
+import { replay } from '../src/review/replay'
+import {
+  CONFIDENCE_STEPS, claimChip, describeClaim, offerClaims, resolveClaim, turnWindows, windowFor,
+} from '../src/coach/claims'
+import type { Claim, ClaimKind } from '../src/coach/claims'
+import { biasOf, brierOf, bucketsOf, driftOf, trendOf } from '../src/coach/calibration'
+import type { Scored } from '../src/coach/calibration'
+import type { Card, GameState, Move, PlayerId } from '../src/engine/types'
 
 let passed = 0
 const failures: string[] = []
@@ -917,6 +924,261 @@ for (const mode of ['capitals', 'supply'] as const) {
   eq(r.troops, s.troops, `${mode}: replay reproduces every troop count`)
   eq(r.rngState, s.rngState, `${mode}: the dice matched`)
   eq(r.winner, s.winner, `${mode}: replay reproduces the result`)
+}
+
+// ── the commander's log: claims settle from boards, never from the app ──
+{
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: 'easy' }, { name: 'C', bot: 'easy' }]
+  let base = createGame({ seats, seed: 909 })
+  while (base.phase === 'setup') base = applyMove(base, legalMoves(base)[0])
+
+  const AUS = TERRITORIES_IN.australia
+  const spare = TERRITORY_IDS.filter((t) => !AUS.includes(t))
+  const holder = (lost: TerritoryId | null) => (t: TerritoryId): PlayerId =>
+    t === lost ? 1 : AUS.includes(t) || t === spare[0] || t === spare[1] ? 0 : 1
+  const own = (lost: TerritoryId | null) =>
+    Object.fromEntries(TERRITORY_IDS.map((t) => [t, holder(lost)(t)])) as Record<TerritoryId, PlayerId>
+
+  /**
+   * A run of boards, hand-built: each frame carries the move that produced it,
+   * which is exactly the relationship `replay` gives real states. Constructed
+   * rather than played so the horizons land on known indices.
+   */
+  interface Frame { by: PlayerId; turn: number; move?: Move; owner?: Record<TerritoryId, PlayerId> }
+  const boards = (frames: Frame[]): GameState[] => {
+    const out: GameState[] = []
+    const moves: Move[] = []
+    let owner = base.owner
+    for (const f of frames) {
+      if (f.owner) owner = f.owner
+      if (f.move) moves.push(f.move)
+      out.push({ ...base, current: f.by, turn: f.turn, phase: 'deploy', owner, moves: [...moves] })
+    }
+    return out
+  }
+
+  const deploy: Move = { type: 'deploy', territory: AUS[0], count: 1 }
+  const hitMe = (to: TerritoryId): Move => ({ type: 'blitz', from: spare[3], to })
+  const script = (finalOwner: Record<TerritoryId, PlayerId>): Frame[] => [
+    { by: 0, turn: 1, owner: own(null) },
+    { by: 0, turn: 1, move: deploy },
+    { by: 1, turn: 1, move: { type: 'endTurn' } },
+    { by: 1, turn: 1, move: hitMe(AUS[1]) },
+    { by: 2, turn: 1, move: { type: 'endTurn' } },
+    { by: 2, turn: 1, move: { type: 'tradeCards', cards: [1, 2, 3] } },
+    { by: 0, turn: 2, move: { type: 'endTurn' }, owner: finalOwner },
+    { by: 0, turn: 2, move: deploy },
+    { by: 1, turn: 2, move: { type: 'endTurn' } },
+    { by: 1, turn: 2, move: hitMe(AUS[2]) },
+  ]
+
+  const broke = boards(script(own(AUS[0])))     // Australia lost before p0's next turn
+  const kept = boards(script(own(null)))        // Australia still whole
+
+  const ws = turnWindows(broke)
+  eq(ws.length, 5, 'every turn in the run gets a window, and initial placement gets none')
+  const w1 = windowFor(ws, 0, 1)!
+  eq(
+    { start: w1.start, handover: w1.handover, next: w1.next, ended: w1.ended, returned: w1.returned },
+    { start: 0, handover: 2, next: 6, ended: true, returned: true },
+    'a turn window runs from the turn start, through the handover, to the next turn',
+  )
+  const stillOut = windowFor(ws, 1, 2)!
+  ok(!stillOut.ended && !stillOut.returned, 'the turn the run stops inside has no horizon')
+
+  const aus: Claim = { kind: 'holdContinent', continent: 'australia' }
+  // Australia was intact at the handover and gone by the next turn: resolving at
+  // the wrong horizon is the failure this pins
+  eq(resolveClaim(aus, w1, broke), false, 'holding a continent is judged at the next turn, not the handover')
+  eq(resolveClaim(aus, windowFor(turnWindows(kept), 0, 1)!, kept), true, 'and true when it survives')
+
+  eq(
+    resolveClaim({ kind: 'territoriesAtLeast', n: AUS.length + 2 }, w1, broke),
+    true,
+    'ground held is judged at the end of the turn it was claimed for',
+  )
+  eq(
+    resolveClaim({ kind: 'territoriesAtLeast', n: AUS.length + 3 }, w1, broke),
+    false,
+    'and one territory short is a miss',
+  )
+
+  eq(resolveClaim({ kind: 'attackedBy', who: 1 }, w1, broke), true, 'an attack inside the window counts')
+  eq(resolveClaim({ kind: 'attackedBy', who: 2 }, w1, broke), false, "and another player's turn does not")
+  eq(resolveClaim({ kind: 'cashes', who: 2 }, w1, broke), true, 'a cash-in inside the window counts')
+  eq(resolveClaim({ kind: 'cashes', who: 1 }, w1, broke), false, 'and a player who never traded does not')
+
+  // p1 attacks again after p0's turn-1 horizon has passed — it belongs to turn 2
+  const w2 = windowFor(ws, 0, 2)!
+  eq(resolveClaim({ kind: 'attackedBy', who: 1 }, w2, broke), true, 'the later attack lands in the later window')
+  eq(
+    resolveClaim({ kind: 'cashes', who: 2 }, w2, broke),
+    null,
+    "a claim whose horizon the run never reaches stays unsettled rather than counting as wrong",
+  )
+  eq(resolveClaim(aus, w2, broke), null, 'and so does one about a next turn that never came')
+}
+
+// ── resolution is a function of the replay, so it survives being replayed ──
+{
+  const seats = [
+    { name: 'A', bot: 'colonel' },
+    { name: 'B', bot: 'general' },
+    { name: 'C', bot: 'colonel' },
+  ]
+  const rng = rngFrom(31337)
+  let s = createGame({ seats, seed: 5150 })
+  while (s.phase !== 'gameOver' && s.turn < 40)
+    s = stepBot(s, BOT_BY_KEY[s.players[s.current].bot!], () => rng.next())
+
+  const record: GameRecord = {
+    id: 'coach', schema: 1, rules: rulesFor(), seed: 5150, botSeed: 0, seats,
+    moves: s.moves, assisted: [], winner: s.winner, turns: s.turn,
+    finished: s.phase === 'gameOver', savedAt: 0,
+  }
+  const a = replay(record).states
+  const b = replay(record).states
+  ok(a.length > 20, `the game replayed, got ${a.length} boards`)
+  eq(
+    JSON.stringify(turnWindows(a)),
+    JSON.stringify(turnWindows(b)),
+    'two replays of one record agree about where every turn started and ended',
+  )
+
+  const mine = turnWindows(a).filter((w) => w.player === 0 && w.returned)
+  ok(mine.length > 3, `player 0 had turns with a horizon, got ${mine.length}`)
+
+  // A resolver that always answers the same thing would pass every stability
+  // check ever written, so a real game has to produce both answers.
+  const closed = turnWindows(a).filter((w) => w.returned)
+  for (const kind of ['attackedBy', 'cashes'] as const) {
+    const said = closed.flatMap((w) =>
+      seats.map((_, q) => q).filter((q) => q !== w.player)
+        .map((who) => resolveClaim({ kind, who }, w, a)),
+    )
+    ok(said.includes(true), `${kind} is true somewhere in a real game`)
+    ok(said.includes(false), `${kind} is false elsewhere`)
+  }
+  ok(
+    s.setsTraded > 0 &&
+      closed.filter((w) => resolveClaim({ kind: 'cashes', who: 1 }, w, a)).length <= s.setsTraded,
+    'no more cash-ins are found than the game actually had',
+  )
+  const w = mine[Math.floor(mine.length / 2)]
+  const claims: Claim[] = [
+    { kind: 'attackedBy', who: 1 },
+    { kind: 'cashes', who: 1 },
+    { kind: 'holdContinent', continent: 'australia' },
+    { kind: 'territoriesAtLeast', n: 14 },
+  ]
+  for (const c of claims)
+    eq(
+      resolveClaim(c, windowFor(turnWindows(b), 0, w.turn)!, b),
+      resolveClaim(c, w, a),
+      `${c.kind} settles the same way on a second replay`,
+    )
+
+  // A verdict must never flip as more of the game arrives — that is what makes a
+  // game abandoned mid-turn safe to score, and undo safe to use.
+  for (const c of claims) {
+    let settled: boolean | null = null
+    let flips = 0
+    let sawPending = false
+    for (let n = w.start + 2; n <= a.length; n++) {
+      const prefix = a.slice(0, n)
+      const pw = windowFor(turnWindows(prefix), 0, w.turn)
+      if (!pw) continue
+      const v = resolveClaim(c, pw, prefix)
+      if (v === null) { sawPending = true; continue }
+      if (settled === null) settled = v
+      else if (v !== settled) flips++
+    }
+    ok(flips === 0, `${c.kind} never changes its mind as the replay grows (${flips} flips)`)
+    eq(settled, resolveClaim(c, w, a), `${c.kind} on a prefix agrees with the whole game`)
+    ok(sawPending || settled !== null, `${c.kind} is either pending or settled, never absent`)
+  }
+}
+
+// ── the menu is generated from the board in front of you ──
+{
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: 'easy' }, { name: 'C', bot: 'easy' }]
+  let s = createGame({ seats, seed: 616 })
+  while (s.phase === 'setup') s = applyMove(s, legalMoves(s)[0])
+  const dead: GameState = {
+    ...s,
+    players: s.players.map((p) => (p.id === 2 ? { ...p, alive: false } : p)),
+    owner: Object.fromEntries(
+      TERRITORY_IDS.map((t) => [t, s.owner[t] === 2 ? 1 : s.owner[t]]),
+    ) as Record<TerritoryId, PlayerId>,
+  }
+  const menu = offerClaims(dead, 0)
+  ok(menu.length > 0 && menu.length <= 6, `the menu is short, got ${menu.length}`)
+  ok(
+    menu.every((c) => (c.kind === 'attackedBy' || c.kind === 'cashes' ? c.who !== 0 && dead.players[c.who].alive : true)),
+    'no claim is offered about yourself or a player who is out',
+  )
+  const ground = menu.find((c) => c.kind === 'territoriesAtLeast')
+  eq(
+    ground && ground.kind === 'territoriesAtLeast' ? ground.n : 0,
+    territoriesOf(dead, 0).length + 2,
+    'the ground claim asks for a push, not for standing still',
+  )
+  const name = (p: PlayerId) => dead.players[p].name
+  ok(
+    menu.every((c) => describeClaim(c, name).length > 12 && claimChip(c, name).length > 0),
+    'every offered claim has words for both the bar and the report',
+  )
+}
+
+// ── calibration: the report is arithmetic over settled claims ──
+{
+  const claimOf = (kind: ClaimKind): Claim =>
+    kind === 'attackedBy' ? { kind, who: 1 }
+      : kind === 'cashes' ? { kind, who: 1 }
+        : kind === 'holdContinent' ? { kind, continent: 'australia' }
+          : { kind, n: 14 }
+  const score = (
+    confidence: number, correct: boolean, kind: ClaimKind = 'attackedBy',
+    gameId = 'g1', when = 1,
+  ): Scored => ({ gameId, when, turn: 1, claim: claimOf(kind), confidence, correct, said: '' })
+
+  eq(brierOf([]), null, 'no settled claims is no score, not a zero')
+  eq(Number(brierOf([score(80, true)])!.toFixed(4)), 0.04, 'a confident hit scores (1 − .8)²')
+  eq(brierOf([score(50, false)]), 0.25, 'a coin flip called at 50% scores .25 either way')
+
+  const buckets = bucketsOf([score(80, true), score(80, false), score(50, true)])
+  eq(buckets.map((b) => [b.confidence, b.claims, b.correct]), [[50, 1, 1], [80, 2, 1]], 'claims bucket by stated confidence')
+  eq(buckets[1].gap, 30, 'the gap is what you said minus what happened')
+  eq(CONFIDENCE_STEPS, [50, 60, 70, 80, 90, 95], 'confidence is picked from fixed rungs')
+  ok(
+    buckets.every((b) => CONFIDENCE_STEPS.includes(b.confidence)),
+    'and the table has a row for those rungs and no others',
+  )
+
+  const over = biasOf([
+    score(80, true, 'attackedBy'), score(80, false, 'attackedBy'),
+    score(80, false, 'attackedBy'), score(80, false, 'attackedBy'),
+  ])
+  ok(!!over && over.kind === 'attackedBy' && over.gap > 0, 'a one-way gap is named')
+  ok(!!over && /never come/.test(over.sentence), `the sentence names the direction, got "${over?.sentence}"`)
+
+  const under = biasOf([
+    score(50, true, 'attackedBy'), score(50, true, 'attackedBy'),
+    score(50, true, 'attackedBy'), score(50, false, 'attackedBy'),
+  ])
+  ok(!!under && under.gap < 0 && /underestimate/.test(under.sentence), 'and so does the other direction')
+
+  eq(biasOf([score(90, false), score(90, false)]), null, 'two predictions are not a habit')
+  eq(biasOf([score(60, true), score(60, false), score(60, true)]), null, 'nor is a gap inside anyone\'s resolution')
+
+  const trend = trendOf([
+    score(90, false, 'attackedBy', 'g2', 200),
+    score(80, true, 'attackedBy', 'g1', 100),
+    score(80, true, 'attackedBy', 'g1', 100),
+  ])
+  eq(trend.map((t) => [t.gameId, t.claims]), [['g1', 2], ['g2', 1]], 'the trend runs oldest game first')
+  eq(driftOf(trend), 'slipping', 'and says which way it is running')
+  eq(driftOf(trend.slice(0, 1)), null, 'one game is not a trend')
 }
 
 console.log(`\n${passed} assertions passed`)

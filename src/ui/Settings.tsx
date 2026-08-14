@@ -7,6 +7,7 @@ const KEYS: [string, string][] = [
   ['Space', 'Press the highlighted button'],
   ['← →', 'Size the move · ⇧ for min / max'],
   ['⇧click', 'Deploy everything at once'],
+  ['L', "Commander's log — before your first move"],
   ['Esc', 'Deselect / close'],
   ['⌘Z', 'Undo — until you roll dice'],
 ]
