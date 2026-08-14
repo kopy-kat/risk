@@ -27,6 +27,12 @@ export interface DockProps {
   settingsOpen: boolean
   onCloseSettings(): void
   seed: number
+  /**
+   * Anything that hangs off the bar without being part of it — the commander's
+   * log. It floats clear of the row below, so the bar's footprint is untouched
+   * whether the strip is there or not.
+   */
+  children?: ReactNode
 }
 
 /**
@@ -89,12 +95,13 @@ function Amount({
  */
 export function Dock(props: DockProps) {
   const { state, primary, onShowSettings } = props
-  const { settingsOpen, onCloseSettings, seed } = props
+  const { settingsOpen, onCloseSettings, seed, children } = props
   const me = state.players[state.current]
   const slots = me.bot ? botSlots(state) : phaseSlots(props)
 
   return (
     <div className="dock">
+      {children}
       <Identity state={state} />
 
       <div className="mid">

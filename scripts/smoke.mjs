@@ -247,6 +247,98 @@ async function open(withHistory) {
   await page.close()
 }
 
+// ── E) the commander's log, and the bargain it makes with the keyboard ──
+// The whole design is that the strip is an offer rather than a step: the bar
+// keeps every key while the offer sits above it, and only takes them once you
+// open the log yourself. Nothing but a browser can check who owns a keypress.
+{
+  const page = await open(false)
+  await page.getByRole('button', { name: 'Begin deployment' }).click()
+  await page.getByRole('button', { name: /Auto-place rest/ }).click()
+  await page.waitForSelector('.dock .amount', { timeout: 60000 })
+  await page.waitForSelector('.coach.shut', { timeout: 60000 })
+
+  const amount = () => page.locator('.dock .amount .n').innerText()
+  const before = await amount()
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(80)
+  ok((await amount()) !== before, 'the arrows still size the deploy while the log is only offered')
+
+  await page.keyboard.press('l')
+  await page.waitForSelector('.coach.open', { timeout: 5000 })
+  ok(
+    await page.locator('.coach input').evaluate((el) => el === document.activeElement),
+    'opening the log puts the caret in the intent',
+  )
+  await page.keyboard.type('Take Australia and hold the Siam chokepoint.')
+  const held = await amount()
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(60)
+  ok((await amount()) === held, 'and then the arrows no longer reach the bar')
+
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(120)
+  const claim = () => page.locator('.coach .picks .pill.on').innerText()
+  const conf = () => page.locator('.coach .conf .pill.on').innerText()
+  const c0 = await claim()
+  const p0 = await conf()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(80)
+  ok((await claim()) !== c0, 'up and down pick the claim')
+  ok((await conf()) !== p0, 'left and right set the confidence')
+  ok(
+    await page.locator('.coach.open').evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return [...el.querySelectorAll('*')].every((c) => c.getBoundingClientRect().right <= box.right + 0.5)
+    }),
+    'nothing in the strip spills out of it',
+  )
+
+  // Space presses the one dark button in the bar, which right now is Log it
+  await page.keyboard.press(' ')
+  await page.waitForTimeout(150)
+  ok((await page.locator('.coach').count()) === 0, 'filing it puts the strip away')
+  const notes = await page.evaluate(() => JSON.parse(localStorage.getItem('risk.coach.v1') ?? '[]'))
+  ok(notes.length === 1, `the note reached storage, got ${notes.length}`)
+  ok(
+    notes[0]?.intent?.startsWith('Take Australia') && !!notes[0]?.claim && notes[0]?.confidence > 0,
+    'with the intent, the claim and the confidence',
+  )
+
+  const after = await amount()
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(80)
+  ok((await amount()) !== after, 'and the bar has its keys back')
+  await page.close()
+}
+
+// ── F) playing a move takes the log away, keys and all ─────────────
+// The offer withdraws on your first move of the turn whether or not the log was
+// open. If the keys didn't come back with it they'd be hostage to a strip that
+// isn't on screen — which is exactly the shape of a toll booth.
+{
+  const page = await open(false)
+  await page.getByRole('button', { name: 'Begin deployment' }).click()
+  await page.getByRole('button', { name: /Auto-place rest/ }).click()
+  await page.waitForSelector('.coach.shut', { timeout: 60000 })
+  await page.keyboard.press('l')
+  await page.waitForSelector('.coach.open', { timeout: 5000 })
+  await page.keyboard.type('Half a plan')
+
+  await page.locator('.terr.clickable').first().click()
+  await page.waitForTimeout(150)
+  ok((await page.locator('.coach').count()) === 0, 'a move withdraws the offer mid-sentence')
+  const amount = () => page.locator('.dock .amount .n').innerText()
+  const before = await amount()
+  await page.keyboard.press('ArrowRight')
+  await page.waitForTimeout(80)
+  ok((await amount()) !== before, 'and hands the keys straight back')
+  const notes = await page.evaluate(() => JSON.parse(localStorage.getItem('risk.coach.v1') ?? '[]'))
+  ok(notes.length === 0, `an abandoned sentence is not a note, got ${notes.length}`)
+  await page.close()
+}
+
 await browser.close()
 stop()
 

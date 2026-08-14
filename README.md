@@ -41,8 +41,9 @@ with an enemy rather than asking you — armies behind the lines do nothing.
 **One key does everything.** `Space` presses the one dark button in the bottom bar —
 confirm an occupation, end an attack, end a turn, skip the bots. `←` `→` size a move
 and `Shift`+`←` `→` take it to the minimum or the maximum. `Esc` deselects, `⌘Z`
-undoes, `Shift`+click deploys everything at once. That is the whole list; the button
-label carries its own hint, so nothing needs memorising.
+undoes, `Shift`+click deploys everything at once, and `L` opens the commander's log
+before your first move of a turn. That is the whole list; the button label carries its
+own hint, so nothing needs memorising.
 
 - **No sidebar.** All controls live in a floating bottom bar; the map gets the screen.
   The bar keeps one footprint for the whole game, so nothing you aim at moves when a
@@ -61,6 +62,7 @@ label carries its own hint, so nothing needs memorising.
 - **Review your games.** Finished games are stored locally as a seed and a move list,
   and played back with the bot's opinion of every move — see below. **Export** on the
   setup screen writes them all to a file, which `npm run study` reads.
+- **The commander's log** measures your judgement instead of correcting it — see below.
 
 ## Bots
 
@@ -153,6 +155,36 @@ export const myBot: Bot = {
 Add it to `BOTS` in `src/bots/index.ts` (weakest first) and it appears as a difficulty
 rung in setup; add it to `BENCH_LADDER` instead to have it ranked without offering it to
 anyone. Then `npm run bench -- mine general 300`.
+
+## The commander's log
+
+The reviewer tells you which move was better. That is a different thing from knowing
+*why* you chose the other one — and most of what improves strategic judgement is
+noticing that your reads of the opponent are wrong in a consistent direction. So the
+log measures calibration and never gives advice.
+
+Before your first move of a turn the bar offers a strip. It is an offer, not a step:
+the bar underneath keeps every key, and playing your first move takes the strip away.
+`L` opens it, `⏎` moves from the intent to the prediction and then files it, `Esc`
+puts it away. Once open it owns the keyboard — `↑` `↓` pick the claim, `←` `→` set the
+confidence — the same bargain the seat-name fields make in setup.
+
+- **Intent** — one line of free text. *"Take Australia and hold the Siam chokepoint."*
+- **Prediction** — one claim from a menu generated off the live board (hold a
+  continent, be attacked by a named player, end the turn on N territories, watch
+  someone cash), plus a confidence from 50/60/70/80/90/95%.
+
+Claims settle against the replayed boards and nothing else, so a verdict is stable
+under undo and identical every time the game is replayed — and an unfinished horizon
+stays unsettled rather than counting as wrong. **Calibration** in the review screen
+buckets your claims by stated confidence against how often they were right, scores the
+lot with a [Brier score](https://en.wikipedia.org/wiki/Brier_score), names the single
+largest one-way bias in a sentence, and lists each turn's intent against what the board
+actually did that turn.
+
+Notes live under their own `localStorage` key, keyed by game and turn, so a game record
+stays a seed and a move list and replays whether or not anything was written down. A
+game with no human seat logs nothing.
 
 ## Development
 
