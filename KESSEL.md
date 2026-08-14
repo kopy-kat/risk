@@ -168,3 +168,9 @@ interval is archived to `data/kessel-exploiters.json` and seeds the next search.
 The number it prints is **exploitability**, and on an invented game it is a statement
 about the rules rather than the bot: a large edge found cheaply means the design has a
 dominant line and needs changing.
+
+At six generations of eight candidates, two independent searches find nothing that
+beats the strongest doctrine by more than the confirmation interval. That is a weak
+statement — the budget is small and the interval is ±6 points — but it is the only
+kind of evidence an invented design can have, and it is the number to re-run after
+every rules change.
