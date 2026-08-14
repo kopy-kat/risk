@@ -4,6 +4,10 @@ Risk for a laptop: the classic 42-territory board, driven from the keyboard, aga
 bots that actually play well. 2–6 seats, any mix of humans and bots, no accounts and
 no server — it's a static page that runs entirely in the browser.
 
+Two games share the shell. Setup picks between **Risk** and **Kessel**, an operational
+wargame on a 142-province map of Europe where formations are pushed back by combat and
+destroyed only when they cannot retreat — see [Kessel](#kessel) below.
+
 ```bash
 npm install
 npm run dev        # then open the URL it prints
@@ -186,6 +190,47 @@ Notes live under their own `localStorage` key, keyed by game and turn, so a game
 stays a seed and a move list and replays whether or not anything was written down. A
 game with no human seat logs nothing.
 
+## Kessel
+
+The second game, picked in setup: operational war in Europe over ~140 provinces, two
+sides, 26 formations each. **A formation beaten with a line of retreat is pushed back
+at full strength; beaten without one it surrenders.** Encirclement kills, combat only
+pushes — everything else exists to make that rule bite. Rules, map generation and the
+design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine.
+
+A turn is orders, then one resolve. Select a formation — click it, or `←` `→` to cycle
+through the ones still without an order — then click an adjacent province: enemy-held
+attacks, anything else moves. `H` holds and digs in, `R` refits, `⌫` clears the staged
+order, `Esc` deselects, `⌘Z` undoes, and `Space` presses the one dark button —
+`Commit turn`, or `Offer terms` once your will is spent.
+
+The map carries the things you can't play without:
+
+- **Supply, in four bands.** Supplied · strained · failing · cut off, on a strip down
+  each counter, with the key above the bar. Anything short of full supply cannot start
+  an attack — that is the culminating point, and it is what a strained counter's broken
+  outline means. A cut-off counter is hatched and struck through; it is losing strength
+  every turn.
+- **Pockets.** A province whose garrison has nowhere to retreat is ringed in red,
+  measured against the board *this turn's staged moves* would produce — so a ring you
+  are about to close counts before you press the button.
+- **The odds, before you commit.** Staging or hovering an attack prices it in the bar:
+  the force ratio, how many of your formations the border's frontage actually admits,
+  and whether the defender has anywhere to fall back to.
+- **Depots** (capacity as pips), **objective values** (a diamond), and each side's
+  **war aims** (the diamond filled in that side's colour, the province hatched to
+  match). Aims are what the peace is scored on.
+
+Both sides' **will** sits in the bar against the threshold below which a side can only
+ask for terms. Take the terms and the war ends on the line as it stands, scored against
+what each side said it wanted — so you can win a war you did not conquer.
+
+Three doctrines rather than difficulty rungs: **Attrition**, **Maneuver** and **Elastic
+Defence** are one policy at different settings — how much it pays to close a ring rather
+than force a front, how far it will outrun its supply, when it pulls a formation out to
+refit. The review screen and the commander's log are Risk-only, so a Kessel game is not
+recorded.
+
 ## Development
 
 The rules live in `src/engine` as pure functions — no React, no dependencies.
@@ -196,6 +241,7 @@ built on.
 | command | what it does |
 | --- | --- |
 | `npm test` | assertions over the rules (cards, combat, reinforcement, placement) |
+| `npm run test:kessel` | Kessel's rules — supply, encirclement, retreat, the settled peace |
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
 | `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
