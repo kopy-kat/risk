@@ -11,6 +11,7 @@ import { stepBot } from '../bots/play'
 import { MapView } from './MapView'
 import { Dock } from './Dock'
 import type { PrimaryAction } from './Dock'
+import { KesselGame } from './KesselGame'
 import { Setup } from './Setup'
 import { Review } from './Review'
 import { playerColor } from './colors'
@@ -89,6 +90,12 @@ export function App() {
   const savedTurn = useRef(-1)
   /** the game being reviewed, or null while playing */
   const [reviewing, setReviewing] = useState<string | null>(null)
+  /**
+   * A Kessel game, which shares nothing with Risk but the shell — different
+   * rules, different map, different bar. Only the seats cross over, so it owns
+   * its own state rather than trying to be a phase of this one.
+   */
+  const [kesselSeats, setKesselSeats] = useState<SeatConfig[] | null>(null)
   /** whether the commander's log has the keyboard */
   const [logOpen, setLogOpen] = useState(false)
   /** the turn the log has already been answered or waved away for */
@@ -481,8 +488,15 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [game, primary, cancel, showSettings, undo, isHuman, range, logOffer, logHasKeys, closeLog])
 
+  if (kesselSeats) return <KesselGame seats={kesselSeats} onExit={() => setKesselSeats(null)} />
   if (reviewing) return <Review id={reviewing} onExit={() => setReviewing(null)} />
-  if (!game) return <Setup onStart={start} onReview={setReviewing} />
+  if (!game)
+    return (
+      <Setup
+        onStart={(seats, picked) => (picked === 'kessel' ? setKesselSeats(seats) : start(seats))}
+        onReview={setReviewing}
+      />
+    )
 
   const phaseIndex = { deploy: 0, attack: 1, occupy: 1, fortify: 2, setup: 0, gameOver: 2 }[game.phase]
   // Only dim during initial placement. Once the game is running you need to read

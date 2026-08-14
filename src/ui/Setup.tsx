@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { BOTS, DEFAULT_BOT } from '../bots'
 import type { SeatConfig } from '../engine/game'
+import { DEFAULT_GAME, GAMES, GAME_BY_KEY } from '../games'
 import { deleteGame, isReplayable, listGames } from '../review/store'
 import type { GameRecord } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[]): void
+  onStart(seats: SeatConfig[], game: string): void
   onReview(id: string): void
 }
 
@@ -16,13 +16,40 @@ interface Seat {
   isBot: boolean
 }
 
+/**
+ * How many sides each game seats. Risk is a table; Kessel is a war between two,
+ * and its `createGame` refuses anything else — so the picker has to know before
+ * the engine gets the chance to say no.
+ */
+const SEAT_COUNTS: Record<string, number[]> = {
+  risk: [2, 3, 4, 5, 6],
+  kessel: [2],
+}
+
+/** The middle rung, the way Risk's General is a fair default and Marshal is opt-in. */
+const defaultBot = (game: string) => {
+  const bots = GAME_BY_KEY[game].bots
+  return bots[Math.min(1, bots.length - 1)].key
+}
+
 export function Setup({ onStart, onReview }: Props) {
+  const [game, setGame] = useState(DEFAULT_GAME)
   const [count, setCount] = useState(4)
   const [past, setPast] = useState<GameRecord[]>(() => listGames())
-  const [difficulty, setDifficulty] = useState(DEFAULT_BOT)
+  const [difficulty, setDifficulty] = useState(() => defaultBot(DEFAULT_GAME))
   const [seats, setSeats] = useState<Seat[]>(
     PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
+
+  const def = GAME_BY_KEY[game]
+  const counts = SEAT_COUNTS[game] ?? [2]
+
+  const chooseGame = (key: string) => {
+    setGame(key)
+    setDifficulty(defaultBot(key))
+    const allowed = SEAT_COUNTS[key] ?? [2]
+    setCount((n) => (allowed.includes(n) ? n : allowed[allowed.length - 1]))
+  }
 
   const update = (i: number, patch: Partial<Seat>) =>
     setSeats((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
@@ -34,21 +61,39 @@ export function Setup({ onStart, onReview }: Props) {
   return (
     <div className="overlay">
       <div className="panel">
-        <h1>RISK<span>.</span></h1>
-        <div className="sub">World Domination</div>
+        <h1>{def.name.toUpperCase()}<span>.</span></h1>
 
-        <div className="field">
-          <span className="mono-label">Players</span>
-          <div className="count">
-            {[2, 3, 4, 5, 6].map((n) => (
-              <button key={n} className={n === count ? 'on' : ''} onClick={() => setCount(n)}>{n}</button>
-            ))}
-          </div>
+        <div className="field gamepick">
+          <span className="mono-label">Game</span>
+          {GAMES.map((g) => (
+            <button
+              key={g.key}
+              className={`pickcard ${g.key === game ? 'on' : ''}`}
+              onClick={() => chooseGame(g.key)}
+            >
+              <span className="nm">{g.name}</span>
+              <span className="bl">{g.blurb}</span>
+            </button>
+          ))}
         </div>
 
+        {counts.length > 1 && (
+          <div className="field">
+            <span className="mono-label">Players</span>
+            <div className="count">
+              {counts.map((n) => (
+                <button key={n} className={n === count ? 'on' : ''} onClick={() => setCount(n)}>{n}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="field">
-          {/* order is drawn at kick-off, so this list is identity, not sequence */}
-          <span className="mono-label">Seats · turn order drawn at start</span>
+          {/* in Risk the order is drawn at kick-off, so the list is identity
+              rather than sequence; a two-sided war has no order to draw */}
+          <span className="mono-label">
+            {game === 'risk' ? 'Seats · turn order drawn at start' : 'Sides'}
+          </span>
           <div className="seats">
             {active.map((s, i) => (
               <div className="seat" key={i} style={{ ['--c' as string]: playerColor(i) }}>
@@ -70,13 +115,14 @@ export function Setup({ onStart, onReview }: Props) {
         {bots > 0 && (
           <div className="field">
             {/* one rung for every bot in the game — mixed tables read as a handicap match */}
-            <span className="mono-label">Difficulty</span>
+            <span className="mono-label">{game === 'risk' ? 'Difficulty' : 'Doctrine'}</span>
             <div className="tiers">
-              {BOTS.map((b) => (
+              {def.bots.map((b) => (
                 <button
                   key={b.key}
                   className={b.key === difficulty ? 'on' : ''}
                   onClick={() => setDifficulty(b.key)}
+                  title={b.blurb}
                 >
                   {b.name}
                 </button>
@@ -88,10 +134,17 @@ export function Setup({ onStart, onReview }: Props) {
         <button
           className="go"
           onClick={() =>
-            onStart(active.map((s) => ({ name: s.name.trim() || 'Player', bot: s.isBot ? difficulty : null })))
+            onStart(
+              active.map((s, i) => ({
+                name: s.name.trim() || 'Player',
+                bot: s.isBot ? difficulty : null,
+                color: i,
+              })),
+              game,
+            )
           }
         >
-          {humans === 0 ? 'Watch the bots' : 'Begin deployment'}
+          {humans === 0 ? 'Watch the bots' : game === 'risk' ? 'Begin deployment' : 'Take the field'}
         </button>
 
         {past.length > 0 && (
