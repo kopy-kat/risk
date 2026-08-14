@@ -47,6 +47,7 @@ const KESSEL_KEYS: [string, string][] = [
   ['⌫', 'Clear the staged order'],
   ['Esc', 'Deselect / close'],
   ['⌘Z', 'Undo — until the turn is committed'],
+  ['+ −', 'Zoom the map · scroll or drag it · 0 fits'],
 ]
 
 const TYPE_NAME: Record<Formation['type'], string> = {

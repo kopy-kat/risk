@@ -819,6 +819,20 @@ kbd {
    be there, or the front line floats in the sea. */
 .kcoast { fill: var(--paper-3); stroke: var(--coast); stroke-width: .5; opacity: .55; pointer-events: none; }
 
+/* 142 provinces don't fit one screenful of counters, so the map zooms and pans. */
+.kmap { cursor: grab; }
+.kmap.panning, .kmap.panning .kterr { cursor: grabbing; }
+
+/* Off the plate. The theatre is clipped to a lon/lat box, so the land is cut
+   whichever way it is drawn; the neatline and the sheet beyond it are what make
+   that a printed edge rather than an unfinished one. */
+.koff-bg { fill: var(--paper-2); }
+.koff-line { stroke: var(--coast); stroke-width: .9; opacity: .17; }
+.kneat { fill: none; stroke: var(--coast); stroke-width: 1.5; }
+.kneat.outer { stroke-width: .7; opacity: .5; }
+.kfade-edge { stop-color: var(--sea); stop-opacity: 1; }
+.kfade-in { stop-color: var(--sea); stop-opacity: 0; }
+
 .kterr {
   fill: var(--land); stroke: none; cursor: pointer;
   transition: fill .2s var(--ease);
