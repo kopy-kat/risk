@@ -91,15 +91,17 @@ for (let g = 0; g < GAMES; g++) {
       violations.push(`bot ${seat[v.current].key} threw: ${e instanceof Error ? e.message : String(e)}`)
       break
     }
-    const legal = kessel.legalMoves(s as never, v.current)
-    if (legal.length === 0) {
-      violations.push('the move generator ran empty while the war was on')
-      break
-    }
     try {
       s = kessel.apply(s as never, move as never) as KesselState
     } catch (e) {
-      violations.push(`illegal bot move: ${e instanceof Error ? e.message : String(e)}`)
+      // Enumerating is the expensive call now that a formation can be sent
+      // anywhere it can reach, so it is only paid when something has gone wrong.
+      const legal = kessel.legalMoves(s as never, v.current)
+      violations.push(
+        legal.length === 0
+          ? 'the move generator ran empty while the war was on'
+          : `illegal bot move: ${e instanceof Error ? e.message : String(e)}`,
+      )
       break
     }
     check(s, move.type)

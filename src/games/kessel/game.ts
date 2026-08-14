@@ -4,10 +4,21 @@ import type { GameView } from '../types'
 import { applyLoss, resolve } from './combat'
 import { STACK_LIMIT, frontage, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
+import { reachable, routeTo } from './movement'
 import { depthMap, retreatTargets, supplyStates } from './supply'
 import type { Formation, KesselState, Move, Order, Side, UnitType } from './types'
 
 export const RULES_VERSION = ['kessel1', 'wear100', 'frontage28', 'will25'].join('|')
+
+/**
+ * Provinces you can set in motion in one turn.
+ *
+ * A commander who can order every formation every turn is not choosing anything.
+ * The cost is per *province*, not per formation, so concentrating a push is
+ * cheaper than spreading it — which is the operational lesson, and the reason a
+ * solid manned line is not free.
+ */
+export const ACTIVATIONS = 7
 
 /** At or below this a side has no orders left to give and must ask for terms. */
 export const WILL_FLOOR = 25
@@ -167,6 +178,10 @@ export function applyMove(s0: KesselState, move: Move): KesselState {
       const f = s.formations.find((x) => x.id === move.formation)
       need(!!f && f.owner === me, 'not your formation')
       need(legalOrder(m, s, f as Formation, move.order), 'illegal order')
+      need(
+        activationsAfter(s, me, (f as Formation).at, move.order) <= ACTIVATIONS,
+        'no activations left this turn',
+      )
       s.orders[move.formation] = move.order
       break
     }
@@ -207,17 +222,31 @@ export function applyMove(s0: KesselState, move: Move): KesselState {
   return s
 }
 
+/** Provinces `p` has already set in motion this turn. Holding and refitting are free. */
+export function activationsUsed(s: KesselState, p: PlayerId): Set<ProvinceId> {
+  const out = new Set<ProvinceId>()
+  for (const f of s.formations) {
+    if (f.owner !== p) continue
+    const o = s.orders[f.id]
+    if (o && (o.type === 'move' || o.type === 'attack')) out.add(f.at)
+  }
+  return out
+}
+
+const activationsAfter = (s: KesselState, p: PlayerId, from: ProvinceId, order: Order): number => {
+  if (order.type !== 'move' && order.type !== 'attack') return activationsUsed(s, p).size
+  const after = activationsUsed(s, p)
+  after.add(from)
+  return after.size
+}
+
 function legalOrder(m: GameMap, s: KesselState, f: Formation, order: Order): boolean {
   switch (order.type) {
     case 'hold':
     case 'refit':
       return true
     case 'move':
-      return (
-        (m.adjacency[f.at] ?? []).includes(order.to) &&
-        !at(s, order.to).some((x) => x.owner !== f.owner) &&
-        at(s, order.to).length < STACK_LIMIT[m.province[order.to].terrain]
-      )
+      return reachable(m, s, f).cost[order.to] !== undefined
     case 'attack':
       // The culminating point, and the reason an offensive has a reach: anything
       // short of full supply can still hold the ground it stands on and can no
@@ -244,11 +273,13 @@ export function legalMoves(s: KesselState, p: PlayerId): Move[] {
   const m = mapOf(s.mapId)
   const out: Move[] = [{ type: 'commit' }]
 
+  const spent = activationsUsed(s, p)
   for (const f of s.formations) {
     if (f.owner !== p) continue
     const orders: Order[] = [{ type: 'hold' }, { type: 'refit' }]
-    for (const n of m.adjacency[f.at] ?? []) {
-      orders.push({ type: 'move', to: n }, { type: 'attack', to: n })
+    if (spent.size < ACTIVATIONS || spent.has(f.at)) {
+      for (const n of Object.keys(reachable(m, s, f).cost)) orders.push({ type: 'move', to: n })
+      for (const n of m.adjacency[f.at] ?? []) orders.push({ type: 'attack', to: n })
     }
     for (const order of orders) {
       if (legalOrder(m, s, f, order)) out.push({ type: 'order', formation: f.id, order })
@@ -276,10 +307,11 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
 
   for (const f of ordered('move')) {
     const order = s.orders[f.id] as { type: 'move'; to: ProvinceId }
-    if (!legalOrder(m, s, f, order)) continue
+    const reach = reachable(m, s, f)
+    if (reach.cost[order.to] === undefined) continue
+    for (const p of routeTo(reach, order.to)) s.owner[p] = me
     f.at = order.to
     f.dug = 0
-    s.owner[order.to] = me
   }
 
   const attacks = new Map<ProvinceId, Formation[]>()

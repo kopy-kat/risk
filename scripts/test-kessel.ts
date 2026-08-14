@@ -5,7 +5,8 @@
  * assertion here runs on a synthetic grid instead — a rule that only holds on one
  * arrangement of provinces isn't a rule.
  */
-import { applyMove, createGame, legalMoves, view } from '../src/games/kessel/game'
+import { ACTIVATIONS, activationsUsed, applyMove, createGame, legalMoves, view } from '../src/games/kessel/game'
+import { reachable } from '../src/games/kessel/movement'
 import { STACK_LIMIT, registerMap } from '../src/games/kessel/map'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
 import { depthMap, retreatOptions, retreatTargets, supplyStates } from '../src/games/kessel/supply'
@@ -324,6 +325,73 @@ function split(): Record<string, PlayerId> {
   )
 }
 
+// ── a formation goes as far as its legs, and stops on contact ───────
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const all: Record<string, PlayerId> = {}
+  for (const p of m.ids) all[p] = 0
+
+  const foot = corps(0, id(0, 1))
+  const horse = corps(0, id(0, 0), { type: 'recon' })
+  const s = stateOn(m.id, all, [foot, horse])
+
+  const footReach = reachable(m, s, foot).cost
+  const horseReach = reachable(m, s, horse).cost
+  eq(footReach[id(2, 1)], 2, 'infantry crosses two provinces of open ground')
+  ok(footReach[id(3, 1)] === undefined, 'and no further')
+  ok(horseReach[id(3, 0)] !== undefined, 'recon goes further on the same ground')
+
+  // An enemy anywhere near the route ends the march at first contact.
+  const blocked = stateOn(m.id, all, [foot, corps(1, id(2, 1))])
+  const stopped = reachable(m, blocked, foot).cost
+  ok(stopped[id(1, 1)] !== undefined, 'a march may enter the ground an enemy watches')
+  ok(stopped[id(1, 0)] !== undefined, 'and reach elsewhere freely')
+  ok(stopped[id(2, 0)] === undefined, 'but it ends there rather than passing through')
+}
+
+// ── a march takes the ground it crosses ─────────────────────────────
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const owner = split()
+  const rider = corps(0, id(3, 1), { type: 'recon' })
+  let g = stateOn(m.id, owner, [rider])
+  const far = id(5, 1)
+  ok(reachable(m, g, rider).cost[far] !== undefined, 'recon can ride deep into empty ground')
+
+  g = applyMove(g, { type: 'order', formation: rider.id, order: { type: 'move', to: far } })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.owner[id(4, 1)], 0, 'the ground it rode across changes hands, not just where it stopped')
+  eq(g.owner[far], 0, 'including where it ended')
+}
+
+// ── you cannot set every province in motion at once ─────────────────
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const all: Record<string, PlayerId> = {}
+  for (const p of m.ids) all[p] = 0
+  const spread = m.ids.slice(0, ACTIVATIONS + 3).map((p) => corps(0, p))
+  let g = stateOn(m.id, all, spread)
+
+  let ordered = 0
+  for (const f of spread) {
+    const to = (m.adjacency[f.at] ?? []).find((n) => reachable(m, g, f).cost[n] !== undefined)
+    if (!to) continue
+    try {
+      g = applyMove(g, { type: 'order', formation: f.id, order: { type: 'move', to } })
+      ordered++
+    } catch {
+      break
+    }
+  }
+  eq(ordered, ACTIVATIONS, 'the activation budget caps how many provinces can move in a turn')
+  eq(activationsUsed(g, 0).size, ACTIVATIONS, 'and it is counted by province, not by formation')
+
+  // Holding costs nothing, so a line can be manned without spending the budget.
+  const idle = spread[spread.length - 1]
+  g = applyMove(g, { type: 'order', formation: idle.id, order: { type: 'hold' } })
+  eq(activationsUsed(g, 0).size, ACTIVATIONS, 'holding is free')
+}
+
 // ── damage costs steps deterministically ────────────────────────────
 {
   const m = fixture({ [id(0, 1)]: { depot: 3 } })
@@ -361,13 +429,19 @@ function split(): Record<string, PlayerId> {
 
   let steps = 0
   let everStuck = false
+  let sinceCommit = 0
   while (g.phase !== 'gameOver' && steps < 60000) {
     const moves = legalMoves(g, g.current)
     if (moves.length === 0) {
       everStuck = true
       break
     }
-    g = applyMove(g, moves[Math.floor((steps * 2654435761) % moves.length)])
+    // Give orders for a while, then commit — a walk that picks uniformly commits
+    // once in a thousand now that a formation can be sent anywhere it can reach.
+    const commit = moves.find((mv) => mv.type === 'commit')
+    const pick = commit && sinceCommit > 20 ? commit : moves[Math.floor((steps * 2654435761) % moves.length)]
+    sinceCommit = pick.type === 'commit' ? 0 : sinceCommit + 1
+    g = applyMove(g, pick)
     steps++
   }
   ok(!everStuck, 'the move generator is never empty while the war is on')

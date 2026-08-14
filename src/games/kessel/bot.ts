@@ -1,9 +1,10 @@
 import type { PlayerId } from '../../engine/types'
 import type { GameBot } from '../types'
 import { attackValue, defendValue } from './combat'
-import { WILL_FLOOR } from './game'
+import { ACTIVATIONS, WILL_FLOOR, activationsUsed } from './game'
 import { STACK_LIMIT, frontage, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
+import { reachable } from './movement'
 import { retreatOptions, supplyStates } from './supply'
 import type { Formation, KesselState, Move, Order } from './types'
 
@@ -129,10 +130,21 @@ export function decideFor(
   // Supply is recomputed at turn start, but orders staged earlier in this same
   // turn move formations, so it is re-read here rather than trusted from state.
   const supply = supplyStates(m, s, me)
-  const f = pending[0]
-  const at = { ...f, supply: supply[f.id] ?? f.supply }
+  const spent = activationsUsed(s, me)
 
-  return { type: 'order', formation: f.id, order: orderFor(doctrine, m, s, me, at, rand) }
+  // The budget goes to the contact line first. Ordering formations in whatever
+  // sequence they happen to sit in the list spends it on rear areas and leaves
+  // the front standing still.
+  const inContact = (f: Formation) =>
+    (m.adjacency[f.at] ?? []).some((n) => s.formations.some((x) => x.at === n && x.owner !== me))
+  const f = [...pending].sort(
+    (a, b) => Number(inContact(b)) - Number(inContact(a)) || b.strength - a.strength,
+  )[0]
+
+  const at = { ...f, supply: supply[f.id] ?? f.supply }
+  const afford = spent.size < ACTIVATIONS || spent.has(f.at)
+
+  return { type: 'order', formation: f.id, order: orderFor(doctrine, m, s, me, at, rand, afford) }
 }
 
 function orderFor(
@@ -142,6 +154,7 @@ function orderFor(
   me: PlayerId,
   f: Formation,
   rand: () => number,
+  afford: boolean,
 ): Order {
   const neighbours = m.adjacency[f.at] ?? []
   const enemyAt = (p: ProvinceId) => s.formations.filter((x) => x.at === p && x.owner !== me)
@@ -153,6 +166,8 @@ function orderFor(
   }
 
   let best: { order: Order; score: number } = { order: { type: 'hold' }, score: dugInWorth(f) }
+  // Out of activations, the only orders left are the free ones.
+  if (!afford) return best.order
 
   if (f.supply >= 3) {
     for (const n of neighbours) {
@@ -194,7 +209,7 @@ function orderFor(
   const goals = s.sides[me].aims.filter((p) => s.owner[p] !== me)
   const pull = distanceTo(m, goals.length > 0 ? goals : m.ids.filter((p) => s.owner[p] !== me))
 
-  for (const n of neighbours) {
+  for (const n of Object.keys(reachable(m, s, f).cost)) {
     if (enemyAt(n).length > 0) continue
     if (friendlyAt(n).length >= STACK_LIMIT[m.province[n].terrain]) continue
 
