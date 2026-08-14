@@ -57,7 +57,31 @@ const stale = {
   id: 'stale-smoke',
 }
 
-const seeded = JSON.stringify([solo, hotseat, stale])
+// A war, for the other review screen. Seat 0 is recorded as human while a
+// doctrine played it, the same trick — and capped short, because a Kessel review
+// resolves a dozen alternative order sets five times for every turn.
+const { kessel } = await import('../src/games/kessel/index.ts')
+const { createGame: createWar } = await import('../src/games/kessel/game.ts')
+const { stepBot: stepWarBot } = await import('../src/games/kessel/play.ts')
+
+function war(seed, doctrine, turnCap = 24) {
+  const seats = [{ name: 'Crimson', bot: null }, { name: 'Azure', bot: `kessel-${doctrine}` }]
+  const rng = rngFrom((seed ^ 0x9e3779b9) >>> 0)
+  const bots = Object.fromEntries(kessel.bots.map((b) => [b.key, b]))
+  let s = createWar({ seats: [{ name: 'Crimson', bot: `kessel-${doctrine}` }, seats[1]], seed })
+  while (s.phase !== 'gameOver' && s.turn < turnCap) {
+    s = stepWarBot(s, bots[s.sides[s.current].bot], () => rng.next())
+  }
+  return {
+    id: `${seed}-war`, schema: 1, rules: kessel.rulesVersion, seed, botSeed: seed ^ 0x9e3779b9,
+    game: 'kessel', seats, moves: s.moves, assisted: [], winner: s.winner, turns: s.turn,
+    finished: s.phase === 'gameOver', savedAt: Date.now() - 30_000,
+  }
+}
+
+const kesselGame = war(20260901, 'attrition')
+
+const seeded = JSON.stringify([solo, hotseat, stale, kesselGame])
 
 // ── serve the build ────────────────────────────────────────────────
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT)], { stdio: 'ignore' })
@@ -369,6 +393,60 @@ async function open(withHistory) {
   ok((await amount()) !== before, 'and hands the keys straight back')
   const notes = await page.evaluate(() => JSON.parse(localStorage.getItem('risk.coach.v1') ?? '[]'))
   ok(notes.length === 0, `an abandoned sentence is not a note, got ${notes.length}`)
+  await page.close()
+}
+
+// ── G) a Kessel war opens its own review ───────────────────────────
+// The record's game tag decides which screen it opens, so this is the check that
+// the two do not cross: the war has to reach a screen that grades whole order
+// sets in steps, and the Risk records above have to be untouched by it.
+{
+  const page = await open(true)
+  await page.getByRole('button', { name: 'Kessel' }).click()
+  await page.waitForTimeout(200)
+  ok(
+    (await page.locator('.games .game').count()) === 1,
+    'the Kessel heading lists only the war',
+  )
+
+  await page.locator('.games .game .open').first().click()
+  await page.waitForSelector('.rev-bar', { timeout: 120000 })
+  await page.waitForTimeout(400)
+
+  ok((await page.locator('.kmap').count()) === 1, 'the war is replayed on the Kessel map')
+  const ticks = await page.locator('.rev-bar .tick').count()
+  ok(ticks > 5, `the tape has one tick per turn of orders, got ${ticks}`)
+  const units = await page.locator('.review .stat .u').allInnerTexts()
+  ok(
+    units.some((u) => /STEPS \/ TURN/i.test(u)) && units.some((u) => /VS EXPECTED/i.test(u)),
+    `loss and the resolution are reported separately, in steps — got ${units.join(' | ')}`,
+  )
+
+  await page.getByRole('button', { name: /Next mistake/ }).click()
+  await page.waitForTimeout(250)
+  const grade = await page.locator('.rev-panel .grade').innerText()
+  ok(/MISTAKE|BLUNDER/i.test(grade), `jumping lands on a mistake, got "${grade.split('\n')[0]}"`)
+  ok(
+    (await page.locator('.rev-panel .line.better').count()) === 1,
+    'a mistake shows the order set that would have been better',
+  )
+  ok(
+    (await page.locator('.rev-panel .fix').count()) > 0,
+    'and names something to change, with what changing it was worth',
+  )
+  const advice = await page.locator('.rev-panel .fix .v').first().innerText()
+  ok(advice.length > 30, `the advice is a sentence about the board, got "${advice}"`)
+
+  // the map draws the recommendation the way the live game draws staged orders
+  const better = await page.locator('.korder').count()
+  await page.locator('.rev-panel .line').first().click()
+  await page.waitForTimeout(200)
+  const played = await page.locator('.korder').count()
+  ok(better !== played || better > 0, 'both order sets are drawn on the map')
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(250)
+  ok((await page.locator('.panel h1').count()) > 0, 'escape returns to the setup screen')
   await page.close()
 }
 

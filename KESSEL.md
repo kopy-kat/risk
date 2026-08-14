@@ -156,6 +156,62 @@ third longer than either pairing with Maneuver.
 `npm run sim:kessel` is the soak — bot games with invariants checked after every move,
 for the states nobody thought to write an assertion for.
 
+## Review
+
+The unit of judgement is a **turn**, not a move. You stage orders for up to 26 formations
+and press one button, so the thing you chose is the whole order set, and grading it a
+formation at a time would report a concentrated assault as three mediocre attacks and an
+encirclement as four moves that achieved nothing.
+
+An order set is priced against whole alternatives: what each of the three doctrines would
+have ordered from that board via `decideFor`, and the player's own orders with one thing
+changed. Each candidate goes through the engine five times under different generator
+states and is averaged, on the same seeds for every candidate so the comparison is paired.
+Five, because the ±15% on the cohesion bill is usually worth a fortieth of a step and
+occasionally decides a wear threshold or a surrender — a single resolution prices the
+roll rather than the plan. **Loss** is the gap to the best candidate, in steps; **luck** is
+what the resolution that actually happened did against that average, and it is the only
+place the real outcome is read.
+
+`src/games/kessel/evaluate.ts` is the position score. War aims dominate — a side's six
+aims are worth more than twice its army, which is what makes a war you did not conquer
+winnable — over ground held, force discounted by supply, cohesion, readiness,
+entrenchment, will, and a debit for formations at or near a pocket. Two of those weights
+were wrong in ways worth recording, because both made the reviewer recommend the opposite
+of the game's thesis:
+
+- **Ground and approach have to be scored, not just objectives.** Four fifths of the map
+  scores nothing at the peace and aims are a step function, so without a per-province term
+  and a distance-to-objective term an army that spent the war at home priced the same as
+  one that fought to the edge of everything it wanted.
+- **A ring is only worth what it can beat.** Charging the whole corps against any formation
+  that loses its last road flags the entire front every turn, makes withdrawing it look
+  free — at one ply the enemy has not walked into the gap yet — and prices the pincer that
+  closes a ring as a blunder. It scales with how close the formation is to being pushed.
+
+The scoring is the smaller half. Every named fault comes with the player's own orders with
+that one thing changed, priced on the same seeds, so *"the corps in Basel had one way out —
+Zurich — and Freiburg could have stood in it"* carries a number that is a measured
+counterfactual rather than a share of the turn's loss. Seven of them: thin odds,
+the culminating point, strained and idle, the pocket left open, standing with no way back,
+dispersal, and formations left without orders at all — which cost you the entrenchment an
+unordered formation never digs.
+
+`npm run review-check:kessel` is the check that this measures skill rather than noise. The
+headline pairing is Maneuver against a commander who fights hard and badly, because every
+doctrine in the ladder is competent and what separates them takes a war to show, while
+what a reviewer exists to catch is a mistake inside a turn. Maneuver wins those wars and
+gives up about half as much per turn, resolved well outside the paired error bar. Over
+twenty thousand turns luck averages to within a hundredth of a step of nothing while loss
+averages well above it, which is the property that keeps the two from contaminating each
+other.
+
+Where it is weak is worth saying, and the check prints it rather than hiding it: **loss is
+the gap to the best available alternative, so it measures how well a side used the options
+in front of it.** Elastic Defence holds, refits and declines to advance, and comes out
+with less to give up per turn than Attrition, which wins those wars. A doctrine that keeps
+its options closed is not something a per-turn measure can convict.
+
 ## Fog
 
 Not built. Staged cheapest-first when it is, because the expensive part of fog is

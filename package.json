@@ -14,6 +14,7 @@
     "gen-map": "node scripts/gen-map.mjs",
     "test": "tsx scripts/test.ts",
     "test:kessel": "tsx scripts/test-kessel.ts",
+    "test:kessel-review": "tsx scripts/test-kessel-review.ts",
     "sim:kessel": "tsx scripts/sim-kessel.ts",
     "bench:kessel": "tsx scripts/bench-kessel.ts",
     "bench": "tsx scripts/bench.ts",
@@ -23,6 +24,7 @@
     "fit-eval": "tsx scripts/fit-eval.ts",
     "study": "tsx scripts/study.ts",
     "review-check": "tsx scripts/review-check.ts",
+    "review-check:kessel": "tsx scripts/review-check-kessel.ts",
     "smoke": "tsx scripts/smoke.mjs"
   },
   "dependencies": {

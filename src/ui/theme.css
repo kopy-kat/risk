@@ -576,6 +576,20 @@ kbd {
 
 .rev-panel .note { font-size: 10.5px; line-height: 1.5; color: var(--ink-2); }
 .rev-panel .note.idle { color: var(--ink-3); }
+
+/* One line per thing worth changing, each with what changing only that was
+   measured to be worth. The number leads because it is what decides whether the
+   sentence beside it is worth reading. */
+.rev-panel .fixes {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 8px; border-top: 1px solid var(--rule);
+}
+.rev-panel .fix { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: baseline; }
+.rev-panel .fix .n {
+  font-family: 'Instrument Serif', serif; font-size: 13px; color: var(--accent);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.rev-panel .fix .v { font-size: 10.5px; line-height: 1.45; color: var(--ink-2); }
 .rev-panel .luck {
   font-size: 10px; line-height: 1.45; padding-top: 7px; border-top: 1px solid var(--rule);
 }

@@ -235,8 +235,33 @@ what each side said it wanted — so you can win a war you did not conquer.
 Three doctrines rather than difficulty rungs: **Attrition**, **Maneuver** and **Elastic
 Defence** are one policy at different settings — how much it pays to close a ring rather
 than force a front, how far it will outrun its supply, when it pulls a formation out to
-refit. The review screen and the commander's log are Risk-only, so a Kessel game is not
-recorded.
+refit.
+
+### Reviewing a war
+
+Wars are stored and reviewed like Risk games, and the screen is the same one — but the
+unit of judgement is different. You stage orders for twenty-six formations and press one
+button, so **the decision is the whole turn**, and a turn is priced against whole
+alternatives: what each doctrine would have ordered from that board, and your own orders
+with one thing changed. Each candidate is resolved through the engine five times under
+different generator states and averaged, because the ±15% on the cohesion bill decides a
+step loss or a surrender often enough to price the roll instead of the plan. **Loss** is
+the gap to the best alternative, in *steps*; **luck** is what the one resolution that
+happened did against that average. Neither can reach the other.
+
+The one-change alternatives are what makes it advice. Each names a fault and carries what
+fixing only that was measured to be worth — *"The corps in Basel had one way out — Zurich
+— and Freiburg could have stood in it."* Counted across the war they become the habits
+panel: *leaving the last way out open, 4× −70*. The faults are
+attacking under the odds an assault has to clear, advancing past your own supply, leaving
+a formation strained and idle, leaving an enemy's last way out open, standing where you
+cannot fall back, attacking in too many places at once, and leaving formations without
+orders at all — which an unordered formation pays for by not even digging in.
+
+`npm run review-check:kessel` is the check that this measures skill rather than noise,
+and `npm run test:kessel-review` the one that pins the properties it rests on.
+[`KESSEL.md`](KESSEL.md) has the position evaluation, the numbers and where it is still
+weak. The commander's log and the calibration tab stay Risk-only.
 
 ## Development
 
@@ -249,12 +274,17 @@ built on.
 | --- | --- |
 | `npm test` | assertions over the rules (cards, combat, reinforcement, placement) |
 | `npm run test:kessel` | Kessel's rules — supply, encirclement, retreat, the settled peace |
+| `npm run test:kessel-review` | the Kessel reviewer's arithmetic: loss floored and blind to the roll, luck averaging to nothing |
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
+| `npm run sim:kessel` | the same soak for Kessel |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
+| `npm run bench:kessel` | the same benchmark for the three doctrines |
 | `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
+| `npm run exploit:kessel` | the same search over Kessel's doctrine space |
 | `npm run fit-eval` | fits the evaluation's weights to outcomes over a mixed population of strategies |
 | `npm run study` | replays exported games and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
+| `npm run review-check:kessel` | the same question for Kessel, against a commander who fights hard and badly |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
 | `npm run gen-map` | builds `data/maps/europe.json` — province shapes, adjacency and label anchors — from seed points and the coastline |
 | `npm run typecheck` | `tsc --noEmit` |
