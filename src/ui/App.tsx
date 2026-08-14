@@ -488,8 +488,15 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [game, primary, cancel, showSettings, undo, isHuman, range, logOffer, logHasKeys, closeLog])
 
-  if (kesselSeats) return <KesselGame seats={kesselSeats} onExit={() => setKesselSeats(null)} />
   if (reviewing) return <Review id={reviewing} onExit={() => setReviewing(null)} />
+  if (kesselSeats)
+    return (
+      <KesselGame
+        seats={kesselSeats}
+        onExit={() => setKesselSeats(null)}
+        onReview={(id) => { setKesselSeats(null); setReviewing(id) }}
+      />
+    )
   if (!game)
     return (
       <Setup

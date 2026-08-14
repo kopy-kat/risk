@@ -22,6 +22,8 @@ const BOT_MOVE_CAP = 20_000
 interface Props {
   seats: SeatConfig[]
   onExit(): void
+  /** open the review for the war just played, by its record id */
+  onReview(id: string): void
 }
 
 const botFor = (key: string | null) => (key ? kessel.bots.find((b) => b.key === key) : undefined)
@@ -71,7 +73,7 @@ const aimReport = (m: GameMap, s: KesselState, p: PlayerId) => {
   return { aims, total, got, share: total === 0 ? 0 : got / total }
 }
 
-export function KesselGame({ seats, onExit }: Props) {
+export function KesselGame({ seats, onExit, onReview }: Props) {
   const [seed] = useState(() => Math.floor(Math.random() * 1e9))
   const recordId = useRef(newGameId(Math.floor(Math.random() * 1e9)))
   const [state, setState] = useState<KesselState>(() => createGame({ seats, seed }))
@@ -453,7 +455,14 @@ export function KesselGame({ seats, onExit }: Props) {
               })}
             </div>
 
-            <button className="go" onClick={onExit}>New game</button>
+            <div className="endgame-actions">
+              {state.sides.some((x) => !x.bot) && (
+                <button className="btn ghost" onClick={() => onReview(recordId.current)}>
+                  Review this war
+                </button>
+              )}
+              <button className="go" onClick={onExit}>New game</button>
+            </div>
           </div>
         </div>
       )}
