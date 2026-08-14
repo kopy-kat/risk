@@ -666,7 +666,14 @@ kbd {
 .coach:focus { outline: none; }
 
 /* closed: one quiet line that costs a turn nothing */
-.coach.shut { flex-direction: row; align-items: center; gap: 12px; padding: 7px 17px; }
+.coach.shut {
+  flex-direction: row; align-items: center; gap: 12px; padding: 7px 17px;
+  /* Shrink to its own words and stop swallowing clicks: full width, it sits over
+     the map and territories under it cannot be selected at all. */
+  right: auto; max-width: calc(100% + 2px);
+  pointer-events: none;
+}
+.coach.shut .offer, .coach.shut .pass { pointer-events: auto; }
 .coach.shut .offer {
   flex: 1; min-width: 0; text-align: left;
   padding: 0; background: transparent; border: 0; cursor: pointer;

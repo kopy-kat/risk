@@ -351,6 +351,12 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
   return updateWill(m, s, me, mineBefore, theirsBefore, standingBefore)
 }
 
+const CORPS: Record<UnitType, string> = {
+  infantry: 'an infantry corps',
+  armour: 'an armoured corps',
+  recon: 'a reconnaissance corps',
+}
+
 const CADRE_COHESION = 30
 
 function cadre(s: KesselState, f: Formation, at: ProvinceId) {
@@ -369,7 +375,7 @@ function cadre(s: KesselState, f: Formation, at: ProvinceId) {
 
 function remove(m: GameMap, s: KesselState, f: Formation, why: string) {
   s.formations = s.formations.filter((x) => x.id !== f.id)
-  log(s, f.owner, `${m.province[f.at].name}: a ${f.type} corps ${why}`)
+  log(s, f.owner, `${m.province[f.at].name}: ${CORPS[f.type]} ${why}`)
 }
 
 const objectivesHeld = (m: GameMap, s: KesselState, p: PlayerId): number =>

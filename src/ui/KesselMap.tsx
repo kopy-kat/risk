@@ -28,7 +28,13 @@ export interface KesselMapProps {
 const CW = 27
 const CH = 18
 const GUTTER = 3.6
-const STACK_DY = 20
+/**
+ * A stack fans like held cards rather than standing in a column. At the counter's
+ * own height a three-stack is taller than the provinces around it in western
+ * Europe, and the front line becomes a pile nobody can read.
+ */
+const STACK_DY = 7
+const STACK_DX = 4
 
 /**
  * Empty map added below the coastline, so the floating bar has something to sit
@@ -343,7 +349,7 @@ export function KesselMap({
               <Counter
                 key={f.id}
                 f={f}
-                x={m.province[at].cx}
+                x={m.province[at].cx + (i - (all.length - 1) / 2) * STACK_DX}
                 y={m.province[at].cy + (i - (all.length - 1) / 2) * STACK_DY}
                 color={colorOf(f.owner)}
                 selected={f.id === selected}
