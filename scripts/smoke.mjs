@@ -75,6 +75,22 @@ const browser = await chromium.launch({ channel: 'chrome' })
 const errors = []
 const failures = []
 let checks = 0
+/**
+ * Wait until the deploy sizer belongs to the player.
+ *
+ * Turn order is drawn at kick-off from an unseeded shuffle, so the bots may move
+ * first and the bar carries their recap until it is dismissed. Waiting on the
+ * sizer alone hangs on exactly the deals where somebody else went first.
+ */
+async function reachDeploy(page) {
+  for (let i = 0; i < 40; i++) {
+    if (await page.locator('.dock .amount').isVisible().catch(() => false)) return
+    await page.keyboard.press('Space')
+    await page.waitForTimeout(250)
+  }
+  throw new Error('never reached a deploy phase')
+}
+
 const ok = (cond, what) => { checks++; if (!cond) failures.push(what) }
 
 async function open(withHistory) {
@@ -216,7 +232,7 @@ async function open(withHistory) {
   const page = await open(false)
   await page.getByRole('button', { name: 'Begin deployment' }).click()
   await page.getByRole('button', { name: /Auto-place rest/ }).click()
-  await page.waitForSelector('.dock .amount', { timeout: 60000 })
+  await reachDeploy(page)
 
   // your turn: place the lot, then hand over
   await page.locator('.terr.clickable').first().click({ modifiers: ['Shift'] })
@@ -255,7 +271,10 @@ async function open(withHistory) {
   const page = await open(false)
   await page.getByRole('button', { name: 'Begin deployment' }).click()
   await page.getByRole('button', { name: /Auto-place rest/ }).click()
-  await page.waitForSelector('.dock .amount', { timeout: 60000 })
+  // Turn order is drawn at kick-off, so the bots may move first and the bar is
+  // theirs until their recap is dismissed. Waiting on the deploy sizer alone
+  // hangs on exactly the deals where somebody else went first.
+  await reachDeploy(page)
   await page.waitForSelector('.coach.shut', { timeout: 60000 })
 
   const amount = () => page.locator('.dock .amount .n').innerText()
@@ -326,7 +345,21 @@ async function open(withHistory) {
   await page.waitForSelector('.coach.open', { timeout: 5000 })
   await page.keyboard.type('Half a plan')
 
-  await page.locator('.terr.clickable').first().click()
+  // The open panel is a real panel and covers the band of map above the bar, so
+  // aim at a territory clear of it — the board is dealt from a fresh shuffle each
+  // run and whichever territory comes first is otherwise pot luck.
+  const panel = await page.locator('.coach.open').boundingBox()
+  const clear = page.locator('.terr.clickable')
+  let target = null
+  for (let i = 0; i < (await clear.count()); i++) {
+    const box = await clear.nth(i).boundingBox()
+    if (box && box.y + box.height < panel.y) {
+      target = clear.nth(i)
+      break
+    }
+  }
+  ok(target !== null, 'some territory sits clear of the open log')
+  await target.click()
   await page.waitForTimeout(150)
   ok((await page.locator('.coach').count()) === 0, 'a move withdraws the offer mid-sentence')
   const amount = () => page.locator('.dock .amount .n').innerText()
