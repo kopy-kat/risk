@@ -27,6 +27,16 @@ export const defendValue = (m: GameMap, f: Formation, where: ProvinceId): number
 /** Cohesion a balanced engagement costs each side. */
 const BASE_LOSS = 22
 
+/**
+ * What it costs to be the one crossing the ground. Without it an assault at even
+ * odds is very nearly a fair trade, and combat spends cohesion, which refitting
+ * gives back — so attacking would be close to free.
+ *
+ * It did not measurably move exploitability, which is worth knowing: the line that
+ * beats the doctrines is about rushing objectives, not about cheap assaults.
+ */
+const ASSAULT_PREMIUM = 1.4
+
 /** How far the ratio can swing the bill, either way. */
 const SWING = [0.4, 2.2] as const
 
@@ -60,7 +70,7 @@ export function resolve(
   const jitter = () => 1 - JITTER / 2 + rand() * JITTER
   return {
     ratio,
-    attackerLoss: BASE_LOSS * clamp(1 / ratio, ...SWING) * jitter(),
+    attackerLoss: BASE_LOSS * clamp(1 / ratio, ...SWING) * ASSAULT_PREMIUM * jitter(),
     defenderLoss: BASE_LOSS * clamp(ratio, ...SWING) * jitter(),
   }
 }

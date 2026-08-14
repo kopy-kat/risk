@@ -310,6 +310,20 @@ function split(): Record<string, PlayerId> {
   )
 }
 
+// ── crossing the ground costs more than holding it ──────────────────
+{
+  const m = fixture()
+  const attacker = corps(0, id(3, 1))
+  const defender = corps(1, id(4, 1))
+  const { resolve } = await import('../src/games/kessel/combat')
+  // Even strength, open ground, nobody dug in: the bill still falls on the attacker.
+  const e = resolve(m, [attacker], [defender], id(4, 1), () => 0.5)
+  ok(
+    e.attackerLoss > e.defenderLoss,
+    'an assault at even odds is a losing trade, or attacking at any odds is free',
+  )
+}
+
 // ── damage costs steps deterministically ────────────────────────────
 {
   const m = fixture({ [id(0, 1)]: { depot: 3 } })

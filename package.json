@@ -18,6 +18,7 @@
     "bench:kessel": "tsx scripts/bench-kessel.ts",
     "bench": "tsx scripts/bench.ts",
     "exploit": "tsx scripts/exploit.ts",
+    "exploit:kessel": "tsx scripts/exploit-kessel.ts",
     "fit-eval": "tsx scripts/fit-eval.ts",
     "study": "tsx scripts/study.ts",
     "review-check": "tsx scripts/review-check.ts",

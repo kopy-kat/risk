@@ -115,7 +115,20 @@ every game, which made each war end on the same turn regardless of what happened
 
 Three doctrines — Attrition, Maneuver, Elastic Defence — as one parameterised policy
 at different settings, so a bot reads as a commander with a view about war rather than
-a weighted sum. The parameters double as the space `npm run exploit` searches.
+a weighted sum. `decideFor` plays any settings, which is what the search hill-climbs.
+
+`npm run bench:kessel` measures them on paired seeds with the seats swapped, through
+the same worker pool as Risk's benchmark. It prints Wilson intervals and says so when
+one spans 50%, because a hundred games cannot tell a real edge from a coin flip and
+reporting the raw score as settled is how you end up tuning against noise.
+
+Maneuver beats Attrition, and both beat Elastic. Attrition beats Elastic by a wider
+margin than Maneuver does, so the three are a matchup structure rather than a straight
+ladder. The wars look different too: Maneuver settles Attrition in about a third of
+the turns Attrition needs to grind down Elastic.
+
+`npm run sim:kessel` is the soak — bot games with invariants checked after every move,
+for the states nobody thought to write an assertion for.
 
 ## Fog
 
@@ -134,7 +147,16 @@ ill-posed.
 ## How we know it isn't shallow
 
 An invented design has no playtest history, so the open question is whether its
-strategy space has a dominant line. `npm run exploit` already answers exactly that for
-Risk: it hill-climbs a parameterised policy space for the strategy a bot has no answer
-to and reports the edge as one number. Point it at Kessel. A large edge found on a
-small budget means the rules are shallow and need changing, not that the bot does.
+strategy space has a dominant line. A ladder of doctrines cannot answer it — each one
+only ever plays opponents that think the way it does.
+
+`npm run exploit:kessel` searches the doctrine parameter space by cross-entropy for
+the point that beats a given doctrine hardest, then re-measures the winner on fresh
+seeds. That second step is the one that matters: the search maximises over a noisy
+objective, so its best score is biased upward by however much it managed to overfit,
+and only fresh seeds say what it actually found. Anything that still clears the
+interval is archived to `data/kessel-exploiters.json` and seeds the next search.
+
+The number it prints is **exploitability**, and on an invented game it is a statement
+about the rules rather than the bot: a large edge found cheaply means the design has a
+dominant line and needs changing.
