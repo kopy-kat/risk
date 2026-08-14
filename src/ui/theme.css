@@ -1050,3 +1050,6 @@ kbd {
 .pickcard.on { background: var(--ink); border-color: var(--ink); }
 .pickcard.on .nm { color: var(--paper); }
 .pickcard.on .bl { color: color-mix(in srgb, var(--paper) 62%, transparent); }
+
+.kdock .cap b { color: var(--ink-2); font-weight: 500; }
+.kdock .cap b.spent { color: var(--danger); }

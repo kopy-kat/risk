@@ -45,15 +45,33 @@ makes maneuver something other than faster attrition: a frontal attack spends co
 on both sides and moves the line, and a formation pushed twice is still at full
 strength and can no longer attack.
 
-- **infantry** — draws 1 supply, holds ground, entrenches
-- **armour** — draws 2, hits hardest. Drawing double is why armoured spearheads
-  culminate first. That is the lesson, not a balance knob.
-- **recon** — weak in combat, cheap, exists to sit behind the line and sever supply.
-  It makes supply an active domain rather than bookkeeping.
+- **infantry** — moves 2, draws 1 supply, holds ground, entrenches
+- **armour** — moves 4, draws 2, hits hardest. Drawing double while travelling fast
+  is why armoured spearheads culminate first. That is the lesson, not a balance knob.
+- **recon** — moves 5, weak in combat, cheap. It gets behind a line and severs
+  supply, which is what makes supply an active domain rather than bookkeeping.
+
+Movement is an allowance spent over terrain, and it **ends the moment a formation
+enters ground an enemy watches** — without that a fast formation laps the front
+every turn and the front stops meaning anything. A march takes the ground it
+crosses, not only where it stops, so riding across a supply line cuts it.
+
+Differential speed is what makes the rest work. At a uniform one province a turn
+armour is expensive infantry, nothing can outrun its own supply, and Elastic
+Defence has nothing to counterattack — it lost almost every game until formations
+had legs.
 
 Each side deploys 26, the contact line first and the rest in depth. The starting
 frontier is 14 provinces wide; far fewer than this and the armies never meet, no front
 forms, and with no front there is nothing to flank.
+
+## Activations
+
+Seven provinces can be set in motion in a turn. Holding and refitting are free;
+moving or attacking costs one for the province the order leaves from, so
+concentrating a push is cheaper than spreading one and a fully manned line is not.
+
+A commander who can order every formation every turn is not choosing anything.
 
 ## Supply
 
@@ -131,9 +149,9 @@ the same worker pool as Risk's benchmark. It prints Wilson intervals and says so
 one spans 50%, because a hundred games cannot tell a real edge from a coin flip and
 reporting the raw score as settled is how you end up tuning against noise.
 
-Maneuver beats Attrition, and both beat Elastic. The wars look different, which is the
-more interesting half: Maneuver settles its games in a quarter of the turns Attrition
-needs to grind Elastic down.
+No doctrine dominates: Elastic beats Attrition, and the other two pairings are inside
+the interval. They still make different wars — Attrition against Elastic runs about a
+third longer than either pairing with Maneuver.
 
 `npm run sim:kessel` is the soak — bot games with invariants checked after every move,
 for the states nobody thought to write an assertion for.

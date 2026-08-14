@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import type { PlayerId } from '../engine/types'
 import { attackValue, defendValue } from '../games/kessel/combat'
-import { WILL_FLOOR } from '../games/kessel/game'
+import { ACTIVATIONS, WILL_FLOOR, activationsUsed } from '../games/kessel/game'
 import { frontage, mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
+import { ALLOWANCE } from '../games/kessel/movement'
 import { retreatOptions } from '../games/kessel/supply'
 import type { Formation, FormationId, KesselState } from '../games/kessel/types'
 import { playerColor } from './colors'
@@ -111,7 +112,7 @@ export function oddsFor(
  * every turn cannot move because a formation happened to be selected.
  */
 export function KesselDock(props: KesselDockProps) {
-  const { state, primary, onShowSettings, settingsOpen, onCloseSettings, seed } = props
+  const { state, me, primary, onShowSettings, settingsOpen, onCloseSettings, seed } = props
   const side = state.sides[state.current]
   const slots = side.bot ? botSlots(props) : phaseSlots(props)
 
@@ -134,7 +135,7 @@ export function KesselDock(props: KesselDockProps) {
         <div className="cell ctrl">
           {slots.controls}
           <OddsBlock {...props} />
-          <Will state={state} />
+          <Will state={state} me={me} />
         </div>
       </div>
 
@@ -170,7 +171,8 @@ export function KesselDock(props: KesselDockProps) {
  * The threshold is drawn rather than stated: how close you are to it is the
  * question, and a number needs a second number to answer that.
  */
-function Will({ state }: { state: KesselState }) {
+function Will({ state, me }: { state: KesselState; me: PlayerId }) {
+  const spent = activationsUsed(state, me).size
   return (
     <div className="kwill">
       {state.sides.map((s) => (
@@ -187,7 +189,13 @@ function Will({ state }: { state: KesselState }) {
           <span className="n">{Math.round(s.will)}</span>
         </div>
       ))}
-      <span className="cap mono-label">Will · terms below {WILL_FLOOR}</span>
+      <span className="cap mono-label">
+        Will · terms below {WILL_FLOOR}
+        {' · '}
+        {/* Holding costs nothing, so this counts provinces you set moving, not
+            formations — the number a player has to ration. */}
+        <b className={spent >= ACTIVATIONS ? 'spent' : ''}>{spent}/{ACTIVATIONS} moving</b>
+      </span>
     </div>
   )
 }
@@ -275,7 +283,7 @@ function phaseSlots(props: KesselDockProps): Slots {
     return {
       counter,
       hint: <>Without orders · <kbd>←</kbd><kbd>→</kbd> cycles them</>,
-      say: <>Click one of your formations, then an adjacent province</>,
+      say: <>Click one of your formations, then where you want it</>,
     }
   }
 
@@ -284,6 +292,7 @@ function phaseSlots(props: KesselDockProps): Slots {
   const hint = (
     <>
       {TYPE_NAME[f.type]} · {m.province[f.at].name} · {f.strength} str · {Math.round(f.cohesion)} coh
+      {' · moves '}{ALLOWANCE[f.type]}
       {' · '}<b className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</b>
       {trapped && ' · encircled'}
     </>
