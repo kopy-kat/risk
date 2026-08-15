@@ -37,10 +37,23 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Kessel's rules run on a synthetic grid rather than the real map — a rule
+      # that only holds on one arrangement of provinces isn't a rule.
+      - name: Kessel unit tests
+        run: npm run test:kessel
+
+      - name: Kessel reviewer unit tests
+        run: npm run test:kessel-review
+
       # 300 seeded bot-vs-bot games, asserting board invariants after every move.
       # Catches "the game is broken" in a way unit tests can't.
       - name: Soak test
         run: npm run sim -- 300
+
+      # The same for Kessel, where it earns its place: it caught stacks
+      # overfilling on retreat within one run of being written.
+      - name: Kessel soak test
+        run: npm run sim:kessel -- 100
 
       - name: Build
         run: npm run build
