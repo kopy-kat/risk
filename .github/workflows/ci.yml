@@ -83,3 +83,12 @@ jobs:
       # `npm run review-check 40` locally before changing any weights.
       - name: Reviewer calibration
         run: npm run review-check -- 8
+
+      # Kessel's reviewer prices a whole order set, and the space of better order
+      # sets is wide enough that mean loss carries real variance — 64 games per
+      # pair is where the difference between a competent doctrine and a reckless
+      # one clears its own error bar. Fewer resolves nothing and would read as a
+      # broken reviewer rather than a thin sample. Games are seeded, so this is
+      # deterministic rather than flaky.
+      - name: Kessel reviewer calibration
+        run: npm run review-check:kessel 64
