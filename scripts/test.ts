@@ -16,7 +16,7 @@ import {
   applyMove, bestTradeIn, createGame, legalMoves, reinforcementFor, territoriesOf, connectedOwn,
   RULES_VERSION, rulesFor, suppliedOf,
 } from '../src/engine/game'
-import { isReplayable } from '../src/review/store'
+import { importGames, isReplayable, listGames, saveGame } from '../src/review/store'
 import type { GameRecord } from '../src/review/store'
 import { rngFrom } from '../src/engine/rng'
 import {
@@ -27,6 +27,7 @@ import { describeRow, recapBetween } from '../src/ui/recap'
 import type { TerritoryId } from '../src/engine/board'
 import { reviewGame } from '../src/review/review'
 import { BOT_BY_KEY } from '../src/bots'
+import type { Bot } from '../src/bots/types'
 import { stepBot } from '../src/bots/play'
 import { evalMove, rivalCount } from '../src/review/price'
 import type { Card, GameState } from '../src/engine/types'
@@ -742,6 +743,10 @@ eq(findSets([card(1, 'infantry'), card(2, 'cavalry'), card(3, 'artillery'), card
   ok(all.judgements.length > 0, 'a played game produces judgements')
   ok(!all.error, `the recorded game replays cleanly: ${all.error}`)
   ok(
+    all.replay.states.every((state) => !state.record && state.moves.length === 0),
+    'replay states do not retain growing copies of the source move list',
+  )
+  ok(
     all.judgements.every((j) => j.player === 0),
     'only the human seat is judged — the bot is not being graded',
   )
@@ -917,6 +922,278 @@ for (const mode of ['capitals', 'supply'] as const) {
   eq(r.troops, s.troops, `${mode}: replay reproduces every troop count`)
   eq(r.rngState, s.rngState, `${mode}: the dice matched`)
   eq(r.winner, s.winner, `${mode}: replay reproduces the result`)
+}
+
+// ── review treats a completed deploy stage as a plan, not an order of clicks ──
+{
+  const seats = [{ name: 'Rival', bot: null }, { name: 'You', bot: null }]
+  const playRng = rngFrom(17 ^ 123456)
+  let before = createGame({ seats, seed: 17 })
+  let guard = 0
+  while (
+    before.phase !== 'gameOver' &&
+    !(
+      before.phase === 'deploy' &&
+      before.current === 1 &&
+      before.toDeploy > 1 &&
+      before.setsTraded >= 3 &&
+      bestTradeIn(before, 1)
+    ) &&
+    guard++ < 20_000
+  ) {
+    before = stepBot(before, BOT_BY_KEY.general, () => playRng.next(), { strict: true })
+  }
+  ok(before.phase === 'deploy' && !!bestTradeIn(before, 1), 'the order-review fixture reaches a cashable set')
+
+  if (before.phase === 'deploy') {
+    const trade = bestTradeIn(before, 1)!
+    const target = territoriesOf(before, 1)[0]
+    const judgedAt = before.moves.length
+
+    // This is strategically identical to cashing first and deploying the combined
+    // pool at once: the first army merely arrives before the cards are cashed.
+    let played = applyMove(before, { type: 'deploy', territory: target, count: 1 })
+    played = applyMove(played, { type: 'tradeCards', cards: trade.cards })
+    played = applyMove(played, { type: 'deploy', territory: target, count: played.toDeploy })
+
+    const cashFirstBot: Bot = {
+      key: 'cash-first-test',
+      name: 'Cash first test',
+      blurb: 'Exercises order-neutral deployment review',
+      decide(s, me) {
+        if (s.phase === 'deploy') {
+          const cash = bestTradeIn(s, me)
+          if (cash) return { type: 'tradeCards', cards: cash.cards }
+          return { type: 'deploy', territory: target, count: s.toDeploy }
+        }
+        if (s.phase === 'attack') return { type: 'endAttack' }
+        if (s.phase === 'fortify') return { type: 'endTurn' }
+        return legalMoves(s)[0]
+      },
+    }
+    const moves = played.moves
+    const record: GameRecord = {
+      id: 'deploy-order', schema: 1, rules: RULES_VERSION, seed: 17, botSeed: 0, seats,
+      moves,
+      assisted: moves.map((_, i) => i).filter((i) => i !== judgedAt),
+      winner: played.winner, turns: played.turn, finished: played.phase === 'gameOver', savedAt: 0,
+    }
+    const review = reviewGame(record, { players: [1], bot: cashFirstBot })
+    const judgement = review.judgements.find((j) => j.index === judgedAt)
+    ok(!!judgement, 'the partial deployment remains a reviewed decision')
+    ok(judgement?.best.type !== 'tradeCards', 'a partial deployment is not compared with cashing first')
+    eq(judgement?.loss, 0, 'deploy-then-cash is not penalised when cash-then-deploy ends identically')
+    eq(judgement?.grade, 'best', 'an order-only deployment difference produces no card advice')
+
+    // The reverse spelling is timing-only too: once the player has cashed, a
+    // partial placement before that cash is not useful advice. Spending the whole
+    // original pool remains distinct because it would bank the set and leave deploy.
+    let cashedFirst = applyMove(before, { type: 'tradeCards', cards: trade.cards })
+    cashedFirst = applyMove(cashedFirst, {
+      type: 'deploy', territory: target, count: cashedFirst.toDeploy,
+    })
+    const deployFirstBot: Bot = {
+      ...cashFirstBot,
+      key: 'deploy-first-test',
+      decide(s, me) {
+        if (s.phase === 'deploy') {
+          const cash = bestTradeIn(s, me)
+          if (cash && s.toDeploy > 1)
+            return { type: 'deploy', territory: target, count: 1 }
+          if (cash) return { type: 'tradeCards', cards: cash.cards }
+          return { type: 'deploy', territory: target, count: s.toDeploy }
+        }
+        if (s.phase === 'attack') return { type: 'endAttack' }
+        if (s.phase === 'fortify') return { type: 'endTurn' }
+        return legalMoves(s)[0]
+      },
+    }
+    const cashRecord: GameRecord = {
+      ...record,
+      id: 'cash-order',
+      moves: cashedFirst.moves,
+      assisted: cashedFirst.moves.map((_, i) => i).filter((i) => i !== judgedAt),
+    }
+    const cashReview = reviewGame(cashRecord, { players: [1], bot: deployFirstBot })
+    const cashJudgement = cashReview.judgements.find((j) => j.index === judgedAt)
+    ok(!!cashJudgement, 'cashing first remains a reviewed decision')
+    eq(cashJudgement?.best.type, 'tradeCards', 'cashing is not compared with a timing-only partial deploy')
+    eq(cashJudgement?.loss, 0, 'cash-then-deploy is not penalised against deploy-then-cash')
+
+    const banked = applyMove(before, {
+      type: 'deploy', territory: target, count: before.toDeploy,
+    })
+    const bankRecord: GameRecord = {
+      ...record,
+      id: 'bank-cards',
+      moves: banked.moves,
+      assisted: banked.moves.map((_, i) => i).filter((i) => i !== judgedAt),
+    }
+    const bankReview = reviewGame(bankRecord, { players: [1], bot: cashFirstBot })
+    const bankJudgement = bankReview.judgements.find((j) => j.index === judgedAt)
+    eq(bankJudgement?.best.type, 'tradeCards', 'deploying the whole pool is still compared with cashing')
+    ok((bankJudgement?.loss ?? 0) > 0, 'banking a valuable set can still receive card advice')
+  }
+}
+
+// ── importing shared games validates and merges without replacing local history ──
+{
+  const savedStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  const memory = new Map<string, string>()
+  const storage: Storage = {
+    get length() { return memory.size },
+    clear: () => memory.clear(),
+    getItem: (key) => memory.get(key) ?? null,
+    key: (index) => [...memory.keys()][index] ?? null,
+    removeItem: (key) => { memory.delete(key) },
+    setItem: (key, value) => { memory.set(key, value) },
+  }
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage })
+
+  try {
+    const seats = [{ name: 'Local A', bot: null }, { name: 'Local B', bot: 'easy' }]
+    const base: GameRecord = {
+      id: 'local', schema: 1, rules: RULES_VERSION, seed: 91, botSeed: 92, seats,
+      moves: [], assisted: [], winner: null, turns: 0, finished: false, savedAt: 10,
+    }
+    storage.setItem('risk.games.v1', JSON.stringify([base]))
+
+    const shared: GameRecord = {
+      ...base,
+      id: 'shared',
+      seats: [{ name: 'Friend A', bot: null }, { name: 'Friend B', bot: 'general' }],
+      savedAt: 20,
+    }
+    const result = importGames(JSON.stringify([
+      { ...base, seats: [{ name: 'Replacement', bot: null }, seats[1]], savedAt: 99 },
+      shared,
+      { ...shared, savedAt: 19 },
+      { ...shared, id: 'old-schema', schema: 99 },
+    ]))
+    eq(
+      result,
+      { imported: 1, duplicates: 2, rejected: 1, atCapacity: 0 },
+      'an array import adds valid new games and reports duplicates and invalid records',
+    )
+    eq(listGames().length, 2, 'import preserves the games already in local storage')
+    eq(
+      listGames().find((g) => g.id === 'local')?.seats[0].name,
+      'Local A',
+      'a colliding import never replaces the local copy',
+    )
+
+    const one = importGames(JSON.stringify({ ...base, id: 'single', savedAt: 30 }))
+    eq(one.imported, 1, 'a per-game object export imports without an array wrapper')
+
+    const beforeFutureImport = Date.now()
+    const future = importGames(JSON.stringify({
+      ...base,
+      id: 'future',
+      savedAt: Number.MAX_SAFE_INTEGER,
+    }))
+    eq(future.imported, 1, 'a valid future-dated shared game still imports')
+    const futureSavedAt = listGames().find((g) => g.id === 'future')?.savedAt ?? Infinity
+    ok(
+      futureSavedAt >= beforeFutureImport && futureSavedAt <= Date.now(),
+      'an imported timestamp is capped to the time of import',
+    )
+
+    let oversizedMessage = ''
+    try {
+      importGames(JSON.stringify(Array.from(
+        { length: 41 },
+        (_, i) => ({ ...base, id: `too-many-${i}` }),
+      )))
+    } catch (e) {
+      oversizedMessage = e instanceof Error ? e.message : String(e)
+    }
+    ok(
+      oversizedMessage.includes('more than 40 games'),
+      'an oversized import is rejected as one bounded job',
+    )
+
+    let overlongMessage = ''
+    try {
+      importGames(JSON.stringify({
+        ...base,
+        id: 'too-long',
+        moves: Array.from({ length: 2_001 }, () => ({ type: 'endTurn' })),
+      }))
+    } catch (e) {
+      overlongMessage = e instanceof Error ? e.message : String(e)
+    }
+    ok(
+      overlongMessage.includes('unreasonably long move list'),
+      'a replay too large to retain safely is rejected before it runs',
+    )
+
+    const gamesBeforeInvalid = listGames().length
+    let invalidMessage = ''
+    try {
+      importGames(JSON.stringify({ ...base, id: 'impossible', moves: [{ type: 'endTurn' }] }))
+    } catch (e) {
+      invalidMessage = e instanceof Error ? e.message : String(e)
+    }
+    ok(invalidMessage.includes('No usable games'), 'an impossible move list is rejected before storage')
+    eq(listGames().length, gamesBeforeInvalid, 'a rejected import leaves local history unchanged')
+
+    // Occupation moves may legally move zero *additional* armies: the winning
+    // dice already crossed the border. Generate a real capture so import checks
+    // this through the full replay validator, not merely through a shape check.
+    const captureSeats = [{ name: 'A', bot: 'general' }, { name: 'B', bot: 'colonel' }]
+    const captureRng = rngFrom(7654321)
+    let captured = createGame({ seats: captureSeats, seed: 123456 })
+    for (let i = 0; i < 2_000 && captured.phase !== 'occupy' && captured.phase !== 'gameOver'; i++) {
+      captured = stepBot(
+        captured,
+        BOT_BY_KEY[captured.players[captured.current].bot!],
+        () => captureRng.next(),
+        { strict: true },
+      )
+    }
+    ok(captured.phase === 'occupy', 'the import fixture reached a captured territory')
+    if (captured.phase === 'occupy') captured = applyMove(captured, { type: 'occupy', count: 0 })
+    ok(
+      captured.moves.some((m) => m.type === 'occupy' && m.count === 0),
+      'the import fixture records zero additional occupation',
+    )
+    const zeroOccupation: GameRecord = {
+      id: 'zero-occupation', schema: 1, rules: RULES_VERSION, seed: 123456,
+      botSeed: 7654321, seats: captureSeats, moves: captured.moves, assisted: [],
+      winner: captured.winner, turns: captured.turn, finished: captured.phase === 'gameOver', savedAt: 40,
+    }
+    eq(importGames(JSON.stringify(zeroOccupation)).imported, 1, 'a valid zero-occupation replay imports')
+
+    storage.setItem(
+      'risk.games.v1',
+      JSON.stringify(Array.from(
+        { length: 40 },
+        (_, i) => ({ ...base, id: `kept-${i}`, savedAt: Number.MAX_SAFE_INTEGER }),
+      )),
+    )
+    const full = importGames(JSON.stringify({ ...shared, id: 'no-room' }))
+    eq(full.atCapacity, 1, 'a full history reports a valid game that had no room')
+    eq(listGames().length, 40, 'an import never evicts local games to make room')
+
+    // Future timestamps are normalised when they arrive through import, so a
+    // later local save can never be sorted off the end of a full shelf.
+    storage.setItem('risk.games.v1', '[]')
+    importGames(JSON.stringify(Array.from(
+      { length: 40 },
+      (_, i) => ({ ...base, id: `future-${i}`, savedAt: Number.MAX_SAFE_INTEGER }),
+    )))
+    saveGame({
+      id: 'new-local', seed: 300, botSeed: 301, seats, moves: [], assisted: [],
+      winner: null, turns: 0, finished: false,
+    })
+    ok(
+      listGames().some((g) => g.id === 'new-local'),
+      'future-dated imports cannot evict a later local save',
+    )
+  } finally {
+    if (savedStorage) Object.defineProperty(globalThis, 'localStorage', savedStorage)
+    else Reflect.deleteProperty(globalThis, 'localStorage')
+  }
 }
 
 console.log(`\n${passed} assertions passed`)

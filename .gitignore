@@ -4,6 +4,10 @@ dist/
 *.log
 tsconfig.tsbuildinfo
 
+# Browser game exports contain complete replay histories; keep local copies private.
+risk-game-*.json
+risk-games-*.json
+
 # generated design artefact — rebuild with `npm run build:mock`
 mock/index.html
 

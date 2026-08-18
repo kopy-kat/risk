@@ -17,7 +17,7 @@
 import { CONTINENTS, TERRITORY_NAMES } from '../engine/board'
 import type { ContinentId, TerritoryId } from '../engine/board'
 import { expectedSurvivors, winProb } from '../engine/combat'
-import { applyMove } from '../engine/game'
+import { applyMove, bestTradeIn } from '../engine/game'
 import type { GameState, Move, Phase, PlayerId } from '../engine/types'
 import { rngFrom } from '../engine/rng'
 import { marshalBot } from '../bots/marshal'
@@ -249,7 +249,7 @@ export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameRe
     opts.onProgress?.(++done, total)
 
     const divisor = rivalCount(s, me)
-    const options = candidatesWith(s, bot, me, rand)
+    const options = candidatesWith(s, bot, me, rand, played)
     // A forced move is not a decision, and grading one is noise.
     if (options.length < 2) continue
 
@@ -324,15 +324,40 @@ export function reviewGame(record: GameRecord, opts: ReviewOptions = {}): GameRe
  * factor — so on its own it would compare the player against a deliberately coarse
  * menu and call the gaps mistakes.
  */
-function candidatesWith(s: GameState, bot: Bot, me: PlayerId, rand: () => number): Move[] {
-  const out = candidateMoves(s)
+function candidatesWith(
+  s: GameState,
+  bot: Bot,
+  me: PlayerId,
+  rand: () => number,
+  played: Move,
+): Move[] {
+  let out = candidateMoves(s)
+
+  // Cards trade themselves in the UI through `bestTradeIn`; offering every set
+  // returned by the engine would let the reviewer recommend a choice the player
+  // could not actually make. Keep an unusual recorded trade as well so imported or
+  // older games can still price what happened rather than silently dropping it.
+  const offered = s.phase === 'deploy' ? bestTradeIn(s, me) : null
+  const tradeKeys = new Set<string>()
+  if (offered) tradeKeys.add(moveKey({ type: 'tradeCards', cards: offered.cards }))
+  if (played.type === 'tradeCards') tradeKeys.add(moveKey(played))
+  if (s.phase === 'deploy')
+    out = out.filter(
+      (m) =>
+        (m.type !== 'tradeCards' || tradeKeys.has(moveKey(m))) &&
+        isDistinctDeployChoice(s, played, m),
+    )
+
   const seen = new Set(out.map(moveKey))
   try {
     const pick = bot.decide(s, me, rand)
     // A bot may return an illegal move — the game loop is allowed to fall back to a
     // random one, so this is a supported outcome rather than a bug. It must not
     // reach the pricing, which would either throw or recommend an unplayable move.
-    if (!seen.has(moveKey(pick))) {
+    const offeredToHuman =
+      (pick.type !== 'tradeCards' || tradeKeys.has(moveKey(pick))) &&
+      isDistinctDeployChoice(s, played, pick)
+    if (offeredToHuman && !seen.has(moveKey(pick))) {
       applyMove(s, pick)
       out.push(pick)
     }
@@ -340,6 +365,25 @@ function candidatesWith(s: GameState, bot: Bot, me: PlayerId, rand: () => number
     // a bot that throws, or offers something illegal, contributes no candidate
   }
   return out
+}
+
+/**
+ * Is `candidate` a genuinely different reinforcement decision, rather than the
+ * same card/deploy sequence with its clicks swapped?
+ *
+ * A partial deployment leaves the card trade available, so comparing it with
+ * "cash now" would express a timing preference and nothing else. The actual
+ * cash-versus-bank choice arrives when the last army is placed: a whole-pool
+ * deployment exits the phase and therefore stays in the candidate set. The same
+ * distinction works in reverse when the recorded move cashes first.
+ */
+function isDistinctDeployChoice(s: GameState, played: Move, candidate: Move): boolean {
+  if (s.phase !== 'deploy') return true
+  if (played.type === 'deploy' && played.count < s.toDeploy)
+    return candidate.type !== 'tradeCards'
+  if (played.type === 'tradeCards' && candidate.type === 'deploy')
+    return candidate.count === s.toDeploy
+  return true
 }
 
 function summarise(player: PlayerId, all: Judgement[]): PlayerReview {

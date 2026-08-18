@@ -156,7 +156,8 @@ export function Review({ id, onExit }: Props) {
       else if (e.key === 'ArrowDown') { e.preventDefault(); jump(1) }
       else if (e.key === ' ') {
         e.preventDefault()
-        setShowing((v) => (v === 'better' ? 'played' : 'better'))
+        if (here?.grade !== 'best')
+          setShowing((v) => (v === 'better' ? 'played' : 'better'))
       }
     }
     window.addEventListener('keydown', onKey)
@@ -165,7 +166,10 @@ export function Review({ id, onExit }: Props) {
 
   // What to draw over the map: the move under consideration, rendered exactly the
   // way the live game renders a move you're lining up.
-  const shown: Move | null = here ? (showing === 'better' ? here.best : here.played) : null
+  // A best-grade decision has no visible "Better" row. Force its played move onto
+  // the map as well, rather than silently painting the hidden reference move.
+  const shownAs = here?.grade === 'best' ? 'played' : showing
+  const shown: Move | null = here ? (shownAs === 'better' ? here.best : here.played) : null
   const overlay = useMemo(() => paint(state, shown), [state, shown])
   const ahead = here ? describeContinuation(here.line) : ''
 
@@ -297,7 +301,7 @@ export function Review({ id, onExit }: Props) {
               </div>
 
               <button
-                className={`line ${showing === 'played' ? 'on' : ''}`}
+                className={`line ${shownAs === 'played' ? 'on' : ''}`}
                 onClick={() => setShowing('played')}
               >
                 <span className="k">You played</span>
@@ -306,7 +310,7 @@ export function Review({ id, onExit }: Props) {
 
               {here.grade !== 'best' && (
                 <button
-                  className={`line better ${showing === 'better' ? 'on' : ''}`}
+                  className={`line better ${shownAs === 'better' ? 'on' : ''}`}
                   onClick={() => setShowing('better')}
                 >
                   <span className="k">Better</span>

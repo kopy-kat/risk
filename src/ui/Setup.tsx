@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react'
 import { BOTS, DEFAULT_BOT } from '../bots'
 import type { SeatConfig } from '../engine/game'
 import type { GameMode } from '../engine/types'
-import { deleteGame, isReplayable, listGames } from '../review/store'
-import type { GameRecord } from '../review/store'
+import { deleteGame, importGames, isReplayable, listGames } from '../review/store'
+import type { GameRecord, ImportGamesResult } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
+
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024
 
 interface Props {
   onStart(seats: SeatConfig[], mode: GameMode): void
@@ -35,6 +37,10 @@ interface Seat {
 export function Setup({ onStart, onReview }: Props) {
   const [count, setCount] = useState(4)
   const [past, setPast] = useState<GameRecord[]>(() => listGames())
+  const [importNotice, setImportNotice] = useState<{
+    kind: 'ok' | 'error'
+    text: string
+  } | null>(null)
   const [difficulty, setDifficulty] = useState(DEFAULT_BOT)
   const [mode, setMode] = useState<GameMode>('classic')
   const [seats, setSeats] = useState<Seat[]>(
@@ -47,6 +53,20 @@ export function Setup({ onStart, onReview }: Props) {
   const active = seats.slice(0, count)
   const humans = active.filter((s) => !s.isBot).length
   const bots = active.length - humans
+
+  const importFile = async (file: File) => {
+    try {
+      if (file.size > MAX_IMPORT_BYTES) throw new Error('That file is too large to import safely.')
+      const result = importGames(await file.text())
+      setPast(listGames())
+      setImportNotice({ kind: 'ok', text: describeImport(result) })
+    } catch (e) {
+      setImportNotice({
+        kind: 'error',
+        text: e instanceof Error ? e.message : 'That file could not be imported.',
+      })
+    }
+  }
 
   return (
     <div className="overlay">
@@ -126,15 +146,44 @@ export function Setup({ onStart, onReview }: Props) {
           {humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>
 
-        {past.length > 0 && (
-          <div className="field pastgames">
-            <span className="mono-label">
-              Past games
-              {/* Games live in localStorage, so without this the only way to get one
-                  out for analysis is the devtools console. It is the whole export
-                  path on purpose: `npm run study <file>` reads what this writes. */}
-              <button className="export" onClick={() => downloadGames(past)}>Export</button>
+        <div className="field pastgames">
+          <span className="mono-label">
+            Past games
+            <span className="history-actions">
+              <label className="history-action import">
+                Import
+                <input
+                  className="file-input"
+                  type="file"
+                  accept=".json,application/json"
+                  aria-label="Import games from a file"
+                  onChange={(e) => {
+                    const input = e.currentTarget
+                    const file = input.files?.[0]
+                    input.value = ''
+                    if (file) void importFile(file)
+                  }}
+                />
+              </label>
+              {/* Games live in localStorage, so without this the only way to get them
+                  out for analysis is the devtools console. `npm run study <file>`
+                  reads the all-games export. */}
+              {past.length > 0 && (
+                <button className="history-action" onClick={() => downloadGames(past)}>
+                  Export all
+                </button>
+              )}
             </span>
+          </span>
+          {importNotice && (
+            <span
+              className={`import-status ${importNotice.kind}`}
+              role={importNotice.kind === 'error' ? 'alert' : 'status'}
+            >
+              {importNotice.text}
+            </span>
+          )}
+          {past.length > 0 ? (
             <div className="games">
               {past.map((g) => (
                 <PastGame
@@ -148,8 +197,10 @@ export function Setup({ onStart, onReview }: Props) {
                 />
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <span className="no-games">No saved games yet. Import one to replay or review it.</span>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -190,6 +241,14 @@ function PastGame({
         </span>
         <span className="when">{ago(game.savedAt)}</span>
       </button>
+      <button
+        className="share"
+        onClick={() => downloadGame(game)}
+        aria-label="Export this game"
+        title="Export this game"
+      >
+        Export
+      </button>
       <button className="del" onClick={onDelete} aria-label="Delete this game" title="Delete">
         ×
       </button>
@@ -205,14 +264,39 @@ function PastGame({
  * enough (~30 kB a game) that dumping all of them is the right granularity.
  */
 function downloadGames(games: GameRecord[]): void {
+  downloadJson(games, `risk-games-${new Date().toISOString().slice(0, 10)}.json`)
+}
+
+/** A single record is easier to send; import accepts it directly as well as the all-games array. */
+function downloadGame(game: GameRecord): void {
+  const safeId = game.id.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80) || 'shared'
+  downloadJson(game, `risk-game-${safeId}.json`)
+}
+
+function downloadJson(value: GameRecord | GameRecord[], filename: string): void {
   const url = URL.createObjectURL(
-    new Blob([JSON.stringify(games, null, 2)], { type: 'application/json' }),
+    new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }),
   )
   const a = document.createElement('a')
   a.href = url
-  a.download = `risk-games-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function describeImport(result: ImportGamesResult): string {
+  const parts = [
+    result.imported
+      ? `Imported ${result.imported} game${result.imported === 1 ? '' : 's'}.`
+      : 'No new games imported.',
+  ]
+  if (result.duplicates)
+    parts.push(`${result.duplicates} already saved or duplicated.`)
+  if (result.rejected)
+    parts.push(`${result.rejected} invalid or incompatible.`)
+  if (result.atCapacity)
+    parts.push(`${result.atCapacity} not added because the 40-game history is full.`)
+  return parts.join(' ')
 }
 
 function ago(ts: number): string {

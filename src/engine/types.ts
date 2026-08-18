@@ -136,7 +136,8 @@ export interface GameState {
    * Whether `moves` is being kept. Off, `applyMove` neither appends to the list
    * nor copies it, which is what stops per-move cost growing with the length of
    * the game — the benchmark plays hundreds of thousands of moves and replays
-   * none of them. Anything that will be saved, undone or reviewed needs it on.
+   * none of them. Anything that will be saved or undone needs it on; replay and
+   * review already own the source move list and reconstruct with it off.
    */
   record: boolean
   rngState: number

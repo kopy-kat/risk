@@ -39,7 +39,10 @@ export function replay(record: GameRecord): Replay {
   const states: GameState[] = []
   let s: GameState
   try {
-    s = createGame({ seats: record.seats, seed: record.seed, mode: record.mode })
+    // The record already owns the move list. Keeping another growing prefix in
+    // every reconstructed state makes a replay quadratic in memory, while no
+    // replay or review consumer reads `state.moves`.
+    s = createGame({ seats: record.seats, seed: record.seed, mode: record.mode, record: false })
   } catch (e) {
     return { record, states: [], error: message(e) }
   }

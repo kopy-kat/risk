@@ -42,7 +42,7 @@ import {
   expectedSurvivors,
   winProb,
 } from '../engine/combat'
-import { applyMove, legalMoves } from '../engine/game'
+import { applyMove, bestTradeIn, legalMoves } from '../engine/game'
 import type { GameState, Move, PlayerId } from '../engine/types'
 import { garrisonFor, isBorder } from '../bots/strategy/board-sense'
 import { EXPOSURE_WEIGHT, assess } from '../bots/strategy/evaluate'
@@ -456,6 +456,14 @@ function follow(s: GameState, me: PlayerId, bot: Bot, rand: () => number): Move 
     m = bot.decide(s, me, rand)
   } catch {
     return null
+  }
+  // The human control cashes `bestTradeIn` automatically; the reference policy
+  // decides whether to trade, but it must not continue a review through a card-set
+  // choice the player could not make in the UI.
+  if (m.type === 'tradeCards') {
+    const trade = bestTradeIn(s, me)
+    if (!trade) return null
+    m = { type: 'tradeCards', cards: trade.cards }
   }
   // `endTurn` is where a rollout stops rather than a move it plays.
   return m.type === 'endTurn' ? null : m

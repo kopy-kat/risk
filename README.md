@@ -78,9 +78,10 @@ label carries its own hint, so nothing needs memorising.
   you missed, with a button to replay them identically.
 - **Every game replays from one number.** One seed drives the turn order, the deal, the
   dice and the bots, and it is stored with the move list.
-- **Review your games.** Finished games are stored locally as a seed and a move list,
-  and played back with the bot's opinion of every move — see below. **Export** on the
-  setup screen writes them all to a file, which `npm run study` reads.
+- **Review and share your games.** Games are stored locally as a seed and a move list,
+  and played back with the bot's opinion of every move — see below. Export one game
+  to send its replay and review to a friend, or export them all for `npm run study`;
+  **Import** adds shared games without replacing the history already in the browser.
 
 ## Bots
 
@@ -150,9 +151,10 @@ best available move) and **luck** (what the dice then did about it). The summary
 **Reinforcement is judged a turn at a time.** Armies in hand buy nothing until
 they're spent, so a deploy is priced by letting the bot finish the turn behind it —
 and the recommendation says what it was for: *deploy 1 to Ural, then take
-Afghanistan*. Alongside the per-move verdicts the review names what you did wrong
-more than once (*taking ground you can't hold, 6× −41*) and splits accuracy by where
-in the turn it went.
+Afghanistan*. Equivalent deployment sequences count as the same plan: placing some
+armies and then cashing a set is not worse than cashing first when both routes finish
+the deployment on the same board. Alongside the per-move verdicts the review names
+what you did wrong more than once (*taking ground you can't hold, 6× −41*).
 
 ### Writing one
 
