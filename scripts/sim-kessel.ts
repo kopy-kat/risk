@@ -9,6 +9,7 @@
  * without a winner or carries on after one.
  */
 import { kessel } from '../src/games/kessel'
+import { REPLACEMENT_TURNS } from '../src/games/kessel/game'
 import { STACK_LIMIT, mapOf } from '../src/games/kessel/map'
 import type { KesselState, Move } from '../src/games/kessel/types'
 import { rngFrom } from '../src/engine/rng'
@@ -40,6 +41,7 @@ function check(s: KesselState, where: string) {
     if (f.cohesion < 0 || f.cohesion > 100) fail(`cohesion out of range (${f.cohesion})`)
     if (f.wear < 0 || f.wear >= 100) fail(`wear out of range (${f.wear})`)
     if (f.supply < 0 || f.supply > 3) fail(`supply out of range (${f.supply})`)
+    if (f.rest < 0 || f.rest >= REPLACEMENT_TURNS) fail(`rest out of range (${f.rest})`)
     if (!m.province[f.at]) fail('a formation stands on a province the map does not have')
   }
   for (const [at, n] of Object.entries(stacked)) {
@@ -55,10 +57,15 @@ function check(s: KesselState, where: string) {
   if (!over && s.winner !== null) fail('a winner while the war is still on')
 
   if (s.phase === 'orders' && Object.keys(s.orders).length > 0) {
-    const stale = Object.keys(s.orders).some(
-      (id) => !s.formations.some((f) => f.id === Number(id) && f.owner === s.current),
-    )
-    if (stale) fail("an order staged against a formation that is gone, or the other side's")
+    for (const id of Object.keys(s.orders)) {
+      const f = s.formations.find((x) => x.id === Number(id))
+      if (!f) fail('an order staged against a formation that is gone')
+      // A refit stands across turns, so the other side's can be on the board; nothing else of theirs can.
+      else if (f.owner !== s.current && s.orders[Number(id)].type !== 'refit') fail("the other side's order on the board")
+    }
+  }
+  for (const side of s.sides) {
+    if (side.aims.length === 0) fail(`${side.name} has no war aims`)
   }
 }
 

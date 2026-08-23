@@ -345,10 +345,9 @@ export function describeOrders(
   if (moves > 0) bits.push(`${moves} advancing`)
   const refits = count('refit')
   if (refits > 0) bits.push(`${refits} refitting`)
-  const held = count('hold')
+  // Standing still is digging in, ordered or not.
+  const held = mine.length - moves - refits - count('attack')
   if (held > 0) bits.push(`${held} digging in`)
-  const none = mine.length - moves - refits - held - count('attack')
-  if (none > 0) bits.push(`${none} left without orders`)
   return bits.length ? bits.join(', ') : 'nothing ordered'
 }
 

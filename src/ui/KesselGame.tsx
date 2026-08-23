@@ -2,17 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { rngFrom } from '../engine/rng'
 import type { PlayerId, SeatConfig } from '../engine/types'
 import { kessel } from '../games/kessel'
-import { WILL_FLOOR, applyMove, createGame, legalMoves } from '../games/kessel/game'
+import { applyMove, broken, createGame, legalMoves } from '../games/kessel/game'
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
+import { MUD_CYCLE, MUD_TURNS, exploitReach, isMud, reachable } from '../games/kessel/movement'
 import { retreatOptions } from '../games/kessel/supply'
 import { newGameId, saveGame } from '../review/store'
-import type { FormationId, KesselState, LogEntry, Move, Order } from '../games/kessel/types'
+import type { FormationId, KesselState, LogEntry, Move } from '../games/kessel/types'
 import { playerColor } from './colors'
 import type { PrimaryAction } from './Dock'
 import { KesselDock } from './KesselDock'
 import type { AttackPreview } from './KesselDock'
 import { KesselMap } from './KesselMap'
+import type { TargetKind } from './KesselMap'
 
 /** Long enough to read the board before the other side answers. */
 const BOT_DELAY = 420
@@ -66,6 +68,14 @@ function projectOrders(s: KesselState): KesselState {
   return { ...s, owner, formations }
 }
 
+const REAR_NEWS = /arrives by rail|up to strength/
+
+/** Turns until the roads go. On the calendar for both sides, so it is said out loud. */
+const mudIn = (turn: number) => {
+  for (let t = 1; t <= MUD_CYCLE; t++) if (isMud(turn + t)) return t
+  return MUD_CYCLE - MUD_TURNS
+}
+
 const aimReport = (m: GameMap, s: KesselState, p: PlayerId) => {
   const aims = s.sides[p].aims
   const total = aims.reduce((n, id) => n + m.province[id].vp, 0)
@@ -117,7 +127,13 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
   const m = mapOf(state.mapId)
   const me = state.current
   const isHuman = !state.sides[me].bot && state.phase !== 'gameOver'
-  const acting = isHuman && state.phase === 'orders' ? me : null
+  /**
+   * Whose eyes the map is drawn through. One human sees the war from their seat
+   * whoever is moving; two at one keyboard each see their own fog on their own
+   * turn; a war between bots is watched with nothing hidden.
+   */
+  const humans = state.sides.filter((x) => !x.bot)
+  const viewer: PlayerId | null = humans.length === 1 ? humans[0].id : isHuman ? me : null
 
   const play = useCallback(
     (move: Move) => {
@@ -160,7 +176,11 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     const botNow = !!state.sides[state.current].bot
     if (botNow && !wasBot.current) logMark.current = state.log.length
     if (!botNow && wasBot.current) {
-      const rows = state.log.slice(logMark.current)
+      // What happens in the enemy's rear is theirs to know: a draft arriving or
+      // a corps rebuilt is not news the other side gets a line about.
+      const rows = state.log
+        .slice(logMark.current)
+        .filter((row) => row.player === state.current || row.player === null || !REAR_NEWS.test(row.text))
       setRecap(rows.length > 0 ? rows : null)
     }
     wasBot.current = botNow
@@ -172,17 +192,18 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
    * and what the rules allow cannot drift apart.
    */
   const legal = useMemo(() => {
-    const out = new Map<FormationId, Map<ProvinceId, Order['type']>>()
+    const out = new Map<FormationId, Map<ProvinceId, 'move' | 'attack'>>()
     if (!isHuman || state.phase !== 'orders') return out
     for (const mv of legalMoves(state, me)) {
       if (mv.type !== 'order') continue
       if (mv.order.type !== 'move' && mv.order.type !== 'attack') continue
-      const at = out.get(mv.formation) ?? new Map<ProvinceId, Order['type']>()
+      const at = out.get(mv.formation) ?? new Map<ProvinceId, 'move' | 'attack'>()
       at.set(mv.order.to, mv.order.type)
       out.set(mv.formation, at)
     }
     return out
   }, [state, me, isHuman])
+
 
   const projected = useMemo(() => projectOrders(state), [state])
 
@@ -195,27 +216,54 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
   }, [m, projected])
 
   const sel = selected === null ? null : (state.formations.find((f) => f.id === selected) ?? null)
-  const targets = (sel && legal.get(sel.id)) || new Map<ProvinceId, Order['type']>()
 
-  /** Formations in the order the eye sweeps them — west to east along the front. */
-  const cycleOrder = useMemo(
-    () =>
-      state.formations
-        .filter((f) => f.owner === me)
-        .sort((a, b) => m.province[a.at].cx - m.province[b.at].cx || m.province[a.at].cy - m.province[b.at].cy),
-    [state.formations, me, m],
-  )
+  /**
+   * Where an attack already staged for the selected formation could ride on to.
+   * Offered only once the assault is staged: the exploitation is the second click.
+   */
+  const onward = useMemo(() => {
+    const out = new Set<ProvinceId>()
+    if (!sel || !isHuman || state.phase !== 'orders') return out
+    const order = state.orders[sel.id]
+    if (order?.type !== 'attack') return out
+    for (const p of Object.keys(exploitReach(m, state, sel, order.to).cost)) out.add(p)
+    return out
+  }, [sel, isHuman, state, m])
+
+  const targets = useMemo(() => {
+    const out = new Map<ProvinceId, TargetKind>()
+    if (!sel) return out
+    const mine = legal.get(sel.id)
+    if (!mine) return out
+    const rail = reachable(m, state, sel).rail
+    for (const [p, kind] of mine) out.set(p, kind === 'move' && rail.has(p) ? 'rail' : kind)
+    for (const p of onward) out.set(p, 'onward')
+    return out
+  }, [state, m, sel, legal, onward])
+
+  /** Formations in the order the eye sweeps them — the contact line first, west to east. */
+  const cycleOrder = useMemo(() => {
+    const inContact = (at: ProvinceId) =>
+      (m.adjacency[at] ?? []).some((n) => state.formations.some((x) => x.at === n && x.owner !== me))
+    return state.formations
+      .filter((f) => f.owner === me)
+      .sort(
+        (a, b) =>
+          Number(inContact(b.at)) - Number(inContact(a.at)) ||
+          m.province[a.at].cx - m.province[b.at].cx ||
+          m.province[a.at].cy - m.province[b.at].cy,
+      )
+  }, [state.formations, me, m])
 
   const cycle = useCallback(
     (dir: 1 | -1) => {
-      const pending = cycleOrder.filter((f) => !state.orders[f.id])
-      const pool = pending.length > 0 ? pending : cycleOrder
+      const pool = cycleOrder
       if (pool.length === 0) return
       const at = pool.findIndex((f) => f.id === selected)
       const next = at === -1 ? (dir > 0 ? 0 : pool.length - 1) : (at + dir + pool.length) % pool.length
       setSelected(pool[next].id)
     },
-    [cycleOrder, state.orders, selected],
+    [cycleOrder, selected],
   )
 
   const pick = useCallback(
@@ -224,6 +272,11 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
       const here = state.formations.filter((f) => f.at === p)
 
       if (sel) {
+        const staged = state.orders[sel.id]
+        if (staged?.type === 'attack' && onward.has(p)) {
+          play({ type: 'order', formation: sel.id, order: { type: 'attack', to: staged.to, onward: p } })
+          return
+        }
         const kind = legal.get(sel.id)?.get(p)
         if (kind === 'attack' || kind === 'move') {
           play({ type: 'order', formation: sel.id, order: { type: kind, to: p } })
@@ -246,12 +299,12 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
         return
       }
       const at = ours.findIndex((f) => f.id === selected)
-      // arriving fresh lands on whatever still needs an order; clicking again
+      // arriving fresh lands on whatever still has no order; clicking again
       // walks the stack, which is the only way to reach the counter underneath
       if (at === -1) setSelected((ours.find((f) => !state.orders[f.id]) ?? ours[0]).id)
       else setSelected(ours[(at + 1) % ours.length].id)
     },
-    [isHuman, state, sel, selected, legal, play, m, me],
+    [isHuman, state, sel, selected, legal, onward, play, m, me],
   )
 
   const attack = useMemo<AttackPreview | null>(() => {
@@ -279,7 +332,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     if (state.phase === 'terms') {
       return { label: 'Accept terms', run: () => play({ type: 'acceptTerms' }) }
     }
-    if (state.sides[me].will <= WILL_FLOOR) {
+    if (broken(state, me) && !state.offered) {
       return { label: 'Offer terms', run: () => play({ type: 'offerTerms' }) }
     }
     return { label: 'Commit turn', run: () => play({ type: 'commit' }) }
@@ -332,7 +385,10 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     <div className="app">
       <div className="topbar">
         <div className="wordmark">KESSEL<span>.</span></div>
-        <div className="mono-label">Turn {String(state.turn).padStart(2, '0')}</div>
+        <div className="mono-label">
+          Turn {String(state.turn).padStart(2, '0')}
+          {isMud(state.turn) ? ' · mud' : ` · mud in ${mudIn(state.turn)}`}
+        </div>
         <div className="spacer" />
         {error && <div className="mono-label err">{error}</div>}
 
@@ -363,7 +419,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
       <main className="stage">
         <KesselMap
           state={state}
-          acting={acting}
+          viewer={viewer}
           selected={selected}
           targets={targets}
           pockets={pockets}
@@ -402,6 +458,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
           primary={primary}
           onClearOrder={() => sel && play({ type: 'clearOrder', formation: sel.id })}
           onRejectTerms={() => play({ type: 'rejectTerms' })}
+          onCommit={() => play({ type: 'commit' })}
           onShowSettings={() => setShowSettings((v) => !v)}
           settingsOpen={showSettings}
           onCloseSettings={() => setShowSettings(false)}

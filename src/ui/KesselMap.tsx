@@ -1,18 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PlayerId } from '../engine/types'
+import { REPLACEMENT_TURNS, STRENGTH } from '../games/kessel/game'
+import { observed } from '../games/kessel/intel'
 import { mapOf } from '../games/kessel/map'
 import type { Province, ProvinceId, Terrain } from '../games/kessel/map'
-import type { Formation, FormationId, KesselState, Order } from '../games/kessel/types'
+import { reachable } from '../games/kessel/movement'
+import { depthMap, liveDepots } from '../games/kessel/supply'
+import type { Formation, FormationId, KesselState, Order, Sighting } from '../games/kessel/types'
 import { playerColor } from './colors'
+
+/** What a click on a highlighted province would do. */
+export type TargetKind = 'move' | 'rail' | 'attack' | 'onward'
 
 export interface KesselMapProps {
   state: KesselState
-  /** the seat with orders to give, or null while a bot has the board */
-  acting: PlayerId | null
+  /**
+   * Whose eyes the board is seen through. Enemy counters out of this seat's sight
+   * show what it last knew of them; the enemy's aims show only once given away.
+   * Null sees everything — a war between bots, or a war being reviewed.
+   */
+  viewer: PlayerId | null
   selected: FormationId | null
   /** where the selected formation may go, and what happens when it gets there */
-  targets: Map<ProvinceId, Order['type']>
+  targets: Map<ProvinceId, TargetKind>
   /**
    * Provinces holding a formation with no line of retreat, measured on the board
    * the staged orders would produce. A ring closed by this turn's moves is the
@@ -53,15 +64,14 @@ const MAX_K = 4
 const KEY_STEP = 1.35
 /** How far the pointer may travel between press and release and still be a click. */
 const DRAG_SLOP = 4
-/** How far the graticule and the off-map margin run past the plate, in map units. */
+/** How far the graticule runs past the theatre, in map units — far enough that no pan finds its edge. */
 const SHEET = 3000
 /**
- * The plate edge, in map units at 1×: how far in the ground gives out, and the gap
- * between the two rules. The zoom is of the map, not of the table it is lying on,
- * so both are divided by the scale and the border reads the same at 1× and at 4×.
+ * Where the coastline is clipped the ground dissolves into the sheet over this
+ * many map units at 1×, instead of ending square. Divided by the zoom, so it is
+ * the same hairline at 1× and at 4×.
  */
-const FADE = 32
-const RULE = 7
+const FADE = 22
 
 const TEXTURE: Partial<Record<Terrain, string>> = {
   mountain: 'kt-mountain',
@@ -125,10 +135,16 @@ function orderPath(a: Province, b: Province) {
 }
 
 export function KesselMap({
-  state, acting, selected, targets, pockets, hover, onPick, onHover,
+  state, viewer, selected, targets, pockets, hover, onPick, onHover,
 }: KesselMapProps) {
   const m = mapOf(state.mapId)
   const colorOf = (p: PlayerId) => playerColor(state.sides[p]?.color ?? p)
+
+  /** Provinces the viewer can see into. Everything, when nobody in particular is looking. */
+  const eyes = useMemo(
+    () => (viewer === null ? null : observed(m, state, viewer)),
+    [m, state, viewer],
+  )
 
   /** The clipped plate: the ground the map actually covers, before the bar's room. */
   const plate = useMemo(() => {
@@ -142,7 +158,6 @@ export function KesselMap({
   const [view, setView] = useState({ k: 1, x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const fade = FADE / view.k
-  const rule = RULE / view.k
 
   /**
    * A zoom and a pan that between them can't show anything but the map: at 1×
@@ -276,12 +291,15 @@ export function KesselMap({
     [m],
   )
 
-  /** Who is fighting for what. Aims are dealt once, so this outlives every turn. */
+  /** Who is fighting for what — as far as the viewer knows. The enemy's aims appear as they are given away. */
   const claim = useMemo(() => {
     const out: Record<ProvinceId, PlayerId> = {}
-    for (const side of state.sides) for (const p of side.aims) out[p] = side.id
+    for (const side of state.sides) {
+      const known = viewer === null || side.id === viewer ? side.aims : side.revealed
+      for (const p of known) out[p] = side.id
+    }
     return out
-  }, [state.sides])
+  }, [state.sides, viewer])
 
   const terrain = useMemo(
     () =>
@@ -303,6 +321,13 @@ export function KesselMap({
     [m, claim],
   )
 
+  /** Railheads still on a line home. A depot off it is a building with a name, and drawn as one. */
+  const live = useMemo(() => {
+    const out = new Set<ProvinceId>()
+    for (const side of state.sides) for (const p of liveDepots(m, state, side.id)) out.add(p)
+    return out
+  }, [m, state])
+
   /** Depots and objective values — fixed to the ground, not to whoever holds it. */
   const marks = useMemo(
     () =>
@@ -313,7 +338,7 @@ export function KesselMap({
             {/* both sit clear of the counter box and of the pip in its corner —
                 a depot under a stack is a depot nobody reads */}
             {p.depot > 0 && (
-              <g transform={`translate(${p.cx - 27},${p.cy - 21})`}>
+              <g transform={`translate(${p.cx - 27},${p.cy - 21})`} className={live.has(p.id) ? '' : 'dead'}>
                 <rect className="kdepot" x={0} y={0} width={12} height={9} rx={1} />
                 {Array.from({ length: p.depot }, (_, i) => (
                   <rect key={i} className="kdepot-pip" x={1.8 + i * 3} y={2.2} width={1.8} height={4.6} />
@@ -334,7 +359,7 @@ export function KesselMap({
         )),
     // colorOf reads only the seat palette, which is fixed for the whole game
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [m, claim],
+    [m, claim, live],
   )
 
   const garrison = useMemo(() => {
@@ -348,18 +373,27 @@ export function KesselMap({
   }, [state.formations])
 
   const arrows = useMemo(() => {
-    const out: { key: string; d: string; kind: Order['type'] }[] = []
+    const out: { key: string; d: string; kind: 'move' | 'rail' | 'attack' | 'onward' }[] = []
+    const depth: Partial<Record<PlayerId, Record<ProvinceId, number>>> = {}
     for (const f of state.formations) {
       const order = state.orders[f.id]
       if (!order || (order.type !== 'move' && order.type !== 'attack')) continue
-      out.push({
-        key: String(f.id),
-        d: orderPath(m.province[f.at], m.province[order.to]),
-        kind: order.type,
-      })
+      let kind: 'move' | 'rail' | 'attack' = order.type
+      if (order.type === 'move') {
+        depth[f.owner] ??= depthMap(m, state, f.owner)
+        if (reachable(m, state, f, { depth: depth[f.owner] }).rail.has(order.to)) kind = 'rail'
+      }
+      out.push({ key: String(f.id), d: orderPath(m.province[f.at], m.province[order.to]), kind })
+      if (order.type === 'attack' && order.onward) {
+        out.push({
+          key: `${f.id}:on`,
+          d: orderPath(m.province[order.to], m.province[order.onward]),
+          kind: 'onward',
+        })
+      }
     }
     return out
-  }, [m, state.formations, state.orders])
+  }, [m, state])
 
   const selectedAt = selected === null
     ? null
@@ -436,20 +470,21 @@ export function KesselMap({
           >
             <path className="khead move" d="M0 1 L10 5 L0 9 L2.5 5 Z" />
           </marker>
-
-          {/* The sheet the plate is printed on — everything past the theatre. The
-              zoom is of the map, not of the table it is lying on, so the ruling
-              holds its weight and the margin looks the same at 1× and at 4×. */}
-          <pattern
-            id="k-off" width={8} height={8} patternUnits="userSpaceOnUse"
-            patternTransform={`rotate(45) scale(${1 / view.k})`}
+          <marker
+            id="k-head-rail" viewBox="0 0 10 10" refX={9} refY={5}
+            markerWidth={4} markerHeight={4} orient="auto-start-reverse"
           >
-            <rect className="koff-bg" width={8} height={8} />
-            <path className="koff-line" d="M0 0 V8" />
-          </pattern>
+            <path className="khead move" d="M0 1 L10 5 L0 9 L2.5 5 Z" />
+          </marker>
+          <marker
+            id="k-head-onward" viewBox="0 0 10 10" refX={9} refY={5}
+            markerWidth={4} markerHeight={4} orient="auto-start-reverse"
+          >
+            <path className="khead attack" d="M0 1 L10 5 L0 9 L2.5 5 Z" />
+          </marker>
 
           {/* each vector points inwards, so stop 0 is always the plate edge */}
-          {([['w', 0, 0, 1, 0], ['e', 1, 0, 0, 0], ['n', 0, 0, 0, 1], ['s', 0, 1, 0, 0]] as const).map(
+          {([['w', 0, 0, 1, 0], ['e', 1, 0, 0, 0], ['n', 0, 0, 0, 1]] as const).map(
             ([side, x1, y1, x2, y2]) => (
               <linearGradient key={side} id={`k-fade-${side}`} x1={x1} y1={y1} x2={x2} y2={y2}>
                 <stop className="kfade-edge" offset="0" />
@@ -505,7 +540,10 @@ export function KesselMap({
                   className={[
                     'kedge',
                     selectedAt === p.id ? 'sel' : '',
-                    kind === 'attack' ? 'attack' : kind ? 'target' : '',
+                    kind === 'attack' ? 'attack'
+                      : kind === 'onward' ? 'onward'
+                        : kind === 'rail' ? 'target rail'
+                          : kind ? 'target' : '',
                     pockets.has(p.id) ? 'pocket' : '',
                     hover === p.id ? 'hot' : '',
                   ].join(' ')}
@@ -517,15 +555,16 @@ export function KesselMap({
 
           <g pointerEvents="none">{marks}</g>
 
-          {/* The ground gives out before the neatline instead of meeting it at full
-              saturation — an ownership colour cut square is what read as a bug.
+          {/* The coastline is clipped to a lon/lat box, so where the theatre ends
+              the ground is cut square — and an ownership colour cut square reads as
+              a bug. It dissolves into the sheet instead, except along the south,
+              where the bar sits on the edge and the Maghreb is thin enough already.
               Above the ground and under the counters: a formation on the last
-              province is still a formation you have to be able to read. */}
+              province still has to be read. */}
           <g pointerEvents="none">
             <rect fill="url(#k-fade-w)" x={plate.x} y={plate.y} width={fade} height={plate.h} />
             <rect fill="url(#k-fade-e)" x={plate.x + plate.w - fade} y={plate.y} width={fade} height={plate.h} />
             <rect fill="url(#k-fade-n)" x={plate.x} y={plate.y} width={plate.w} height={fade} />
-            <rect fill="url(#k-fade-s)" x={plate.x} y={plate.y + plate.h - fade} width={plate.w} height={fade} />
           </g>
 
           <g pointerEvents="none">
@@ -541,44 +580,25 @@ export function KesselMap({
 
           <g pointerEvents="none">
             {[...garrison].map(([at, all]) =>
-              all.map((f, i) => (
-                <Counter
-                  key={f.id}
-                  f={f}
-                  x={m.province[at].cx + (i - (all.length - 1) / 2) * STACK_DX}
-                  y={m.province[at].cy + (i - (all.length - 1) / 2) * STACK_DY}
-                  color={colorOf(f.owner)}
-                  selected={f.id === selected}
-                  pending={f.owner === acting && !state.orders[f.id]}
-                  order={state.orders[f.id]}
-                />
-              )),
+              all.map((f, i) => {
+                const hidden = eyes !== null && f.owner !== viewer && !eyes.has(f.at)
+                return (
+                  <Counter
+                    key={f.id}
+                    f={f}
+                    x={m.province[at].cx + (i - (all.length - 1) / 2) * STACK_DX}
+                    y={m.province[at].cy + (i - (all.length - 1) / 2) * STACK_DY}
+                    color={colorOf(f.owner)}
+                    selected={f.id === selected}
+                    order={viewer === null || f.owner === viewer ? state.orders[f.id] : undefined}
+                    sighting={hidden ? (viewer === null ? null : state.sides[viewer].seen[f.id] ?? null) : undefined}
+                    turn={state.turn}
+                  />
+                )
+              }),
             )}
           </g>
 
-          {/* The theatre is a plate, not the world. The coastline is clipped to a
-              box, so the land is cut whichever way it is drawn — and an atlas cuts
-              geography at a neatline with the off-map sheet showing beyond it,
-              which is the difference between an edge and an unfinished render. */}
-          <g pointerEvents="none">
-            <path
-              fillRule="evenodd"
-              fill="url(#k-off)"
-              d={
-                `M${-SHEET} ${-SHEET} h${SHEET * 2 + plate.w} v${SHEET * 2 + frameH} h${-(SHEET * 2 + plate.w)} Z` +
-                `M${plate.x} ${plate.y} h${plate.w} v${plate.h} h${-plate.w} Z`
-              }
-            />
-            <rect
-              className="kneat outer" vectorEffect="non-scaling-stroke"
-              x={plate.x - rule} y={plate.y - rule}
-              width={plate.w + 2 * rule} height={plate.h + 2 * rule}
-            />
-            <rect
-              className="kneat" vectorEffect="non-scaling-stroke"
-              x={plate.x} y={plate.y} width={plate.w} height={plate.h}
-            />
-          </g>
         </g>
       </svg>
 
@@ -594,14 +614,37 @@ export function KesselMap({
               claim[readout] !== undefined ? `${state.sides[claim[readout]].name} war aim` : null,
             ].filter(Boolean).join(' · ')}
           </div>
-          {(garrison.get(readout) ?? []).map((f) => (
-            <div className="f" key={f.id} style={{ ['--c' as string]: colorOf(f.owner) }}>
-              <span className="dot" />
-              <span className="nm">{TYPE_NAME[f.type]}</span>
-              <span className="n">{f.strength} str · {Math.round(f.cohesion)} coh</span>
-              <span className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</span>
-            </div>
-          ))}
+          {(garrison.get(readout) ?? []).map((f) => {
+            const hidden = eyes !== null && f.owner !== viewer && !eyes.has(f.at)
+            const last = hidden && viewer !== null ? state.sides[viewer].seen[f.id] : undefined
+            if (hidden) {
+              return (
+                <div className="f fog" key={f.id} style={{ ['--c' as string]: colorOf(f.owner) }}>
+                  <span className="dot" />
+                  {last ? (
+                    <>
+                      <span className="nm">{TYPE_NAME[last.type]}</span>
+                      <span className="n">{last.strength} str · {Math.round(last.cohesion)} coh</span>
+                      <span className="age">seen turn {last.turn}</span>
+                    </>
+                  ) : (
+                    <span className="nm">Unseen</span>
+                  )}
+                </div>
+              )
+            }
+            return (
+              <div className="f" key={f.id} style={{ ['--c' as string]: colorOf(f.owner) }}>
+                <span className="dot" />
+                <span className="nm">{TYPE_NAME[f.type]}</span>
+                <span className="n">
+                  {f.strength} str · {Math.round(f.cohesion)} coh
+                  {f.rest > 0 ? ` · rebuilding ${f.rest}/${REPLACEMENT_TURNS}` : ''}
+                </span>
+                <span className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</span>
+              </div>
+            )
+          })}
           {pockets.has(readout) && <div className="kpocket-say">No line of retreat</div>}
         </div>
       )}
@@ -622,28 +665,63 @@ export function KesselMap({
           <b>Encircled</b>
           <em>surrenders if beaten</em>
         </span>
+        {viewer !== null && (
+          <span className="row fog">
+            <i className="pip" />
+            <b>Unseen</b>
+            <em>last known, if anything</em>
+          </span>
+        )}
       </div>
     </>
   )
 }
 
 function Counter({
-  f, x, y, color, selected, pending, order,
+  f, x, y, color, selected, order, sighting, turn,
 }: {
   f: Formation
   x: number
   y: number
   color: string
   selected: boolean
-  pending: boolean
   order: Order | undefined
+  /**
+   * Set when the viewer cannot see this counter: what they last knew of it, or
+   * null for a counter never observed. Undefined means it is in plain sight.
+   */
+  sighting: Sighting | null | undefined
+  turn: number
 }) {
   const x0 = x - CW / 2
   const y0 = y - CH / 2
-  const cut = f.supply === 0
   const sx = x0 + GUTTER + 7
   const sy = y0 + CH / 2 - 1
 
+  // Out of sight: the counter is there — counts are public — but what it is
+  // worth is what the viewer last saw, or nothing at all.
+  if (sighting !== undefined) {
+    const k = sighting
+    return (
+      <g className={`kcounter fog ${k ? `s${k.supply}` : ''} ${selected ? 'sel' : ''}`} style={{ ['--c' as string]: color }}>
+        <rect className="body" x={x0} y={y0} width={CW} height={CH} rx={1.5} />
+        {k && (
+          <>
+            {k.type === 'infantry' && (
+              <path className="sym" d={`M${sx - 4.4},${sy - 3.4} L${sx + 4.4},${sy + 3.4} M${sx - 4.4},${sy + 3.4} L${sx + 4.4},${sy - 3.4}`} />
+            )}
+            {k.type === 'armour' && <ellipse className="sym" cx={sx} cy={sy} rx={4.6} ry={3.3} />}
+            {k.type === 'recon' && <path className="sym" d={`M${sx - 4.4},${sy + 3.4} L${sx + 4.4},${sy - 3.4}`} />}
+            <text className="str" x={x0 + CW - 6.5} y={y0 + CH / 2 + 2.2}>{k.strength}</text>
+            <text className="age" x={x0 + CW - 1.5} y={y0 + CH - 1.5}>{turn - k.turn > 0 ? `−${turn - k.turn}` : ''}</text>
+          </>
+        )}
+        {!k && <text className="str unknown" x={x0 + CW / 2} y={y0 + CH / 2 + 2.6}>?</text>}
+      </g>
+    )
+  }
+
+  const cut = f.supply === 0
   return (
     <g className={`kcounter s${f.supply} ${selected ? 'sel' : ''}`} style={{ ['--c' as string]: color }}>
       {selected && <rect className="halo" x={x0 - 3} y={y0 - 3} width={CW + 6} height={CH + 6} rx={3} />}
@@ -669,6 +747,12 @@ function Counter({
       {f.type === 'recon' && <path className="sym" d={`M${sx - 4.4},${sy + 3.4} L${sx + 4.4},${sy - 3.4}`} />}
 
       <text className="str" x={x0 + CW - 6.5} y={y0 + CH / 2 + 2.2}>{f.strength}</text>
+      {/* under strength: the steps it is missing, as hollow pips — and rebuilding, if it is */}
+      {f.strength < STRENGTH[f.type] && (
+        <text className={`str short ${f.rest > 0 ? 'rebuilding' : ''}`} x={x0 + CW - 1.5} y={y0 + 5.2}>
+          {f.rest > 0 ? '+' : '−'}
+        </text>
+      )}
 
       <rect className="coh-bg" x={x0 + GUTTER + 1} y={y0 + CH - 4} width={CW - GUTTER - 2.5} height={2.4} />
       <rect
@@ -682,9 +766,6 @@ function Counter({
       {cut && (
         <path className="strike" d={`M${x0 + 2},${y0 + 2} L${x0 + CW - 2},${y0 + CH - 2} M${x0 + 2},${y0 + CH - 2} L${x0 + CW - 2},${y0 + 2}`} />
       )}
-      {/* what is left to give an order to, marked on the board rather than counted
-          in the bar — twenty-six formations is too many to find by name */}
-      {pending && <circle className="pending" cx={x0 + CW - 1.5} cy={y0 + 1.5} r={2.6} />}
       {order?.type === 'hold' && <path className="ordmark" d={`M${x0 + 4},${y0 + CH + 4} H${x0 + CW - 4}`} />}
       {order?.type === 'refit' && (
         <path className="ordmark" d={`M${x - 4},${y0 + CH + 4} H${x + 4} M${x},${y0 + CH} V${y0 + CH + 8}`} />

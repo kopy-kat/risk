@@ -1,6 +1,9 @@
-import { TERRAIN_DEFENCE } from './map'
+import { TERRAIN_DEFENCE, frontage } from './map'
 import type { GameMap, ProvinceId } from './map'
 import type { Formation, UnitType } from './types'
+
+/** Formations that can engage one province at once, from however many directions. */
+export const MAX_ENGAGED = 4
 
 const ATTACK_FACTOR: Record<UnitType, number> = { infantry: 1, armour: 1.4, recon: 0.5 }
 const DEFEND_FACTOR: Record<UnitType, number> = { infantry: 1.1, armour: 1, recon: 0.5 }
@@ -23,6 +26,27 @@ export const defendValue = (m: GameMap, f: Formation, where: ProvinceId): number
   DEFEND_FACTOR[f.type] *
   TERRAIN_DEFENCE[m.province[where].terrain] *
   entrench(f.dug)
+
+/**
+ * Who actually fights, out of everyone ordered against `target`.
+ *
+ * Each border admits what its frontage allows, and the best attack value goes
+ * through it first — so a fresh corps is not left at the rear because a spent one
+ * stood in front of it, and converging from several provinces brings more to bear
+ * than stacking a single border ever can. Four in all: a province can only be
+ * attacked from so many sides at once.
+ */
+export function engage(m: GameMap, attackers: Formation[], target: ProvinceId): Formation[] {
+  const bySource = new Map<ProvinceId, Formation[]>()
+  for (const f of attackers) bySource.set(f.at, [...(bySource.get(f.at) ?? []), f])
+
+  const admitted: Formation[] = []
+  for (const [src, all] of bySource) {
+    const room = frontage(m, src, target)
+    admitted.push(...[...all].sort((a, b) => attackValue(b) - attackValue(a)).slice(0, room))
+  }
+  return admitted.sort((a, b) => attackValue(b) - attackValue(a)).slice(0, MAX_ENGAGED)
+}
 
 /** Cohesion a balanced engagement costs each side. */
 const BASE_LOSS = 22

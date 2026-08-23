@@ -285,6 +285,8 @@ svg.map { width: 100%; height: 100%; display: block; }
 
 .counter { font-family: 'Instrument Serif', serif; font-size: 34px; line-height: .85; color: var(--accent); font-variant-numeric: tabular-nums; }
 .counter.sm { font-size: 22px; }
+.counter.spent { color: var(--ink-3); }
+.counter i { font-style: normal; font-size: 16px; color: var(--ink-3); }
 
 /* cards, as compact chips. The rack holds a full hand's width whatever it's
    carrying, so cashing a set doesn't drag the ± control across the bar. */
@@ -837,13 +839,8 @@ kbd {
 .kmap { cursor: grab; }
 .kmap.panning, .kmap.panning .kterr { cursor: grabbing; }
 
-/* Off the plate. The theatre is clipped to a lon/lat box, so the land is cut
-   whichever way it is drawn; the neatline and the sheet beyond it are what make
-   that a printed edge rather than an unfinished one. */
-.koff-bg { fill: var(--paper-2); }
-.koff-line { stroke: var(--coast); stroke-width: .9; opacity: .17; }
-.kneat { fill: none; stroke: var(--coast); stroke-width: 1.5; }
-.kneat.outer { stroke-width: .7; opacity: .5; }
+/* The theatre is clipped to a lon/lat box, so the land is cut whichever way it is
+   drawn; at the cut it dissolves into the sheet it is printed on. */
 .kfade-edge { stop-color: var(--sea); stop-opacity: 1; }
 .kfade-in { stop-color: var(--sea); stop-opacity: 0; }
 
@@ -872,8 +869,13 @@ kbd {
   transition: stroke .16s var(--ease), stroke-width .16s var(--ease);
 }
 .kedge.hot { stroke: var(--ink-2); stroke-width: 1.4; }
-.kedge.target { stroke: var(--ink); stroke-width: 1.7; stroke-dasharray: 4 3; animation: march 9s linear infinite; }
+.kedge.target { stroke: var(--ink); stroke-width: 1.6; stroke-dasharray: 4 3; }
+/* reached by rail rather than on foot — lighter, and ruled like the track */
+.kedge.target.rail { stroke: var(--ink-3); stroke-width: 1.2; stroke-dasharray: 1.5 2.5; }
+/* The one outline that moves: the assault you are about to make. */
 .kedge.attack { stroke: var(--accent); stroke-width: 3.2; stroke-dasharray: 5 3; animation: march 9s linear infinite; }
+/* where a staged assault could ride on to, if the ground falls */
+.kedge.onward { stroke: var(--accent); stroke-width: 1.7; stroke-dasharray: 2.5 3; }
 .kedge.sel { stroke: var(--ink); stroke-width: 2.6; }
 /* No line of retreat. Beaten here a formation surrenders, so this is the loudest
    mark on the map and the only one that moves. */
@@ -885,6 +887,9 @@ kbd {
 /* depots and objective values — fixed to the ground, not to whoever holds it */
 .kdepot { fill: var(--paper); stroke: var(--ink-2); stroke-width: .9; }
 .kdepot-pip { fill: var(--ink-2); }
+/* cut off from home: the railhead issues nothing until the line is reopened */
+.dead .kdepot { stroke: var(--cut); stroke-dasharray: 2 1.5; }
+.dead .kdepot-pip { fill: var(--cut); opacity: .5; }
 .kvp { fill: var(--paper); stroke: var(--ink-2); stroke-width: 1.1; }
 .kvp.aim { stroke: var(--ink); stroke-width: 1.1; }
 .kvp-n {
@@ -897,7 +902,10 @@ kbd {
 /* staged orders, drawn where they will happen */
 .korder { fill: none; }
 .korder.move { stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 5.5 3.5; }
+/* by rail: the same arrow, ruled like a railway rather than dashed like a march */
+.korder.rail { stroke: var(--ink-2); stroke-width: 2.4; stroke-dasharray: 1.5 2.5; }
 .korder.attack { stroke: var(--accent); stroke-width: 3; }
+.korder.onward { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 2.5 3; }
 .khead.attack { fill: var(--accent); stroke: none; }
 .khead.move { fill: var(--ink-2); stroke: none; }
 
@@ -918,10 +926,18 @@ kbd {
 .kcounter .coh { fill: var(--ink-2); }
 .kcounter .coh.low { fill: var(--cut); }
 .kcounter .halo { fill: none; stroke: var(--ink); stroke-width: 1.8; }
-/* what is still waiting for an order, marked on the board — twenty-six
-   formations is too many to find by name */
-.kcounter .pending { fill: var(--paper); stroke: var(--accent); stroke-width: 1.5; }
 .kcounter .ordmark { stroke: var(--ink-2); stroke-width: 1.6; fill: none; }
+/* under strength: a step missing, or one on its way back */
+.kcounter .str.short { font-size: 8px; fill: var(--cut); }
+.kcounter .str.short.rebuilding { fill: var(--p5); }
+
+/* Out of sight. The counter is there — counts are public — drawn from what the
+   viewer last saw of it: faded, with how many turns ago in the corner, or a
+   blank with a question mark for a formation never observed at all. */
+.kcounter.fog .body { fill: color-mix(in srgb, var(--c) 7%, var(--paper)); stroke: var(--c); stroke-width: 1.1; stroke-dasharray: 2 2; opacity: .8; }
+.kcounter.fog .sym, .kcounter.fog .str { opacity: .55; }
+.kcounter.fog .age { font-family: 'IBM Plex Mono', monospace; font-size: 6px; fill: var(--ink-3); text-anchor: end; }
+.kcounter.fog .str.unknown { opacity: .45; font-size: 12px; }
 
 /* Anything short of full supply cannot start an attack, and the counter says so
    by breaking its own outline. Below that it is dying rather than culminating. */
@@ -948,6 +964,8 @@ kbd {
 .kreadout .f .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
 .kreadout .f .nm { width: 62px; color: var(--ink); }
 .kreadout .f .n { font-variant-numeric: tabular-nums; }
+.kreadout .f.fog { opacity: .7; }
+.kreadout .f .age { font-size: 9.5px; color: var(--ink-3); }
 .kreadout .kpocket-say {
   margin-top: 4px; color: var(--cut); font-weight: 600;
   font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
@@ -963,11 +981,12 @@ kbd {
    more than a border style can carry unaided, and anything taller would buy
    legibility by hiding the ground it explains. */
 .klegend {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 106px; z-index: 4;
-  display: flex; align-items: center; gap: 15px; flex-wrap: wrap; justify-content: center;
-  max-width: var(--dock-w);
-  padding: 6px 13px;
-  background: rgba(252,250,245,.9); border: 1px solid var(--rule); border-radius: 3px;
+  /* The sheet's top-right corner, past the Volga: off the ground and out from
+     under the bar. Centred over the bar it sat on North Africa. */
+  position: absolute; right: 18px; top: 14px; z-index: 4;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: 8px 12px;
+  background: rgba(252,250,245,.82); border-radius: 3px;
   pointer-events: none;
 }
 .klegend .row { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -977,6 +996,7 @@ kbd {
 .klegend .row.s1 .pip { background: var(--cut); opacity: .55; }
 .klegend .row.s0 .pip { background: var(--cut); }
 .klegend .row.pocket .pip { background: transparent; border: 1.5px dashed var(--cut); }
+.klegend .row.fog .pip { background: transparent; border: 1.2px dashed var(--ink-3); }
 .klegend b {
   font-size: 9px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: var(--ink);
 }

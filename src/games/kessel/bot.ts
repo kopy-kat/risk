@@ -1,10 +1,10 @@
 import type { PlayerId } from '../../engine/types'
 import type { GameBot } from '../types'
-import { attackValue, defendValue } from './combat'
-import { ACTIVATIONS, WILL_FLOOR, activationsUsed } from './game'
-import { STACK_LIMIT, frontage, mapOf } from './map'
+import { attackValue, defendValue, engage } from './combat'
+import { ACTIVATIONS, activationsUsed, broken } from './game'
+import { STACK_LIMIT, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
-import { reachable } from './movement'
+import { exploitReach, reachable } from './movement'
 import { retreatOptions, supplyStates } from './supply'
 import type { Formation, KesselState, Move, Order } from './types'
 
@@ -121,10 +121,23 @@ export function decideFor(
 ): Move {
   if (s.phase === 'terms') return termsReply(s, me)
 
-  if (s.sides[me].will <= WILL_FLOOR) return { type: 'offerTerms' }
+  if (broken(s, me) && !s.offered) return { type: 'offerTerms' }
 
   const m = mapOf(s.mapId)
-  const pending = s.formations.filter((f) => f.owner === me && !s.orders[f.id])
+  const mine = s.formations.filter((f) => f.owner === me)
+
+  // A refit stands from one turn to the next. The doctrine only meant it for as
+  // long as the formation was below its own threshold and out of contact, so a
+  // standing one past that point is cleared and decided afresh.
+  const stale = mine.find(
+    (f) =>
+      s.orders[f.id]?.type === 'refit' &&
+      (f.cohesion >= doctrine.refitBelow ||
+        (m.adjacency[f.at] ?? []).some((n) => s.formations.some((x) => x.at === n && x.owner !== me))),
+  )
+  if (stale) return { type: 'clearOrder', formation: stale.id }
+
+  const pending = mine.filter((f) => !s.orders[f.id])
   if (pending.length === 0) return { type: 'commit' }
 
   // Supply is recomputed at turn start, but orders staged earlier in this same
@@ -134,11 +147,28 @@ export function decideFor(
 
   // The budget goes to the contact line first. Ordering formations in whatever
   // sequence they happen to sit in the list spends it on rear areas and leaves
-  // the front standing still.
-  const inContact = (f: Formation) =>
-    (m.adjacency[f.at] ?? []).some((n) => s.formations.some((x) => x.at === n && x.owner !== me))
+  // the front standing still. Before even the line: whoever stands near valuable
+  // ground of ours that is empty with an enemy closing on it — left until the
+  // activations are spent, the rear is never garrisoned and a raid takes it.
+  const enemyAt = (p: ProvinceId) => s.formations.some((x) => x.at === p && x.owner !== me)
+  const within2 = (p: ProvinceId, test: (q: ProvinceId) => boolean) =>
+    (m.adjacency[p] ?? []).some((n) => test(n) || (m.adjacency[n] ?? []).some(test))
+  const threatened = new Set(
+    m.ids.filter(
+      (p) =>
+        s.owner[p] === me &&
+        provinceValue(m, p) > 0 &&
+        !s.formations.some((x) => x.at === p) &&
+        within2(p, enemyAt),
+    ),
+  )
+  const guardian = (f: Formation) => threatened.size > 0 && within2(f.at, (q) => threatened.has(q))
+  const inContact = (f: Formation) => (m.adjacency[f.at] ?? []).some(enemyAt)
   const f = [...pending].sort(
-    (a, b) => Number(inContact(b)) - Number(inContact(a)) || b.strength - a.strength,
+    (a, b) =>
+      Number(guardian(b)) - Number(guardian(a)) ||
+      Number(inContact(b)) - Number(inContact(a)) ||
+      b.strength - a.strength,
   )[0]
 
   const at = { ...f, supply: supply[f.id] ?? f.supply }
@@ -165,11 +195,41 @@ function orderFor(
     return { type: 'refit' }
   }
 
-  let best: { order: Order; score: number } = { order: { type: 'hold' }, score: dugInWorth(f) }
+  // Ground of ours worth something, with nobody on it and an enemy two provinces
+  // away. A rear nobody garrisons is a rear a recon corps takes, railhead and
+  // all — so standing on it is worth about what the province is, whatever the
+  // doctrine thinks of the front.
+  const enemyNear = (p: ProvinceId) =>
+    (m.adjacency[p] ?? []).some(
+      (n) => enemyAt(n).length > 0 || (m.adjacency[n] ?? []).some((nn) => enemyAt(nn).length > 0),
+    )
+  const guardWorth = (n: ProvinceId, standing: number) =>
+    s.owner[n] === me && provinceValue(m, n) > 0 && standing === 0 && enemyNear(n)
+      ? provinceValue(m, n) * 0.6
+      : 0
+
+  // Holding is worth the entrenchment — and the ground, if this is the only
+  // formation between a valuable province and an enemy close enough to walk in.
+  const alone = friendlyAt(f.at).length === 1
+  let best: { order: Order; score: number } = {
+    order: { type: 'hold' },
+    score: dugInWorth(f) + (alone ? guardWorth(f.at, 0) : 0),
+  }
   // Out of activations, the only orders left are the free ones.
   if (!afford) return best.order
 
-  if (f.supply >= 3) {
+  const goals = s.sides[me].aims.filter((p) => s.owner[p] !== me)
+  const pull = distanceTo(m, goals.length > 0 ? goals : m.ids.filter((p) => s.owner[p] !== me))
+
+  /** What standing on `n` would be worth, from `from` — the same yardstick for a march and an exploitation. */
+  const groundWorth = (from: ProvinceId, n: ProvinceId) => {
+    const closing = (chokes.get(n) ?? 0) * d.encirclement
+    const advance = (pull[from] - pull[n]) * d.objectivePull
+    const strain = s.owner[n] === me ? 0 : (1 - d.overreach) * 0.5
+    return closing + advance + provinceValue(m, n) * 0.2 - strain + guardWorth(n, friendlyAt(n).length)
+  }
+
+  if (f.supply >= 3 && !broken(s, me)) {
     for (const n of neighbours) {
       const defenders = enemyAt(n)
       if (defenders.length === 0) continue
@@ -185,9 +245,8 @@ function orderFor(
           x.supply >= 3 &&
           (!s.orders[x.id] || sameTarget(s.orders[x.id], n)),
       )
-      const sources = [...new Set([f.at, ...help.map((x) => x.at)])]
-      const room = Math.min(4, sources.reduce((t, src) => t + frontage(m, src, n), 0))
-      const committed = [f, ...help].slice(0, Math.max(1, room))
+      const committed = engage(m, [f, ...help], n)
+      if (!committed.some((x) => x.id === f.id)) continue
       const ours = committed.reduce((t, x) => t + attackValue(x), 0)
       const theirs = defenders.reduce((t, x) => t + defendValue(m, x, n), 0)
       const ratio = theirs === 0 ? Infinity : ours / theirs
@@ -202,26 +261,33 @@ function orderFor(
         provinceValue(m, n) * 0.4 +
         trapped * 4 * d.encirclement +
         overextended * d.counterattack
-      if (score > best.score) best = { order: { type: 'attack', to: n }, score }
+      if (score <= best.score) continue
+
+      // Where to ride on to if the ground falls: the best of what the assault
+      // would leave reachable, if it beats standing on the ground taken.
+      let onward: ProvinceId | undefined
+      let worth = 0
+      for (const p of Object.keys(exploitReach(m, s, f, n).cost)) {
+        const w = groundWorth(n, p)
+        if (w > worth) {
+          worth = w
+          onward = p
+        }
+      }
+      best = { order: onward ? { type: 'attack', to: n, onward } : { type: 'attack', to: n }, score }
     }
   }
-
-  const goals = s.sides[me].aims.filter((p) => s.owner[p] !== me)
-  const pull = distanceTo(m, goals.length > 0 ? goals : m.ids.filter((p) => s.owner[p] !== me))
 
   for (const n of Object.keys(reachable(m, s, f).cost)) {
     if (enemyAt(n).length > 0) continue
     if (friendlyAt(n).length >= STACK_LIMIT[m.province[n].terrain]) continue
-
-    const closing = (chokes.get(n) ?? 0) * d.encirclement
-    const advance = (pull[f.at] - pull[n]) * d.objectivePull
-    const strain = s.owner[n] === me ? 0 : (1 - d.overreach) * 0.5
-    const score = closing + advance + provinceValue(m, n) * 0.2 - strain + rand() * 0.1
+    const score = groundWorth(f.at, n) + rand() * 0.1
     if (score > best.score) best = { order: { type: 'move', to: n }, score }
   }
 
   return best.order
 }
+
 
 const sameTarget = (o: Order, n: ProvinceId) => o.type === 'attack' && o.to === n
 

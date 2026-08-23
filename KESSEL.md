@@ -22,11 +22,18 @@ Everything else exists to make that rule bite.
 a Natural Earth coastline. Natural Earth is public domain, so unlike the Risk board
 this map carries no share-alike terms.
 
-142 provinces, average degree 4.38, diameter 17, from Iberia to the Volga. Seeds are
+142 provinces, average degree 4.41, diameter 17, from Iberia to the Volga. Seeds are
 real cities at real coordinates, so density follows settlement: the west is dense and
 grinding, the east deep and open. Provinces carry terrain, depot capacity and
 objective value; edges carry shared border length, which narrows engagement across
 the tightest crossings.
+
+Each side's **rear** is one fourteenth of the map at its own end by longitude — ten
+provinces: Iberia, Ireland and Scotland for the west, the Volga for the east. Supply enters there and
+reinforcements arrive there. Every province a side starts with has to connect to its
+rear through the side's own ground, which is why Norway and the Maghreb carry sea
+links to Scotland and Tangier: an enclave that cannot trace home is a pocket on turn
+one.
 
 Topology is the main tuning surface. Edit `data/maps/europe.seeds.json` and
 regenerate — it takes under a second — rather than patching geometry.
@@ -38,6 +45,7 @@ regenerate — it takes under a second — rather than patching geometry.
 | `strength` | steps, 1–4. Lost slowly, and mostly to encirclement. |
 | `cohesion` | 0–100. Readiness. Lost fast, regained in supply. |
 | `wear` | damage since the last step loss. Every 100 costs a step, with no roll. |
+| `rest` | turns spent refitting on a live railhead while under strength. Three regain a step. |
 | `type` | `infantry` · `armour` · `recon` |
 
 Strength is what you have; cohesion is what you can use today. Splitting them is what
@@ -49,7 +57,8 @@ strength and can no longer attack.
 - **armour** — moves 4, draws 2, hits hardest. Drawing double while travelling fast
   is why armoured spearheads culminate first. That is the lesson, not a balance knob.
 - **recon** — moves 5, weak in combat, cheap. It gets behind a line and severs
-  supply, which is what makes supply an active domain rather than bookkeeping.
+  supply, which is what makes supply an active domain rather than bookkeeping; and
+  it sees two provinces out where everyone else sees one.
 
 Movement is an allowance spent over terrain, and it **ends the moment a formation
 enters ground an enemy watches** — without that a fast formation laps the front
@@ -58,8 +67,24 @@ crosses, not only where it stops, so riding across a supply line cuts it.
 
 Differential speed is what makes the rest work. At a uniform one province a turn
 armour is expensive infantry, nothing can outrun its own supply, and Elastic
-Defence has nothing to counterattack — it lost almost every game until formations
-had legs.
+Defence has nothing to counterattack.
+
+**Exploitation.** An assault costs two of the allowance; whatever is left is
+ridden on with if the ground falls, over ground the enemy no longer stands on,
+stopping on contact like any march. Armour has two left and recon three; infantry
+has none. An attack order names where to ride to in advance, because the turn is
+plotted and resolved as one — and the ring that closes in the turn it is broken into
+is the whole difference between a breakthrough and a bulge the enemy has a turn to
+seal.
+
+**The railway.** A formation out of contact and at full supply moves six along its
+own supply network instead of marching, starting and ending out of contact. The map
+is seventeen wide and infantry marches two, so without it a reserve is local to the
+sector it stands in and where to commit it is never a question.
+
+**Mud.** Two turns in every ten — the ninth and tenth — the march halves and the
+trains still run. It is on the calendar for both sides, so an offensive has a date it
+has to have gone in by.
 
 Each side deploys 26, the contact line first and the rest in depth. The starting
 frontier is 14 provinces wide; far fewer than this and the armies never meet, no front
@@ -73,12 +98,20 @@ concentrating a push is cheaper than spreading one and a fully manned line is no
 
 A commander who can order every formation every turn is not choosing anything.
 
+**Standing still is digging in.** A formation with no order holds, so a turn's orders
+are what changes, not a roll call. A refit stands from turn to turn until the
+formation is whole — full cohesion, and full strength or nowhere to rebuild it — and
+a move or an attack is spent the turn it is given.
+
 ## Supply
 
-13 depots, capacity 1–3, serving two draw per point. Supply traces outward through
-friendly-held provinces that are not in an enemy zone of control, costing 1 per
-province and 2 through mountain, marsh or forest. A formation draws from the cheapest
-reachable depot with capacity left; the ones at the end of the chain go short.
+Supply enters at the rear and flows through friendly-held provinces that are not in
+an enemy zone of control — the **network**. 13 depots, capacity 1–3, serving two draw
+per point, are railheads on it: a depot on the network resets chain depth to zero and
+issues supply; one the enemy has cut off from home issues nothing, and whoever stands
+on it is in a pocket like anybody else. Chains cost 1 per province and 2 through
+mountain, marsh or forest. A formation draws from the cheapest live depot with
+capacity left; the ones at the end of the chain go short.
 
 Degradation is graded, never deletion:
 
@@ -86,12 +119,15 @@ Degradation is graded, never deletion:
 | --- | --- |
 | 3 supplied | full |
 | 2 strained | may not attack |
-| 1 failing | combat halved, cohesion decays |
+| 1 failing | combat halved, and no cohesion recovered |
 | 0 cut off | strength attrition each turn, while an enemy is pressing the pocket |
 
-Capturing a depot resets chain depth, which is why offensives are aimed at them.
-Encircling a force sends its depth to infinity and the pocket collapses without a
-frontal assault.
+Capturing a depot that connects to your own rear resets chain depth, which is why
+offensives are aimed at them. Encircling a force — depot under its feet or not — sends
+its depth to infinity and the pocket collapses without a frontal assault. A city held
+by three dug-in infantry corps is worth more in defence than four armoured corps can
+bring against it through one border each, which is correct; what makes it fall is the
+cordon, not the assault.
 
 Depot count is the lever that decides whether any of this matters. At 24 depots every
 province sat within one hop of a railhead and the chain rules could never bite.
@@ -113,8 +149,9 @@ A defender at zero cohesion retreats one province.
 province already packed to what its terrain holds is not a way out either.
 
 Two formations can engage across open ground and one across anything that funnels, so
-concentration has to be *aimed* rather than merely amassed. Converging from several
-directions brings more to bear than piling onto one border, to a ceiling of four.
+concentration has to be *aimed* rather than merely amassed. Each border admits its own
+frontage, the best attack value first; converging from several directions brings more
+to bear than piling onto one border, to a ceiling of four.
 
 Death is asymmetric, and this is the incentive gradient the whole design rests on: a
 formation beaten down in a stand-up fight leaves a cadre behind that plugs the gap, and
@@ -122,21 +159,42 @@ one destroyed in a pocket leaves nothing.
 
 ## War aims
 
-Total conquest is not the win condition. Each side has a **will** track and an
-objective set. Will falls with formations lost and objectives lost, rises with
-objectives taken, and decays slightly every turn.
+Total conquest is not the win condition. Each side has a **will** track and six
+**aims**, dealt at the start off a public menu: the ten most valuable provinces on the
+other side of the line. The menu is public and the deal is not — everyone knew what the
+enemy might want, nobody knew which. An aim is revealed when
+its owner takes it, attacks it, or ends a turn with three formations beside it, so
+intent is read off deployment, which is how it is read in a real war. Will falls with
+formations lost and objectives lost, rises with objectives taken, and decays slightly
+every turn.
 
-At or below the floor a side has no orders left to give and must ask for terms. The
-other side may refuse, at a cost to its own will — so refusing a reasonable peace
-exhausts you too, and two broken sides end the war whatever either wanted. Peace is
-scored on the line as it stands, against each side's stated aims, with everything of
-value held breaking ties.
+At or below the floor a side can no longer be ordered forward: it holds, refits and
+moves, and once a turn it may ask for terms. The other side may refuse, at a cost to
+its own will, and the broken side then fights the turn out — so refusing a reasonable
+peace exhausts you too, "fight on" is a turn rather than a word, and two broken sides
+end the war whatever either wanted. Peace is scored on the line as it stands, against
+each side's stated aims, with everything of value held breaking ties.
 
 So you can win a war you did not conquer, and lose one in which you took ground.
 
 Weariness is deliberately small. It is the backstop that stops a stalemate running
 forever, and anything large enough to decide games ends every war on the same turn
 regardless of what happened in it.
+
+## Time
+
+Will decays; two things push the other way, both on a calendar both sides can read.
+
+- **Replacements.** A corps under strength that refits on a live railhead at full
+  supply regains a step every three turns. Nowhere else — replacements come by rail —
+  so a rear railhead is worth holding for its own sake and a cadre is a corps in six
+  turns rather than a write-off.
+- **Reinforcements.** Every sixth turn each side receives a fresh infantry corps at
+  its largest live railhead, the one nearest home if several. Largest rather than
+  rearmost, because the railhead nearest home can be a backwater at the end of a sea
+  link, and a corps that detrains a week's march from the war is not a reinforcement.
+  A side that is losing can hold for the next draft; one that is winning had better
+  finish before it arrives.
 
 ## Bots
 
@@ -149,9 +207,17 @@ the same worker pool as Risk's benchmark. It prints Wilson intervals and says so
 one spans 50%, because a hundred games cannot tell a real edge from a coin flip and
 reporting the raw score as settled is how you end up tuning against noise.
 
-No doctrine dominates: Elastic beats Attrition, and the other two pairings are inside
-the interval. They still make different wars — Attrition against Elastic runs about a
-third longer than either pairing with Maneuver.
+Maneuver and Elastic both beat Attrition, and Maneuver against Elastic is inside the
+interval. They still make different wars — Attrition against Elastic runs about half
+as long again as either pairing with Maneuver.
+
+All three garrison: valuable ground of theirs standing empty with an enemy two
+provinces off is worth about what the province is, and whoever can reach it is
+ordered before the front is. A rear nobody garrisons is a rear one armoured corps
+takes, railhead and all, and the activation budget spent on the line never gets
+round to it.
+
+Bots see the whole board. The fog is the player's.
 
 `npm run sim:kessel` is the soak — bot games with invariants checked after every move,
 for the states nobody thought to write an assertion for.
@@ -192,39 +258,48 @@ of the game's thesis:
 The scoring is the smaller half. Every named fault comes with the player's own orders with
 that one thing changed, priced on the same seeds, so *"the corps in Basel had one way out —
 Zurich — and Freiburg could have stood in it"* carries a number that is a measured
-counterfactual rather than a share of the turn's loss. Seven of them: thin odds,
+counterfactual rather than a share of the turn's loss. Six of them: thin odds,
 the culminating point, strained and idle, the pocket left open, standing with no way back,
-dispersal, and formations left without orders at all — which cost you the entrenchment an
-unordered formation never digs.
+and dispersal.
+
+The reviewer prices the board as it was, not as the player could see it. Every fault it
+names is computable from what the player could see — odds are only priced against
+defenders in contact, and positions are public — but the value of a whole order set
+includes the enemy's hidden cohesion and supply, so loss is a hindsight measure: fair
+between candidates, which all see the same board, and not a measure of what was knowable.
 
 `npm run review-check:kessel` is the check that this measures skill rather than noise. The
 headline pairing is Maneuver against a commander who fights hard and badly, because every
 doctrine in the ladder is competent and what separates them takes a war to show, while
 what a reviewer exists to catch is a mistake inside a turn. Maneuver wins those wars and
-gives up about half as much per turn, resolved well outside the paired error bar. Over
-twenty thousand turns luck averages to within a hundredth of a step of nothing while loss
-averages well above it, which is the property that keeps the two from contaminating each
-other.
+gives up about half as much per turn, resolved well outside the paired error bar on both
+readings. Over twenty thousand turns luck averages to within a few hundredths of a step
+of nothing while loss averages over three steps, which is the property that keeps the two
+from contaminating each other.
 
 Where it is weak is worth saying, and the check prints it rather than hiding it: **loss is
 the gap to the best available alternative, so it measures how well a side used the options
-in front of it.** Elastic Defence holds, refits and declines to advance, and comes out
-with less to give up per turn than Attrition, which wins those wars. A doctrine that keeps
-its options closed is not something a per-turn measure can convict.
+in front of it.** Elastic Defence wins its wars against Attrition and gives up no less per
+turn doing it — that pair sits inside the error bar — because a doctrine that holds, refits
+and declines to advance keeps its options closed, and that is not something a per-turn
+measure can convict.
 
 ## Fog
 
-Not built. Staged cheapest-first when it is, because the expensive part of fog is
-hidden *position*: it makes the bot's belief combinatorial and the reviewer's job
-ill-posed.
+Fog of strength, and nothing deeper. Ownership and formation counts are public —
+front lines are known in real war. Type, strength, cohesion and supply are visible
+only where a side can see: beside its own formations, or within two provinces of its
+recon. Elsewhere a counter shows what was last seen of it and how many turns ago, or
+nothing if it was never seen. Each side's sightings are state, updated after every
+resolution, so a replay fogs exactly as the game did.
 
-1. **Fog of strength.** Ownership and formation counts stay public — front lines are
-   known in real war. Strength, cohesion and type visible only on contact or under
-   recon; elsewhere the last known value and its age. Belief is one scalar per
-   province, so no particle filter and the reviewer prices against the belief vector.
-2. **Order latency.** Formations outside an HQ's command radius execute one turn late.
-   No hidden state at all, and it produces real friction.
-3. **Hidden position.** Deferred. Costs the most and buys the least.
+Bots see everything and the reviewer scores the whole board; the fog is the player's
+experience, which is where it earns its keep. Hidden *position* is not built: it makes
+a fair bot's belief combinatorial and the reviewer's job ill-posed, and in operational
+war the line is known anyway — it is the reserve behind it that is not, and fog of
+strength already hides what the reserve is worth. Order latency — formations outside
+an HQ's command radius executing a turn late — is the next friction worth adding, and
+it carries no hidden state at all.
 
 ## How we know it isn't shallow
 
@@ -243,8 +318,8 @@ The number it prints is **exploitability**, and on an invented game it is a stat
 about the rules rather than the bot: a large edge found cheaply means the design has a
 dominant line and needs changing.
 
-At six generations of eight candidates, two independent searches find nothing that
-beats the strongest doctrine by more than the confirmation interval. That is a weak
-statement — the budget is small and the interval is ±6 points — but it is the only
-kind of evidence an invented design can have, and it is the number to re-run after
-every rules change.
+At six generations of ten candidates, seeded by the archived exploiters, the search
+finds nothing that beats Maneuver by more than the confirmation interval: its best
+candidate confirms at 46% ±6 on fresh seeds. That is a weak statement — the budget is
+small and the interval is ±6 points — but it is the only kind of evidence an invented
+design can have, and it is the number to re-run after every rules change.

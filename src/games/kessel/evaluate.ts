@@ -17,6 +17,7 @@
  * doctrine from a weak one, which is the only claim being made for them.
  */
 import type { PlayerId } from '../../engine/types'
+import { REPLACEMENT_TURNS, STRENGTH } from './game'
 import { mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
 import { retreatOptions, supplyStates } from './supply'
@@ -135,6 +136,13 @@ const DUG_VALUE = 0.3
 const WILL_VALUE = 0.5
 
 /**
+ * A step on its way back: what a turn already spent rebuilding on a railhead is
+ * worth, as a fraction of the step it is working toward. Under one, because the
+ * next turn may not be spent there.
+ */
+const REST_VALUE = 0.8
+
+/**
  * What a formation with no line of retreat, and with exactly one, costs its owner
  * beyond the ground it stands on — as a fraction of its strength.
  *
@@ -243,6 +251,7 @@ export function assess(
     if (f.owner !== p) continue
     const sup = supply[f.id] ?? f.supply
     force += f.strength * SUPPLY_WORTH[sup]
+    if (f.strength < STRENGTH[f.type]) force += (f.rest / REPLACEMENT_TURNS) * REST_VALUE
     cohesion += (f.cohesion / 100) * f.strength * COHESION_VALUE
     if (sup >= 3) ready += READY_VALUE
     dug += Math.min(f.dug, 3) * DUG_VALUE

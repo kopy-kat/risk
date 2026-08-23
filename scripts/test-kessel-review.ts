@@ -79,8 +79,11 @@ const fixture = (over: Partial<Record<string, Partial<Province>>> = {}) =>
 let formationSerial = 1000
 const corps = (owner: PlayerId, at: string, patch: Partial<Formation> = {}): Formation => ({
   id: formationSerial++, owner, type: 'infantry' as UnitType, at,
-  strength: 3, cohesion: 100, wear: 0, dug: 0, supply: 3, ...patch,
+  strength: 3, cohesion: 100, wear: 0, dug: 0, supply: 3, rest: 0, ...patch,
 })
+
+const homeOf = (side: PlayerId): string[] =>
+  Array.from({ length: H }, (_, y) => id(side === 0 ? 0 : W - 1, y))
 
 function stateOn(
   mapId: string,
@@ -92,10 +95,11 @@ function stateOn(
     mapId,
     sides: [0, 1].map((i) => ({
       id: i, name: `S${i}`, color: i, bot: null, alive: true, will: 100, aims: [],
+      revealed: [], home: homeOf(i as PlayerId), seen: {},
     })),
     owner, formations, orders: {}, phase: 'orders', current: 0, turn: 1,
     log: [], moves: [], record: false, rngState: 12345, winner: null,
-    nextFormationId: formationSerial + 1000,
+    nextFormationId: formationSerial + 1000, offered: false,
     ...patch,
   }
 }

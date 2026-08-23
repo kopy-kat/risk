@@ -34,8 +34,48 @@ export function enemyZoc(m: GameMap, s: KesselState, me: PlayerId): Set<Province
 }
 
 /**
- * Cheapest supply chain depth from any of `me`'s depots to every province, over
- * ground they control and the enemy does not overlook.
+ * The supply network: every province this side's supply can flow through. Held
+ * by it, not overlooked by an enemy it does not itself stand in, and — the part
+ * that makes a pocket a pocket — traceable back to where its supply enters the
+ * map. Ground that cannot be reached from home is ground the trains do not run to.
+ */
+export function network(m: GameMap, s: KesselState, me: PlayerId): Set<ProvinceId> {
+  const blocked = enemyZoc(m, s, me)
+  const open = new Set<ProvinceId>()
+  const queue: ProvinceId[] = []
+  for (const p of s.sides[me].home) {
+    if (s.owner[p] === me && !blocked.has(p)) {
+      open.add(p)
+      queue.push(p)
+    }
+  }
+  for (let i = 0; i < queue.length; i++) {
+    for (const n of m.adjacency[queue[i]] ?? []) {
+      if (open.has(n) || s.owner[n] !== me || blocked.has(n)) continue
+      open.add(n)
+      queue.push(n)
+    }
+  }
+  return open
+}
+
+/**
+ * Depots that issue supply: held, and on the network. A depot is a railhead, not
+ * a well — one the enemy has cut off from home is a building with a name, and
+ * the formations standing on it are in a pocket like anybody else.
+ */
+export function liveDepots(
+  m: GameMap,
+  s: KesselState,
+  me: PlayerId,
+  net = network(m, s, me),
+): ProvinceId[] {
+  return m.ids.filter((p) => m.province[p].depot > 0 && net.has(p))
+}
+
+/**
+ * Cheapest supply chain depth from any of `me`'s live depots to every province,
+ * over ground they control and the enemy does not overlook.
  */
 export function depthMap(m: GameMap, s: KesselState, me: PlayerId): Record<ProvinceId, number> {
   const blocked = enemyZoc(m, s, me)
@@ -43,11 +83,9 @@ export function depthMap(m: GameMap, s: KesselState, me: PlayerId): Record<Provi
   for (const id of m.ids) dist[id] = UNREACHABLE
 
   const open = new Set<ProvinceId>()
-  for (const p of m.ids) {
-    if (m.province[p].depot > 0 && s.owner[p] === me) {
-      dist[p] = 0
-      open.add(p)
-    }
+  for (const p of liveDepots(m, s, me)) {
+    dist[p] = 0
+    open.add(p)
   }
 
   while (open.size > 0) {
@@ -99,11 +137,7 @@ export function supplyStates(
 ): Record<number, number> {
   const dist = depthMap(m, s, me)
   const capacity: Record<ProvinceId, number> = {}
-  for (const p of m.ids) {
-    if (m.province[p].depot > 0 && s.owner[p] === me) {
-      capacity[p] = m.province[p].depot * CAPACITY_PER_DEPOT
-    }
-  }
+  for (const p of liveDepots(m, s, me)) capacity[p] = m.province[p].depot * CAPACITY_PER_DEPOT
 
   const byDepth = s.formations.filter((f) => f.owner === me).sort((a, b) => dist[a.at] - dist[b.at])
 

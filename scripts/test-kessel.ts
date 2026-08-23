@@ -5,11 +5,16 @@
  * assertion here runs on a synthetic grid instead — a rule that only holds on one
  * arrangement of provinces isn't a rule.
  */
-import { ACTIVATIONS, activationsUsed, applyMove, createGame, legalMoves, view } from '../src/games/kessel/game'
-import { reachable } from '../src/games/kessel/movement'
+import {
+  ACTIVATIONS, REINFORCE_EVERY, REPLACEMENT_TURNS, WILL_FLOOR,
+  activationsUsed, applyMove, createGame, legalMoves, view,
+} from '../src/games/kessel/game'
+import { engage } from '../src/games/kessel/combat'
+import { observed } from '../src/games/kessel/intel'
+import { MUD_CYCLE, RAIL_ALLOWANCE, exploitReach, isMud, reachable } from '../src/games/kessel/movement'
 import { STACK_LIMIT, registerMap } from '../src/games/kessel/map'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
-import { depthMap, retreatOptions, retreatTargets, supplyStates } from '../src/games/kessel/supply'
+import { depthMap, liveDepots, retreatOptions, retreatTargets, supplyStates } from '../src/games/kessel/supply'
 import type { Formation, KesselState, UnitType } from '../src/games/kessel/types'
 import type { PlayerId } from '../src/engine/types'
 
@@ -79,9 +84,14 @@ function corps(owner: PlayerId, at: string, patch: Partial<Formation> = {}): For
     wear: 0,
     dug: 0,
     supply: 3,
+    rest: 0,
     ...patch,
   }
 }
+
+/** The grid's two ends: where each side's supply enters, and where its reinforcements arrive. */
+const homeOf = (side: PlayerId): string[] =>
+  Array.from({ length: H }, (_, y) => id(side === 0 ? 0 : W - 1, y))
 
 function stateOn(
   mapId: string,
@@ -99,6 +109,9 @@ function stateOn(
       alive: true,
       will: 100,
       aims: [],
+      revealed: [],
+      home: homeOf(i as PlayerId),
+      seen: {},
     })),
     owner,
     formations,
@@ -112,6 +125,7 @@ function stateOn(
     rngState: 12345,
     winner: null,
     nextFormationId: formationSerial,
+    offered: false,
     ...patch,
   }
 }
@@ -327,7 +341,8 @@ function split(): Record<string, PlayerId> {
 
 // ── a formation goes as far as its legs, and stops on contact ───────
 {
-  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  // No depot anywhere, so there is no railway: this is the march alone.
+  const m = fixture()
   const all: Record<string, PlayerId> = {}
   for (const p of m.ids) all[p] = 0
 
@@ -405,6 +420,222 @@ function split(): Record<string, PlayerId> {
   eq(applyLoss(f, 0.5).strength, 3, 'and stopping short of it costs nothing')
 }
 
+// ── a depot is a railhead, not a well: cut from home it issues nothing ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(4, 1)]: { depot: 2 } })
+  const owner = split()
+  // Side 0 has taken the enemy depot at (4,1) and the ground around it, but the
+  // enemy still stands on (3,1): the depot is behind their line, off side 0's network.
+  owner[id(4, 1)] = 0
+  owner[id(4, 0)] = 0
+  owner[id(4, 2)] = 0
+  const garrison = corps(0, id(4, 1))
+  const s = stateOn(m.id, owner, [garrison, corps(1, id(3, 1))])
+
+  ok(!liveDepots(m, s, 0).includes(id(4, 1)), 'a depot the enemy has cut off from home is not a source')
+  eq(supplyStates(m, s, 0)[garrison.id], 0, 'and the formation standing on it is cut off like any other pocket')
+
+  // Reopen the line: side 0 holds (3,1) too, and the screen is gone.
+  const open = { ...owner, [id(3, 1)]: 0 as PlayerId }
+  const relieved = stateOn(m.id, open, [garrison, corps(0, id(3, 1))])
+  ok(liveDepots(m, relieved, 0).includes(id(4, 1)), 'reconnected to home, the same depot issues supply again')
+  eq(supplyStates(m, relieved, 0)[garrison.id], 3, 'and its garrison is fully supplied')
+}
+
+// ── each border admits its frontage, and the best value goes through first ──
+{
+  const m = fixture()
+  const target = id(4, 1)
+  const spent = corps(0, id(3, 1), { cohesion: 20 })
+  const fresh = corps(0, id(3, 1), { type: 'armour' })
+  const flank = corps(0, id(4, 0))
+  const second = corps(0, id(4, 0))
+  const third = corps(0, id(4, 0))
+  const committed = engage(m, [spent, fresh, flank, second, third], target)
+
+  ok(committed.some((f) => f.id === fresh.id), 'the fresh armour goes in')
+  ok(committed.some((f) => f.id === flank.id), 'so does the flank')
+  eq(committed.filter((f) => f.at === id(3, 1)).length, 2, 'open ground admits two across one border')
+  eq(committed.length, 4, 'and four in all, from however many directions')
+  // Through a pass only one gets in, and it is the best one.
+  const narrow = fixture({ [id(4, 1)]: { terrain: 'mountain' } })
+  const pass = engage(narrow, [spent, fresh], target)
+  eq(pass.length, 1, 'a mountain border admits one formation')
+  eq(pass[0].id, fresh.id, 'and it is the one with the most to bring, not the one listed first')
+}
+
+// ── terms: refused, the broken side fights the turn out and can ask again ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const owner = split()
+  const mine = corps(0, id(3, 1))
+  const theirs = corps(1, id(4, 1))
+  let g = stateOn(m.id, owner, [mine, theirs])
+  g.sides[0].will = WILL_FLOOR
+
+  const first = legalMoves(g, 0)
+  ok(first.some((mv) => mv.type === 'offerTerms'), 'a side at the floor may ask for terms')
+  ok(first.some((mv) => mv.type === 'commit'), 'and may still play the turn')
+  ok(
+    !first.some((mv) => mv.type === 'order' && mv.order.type === 'attack'),
+    'but it can no longer be ordered forward',
+  )
+  ok(
+    first.some((mv) => mv.type === 'order' && mv.order.type === 'move'),
+    'holding, refitting and moving are still its to give',
+  )
+
+  g = applyMove(g, { type: 'offerTerms' })
+  eq(g.phase, 'terms', 'the offer goes to the other side')
+  g = applyMove(g, { type: 'rejectTerms' })
+  eq(g.phase, 'orders', 'refused, the war goes on')
+  eq(g.current, 0, 'and the broken side has its turn')
+  eq(g.sides[1].will, 100 - 8, 'refusing cost the refuser will')
+  ok(!legalMoves(g, 0).some((mv) => mv.type === 'offerTerms'), 'it cannot ask twice in one turn')
+  g = applyMove(g, { type: 'commit' })
+  eq(g.current, 1, 'it commits, and the turn passes')
+  g = applyMove(g, { type: 'commit' })
+  ok(legalMoves(g, 0).some((mv) => mv.type === 'offerTerms'), 'next turn it may ask again')
+}
+
+// ── no order is an order to dig in, and a refit stands until it is done ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const owner = split()
+  const quiet = corps(0, id(1, 1))
+  const tired = corps(0, id(1, 0), { cohesion: 50 })
+  let g = stateOn(m.id, owner, [quiet, tired, corps(1, id(6, 1))])
+  g = applyMove(g, { type: 'order', formation: tired.id, order: { type: 'refit' } })
+  g = applyMove(g, { type: 'commit' })
+
+  eq(g.formations.find((f) => f.id === quiet.id)?.dug, 1, 'a formation nobody ordered digs in anyway')
+  eq(g.orders[tired.id]?.type, 'refit', 'a refit outlives the turn it was given')
+  g = applyMove(g, { type: 'commit' }) // the other side
+  g = applyMove(g, { type: 'commit' }) // ours again: still refitting
+  g = applyMove(g, { type: 'commit' })
+  ok(!g.orders[tired.id], 'and ends on its own once cohesion is full')
+  eq(g.formations.find((f) => f.id === tired.id)?.cohesion, 100, 'which it is')
+}
+
+// ── exploitation: what takes a province by assault rides on with what is left ──
+{
+  // The enemy railhead sits at (4,0), so a beaten defender falls back there and
+  // leaves the road east open.
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(4, 0)]: { depot: 3 } })
+  const owner = split()
+  const tanks = corps(0, id(3, 1), { type: 'armour' })
+  const foot = corps(0, id(2, 0))
+  const weak = corps(1, id(4, 1), { cohesion: 5, strength: 1 })
+  const s = stateOn(m.id, owner, [tanks, foot, weak])
+
+  ok(exploitReach(m, s, tanks, id(4, 1)).cost[id(5, 1)] !== undefined, 'armour can plan to ride on past the ground it takes')
+  eq(Object.keys(exploitReach(m, s, foot, id(4, 1)).cost).length, 0, 'infantry has nothing left after an assault')
+
+  let g = applyMove(s, { type: 'order', formation: tanks.id, order: { type: 'attack', to: id(4, 1), onward: id(5, 1) } })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.formations.find((f) => f.id === tanks.id)?.at, id(5, 1), 'the assault goes in, the ground falls, and the armour is two provinces on')
+  eq(g.owner[id(4, 1)], 0, 'the ground it broke through is taken')
+  eq(g.owner[id(5, 1)], 0, 'and so is the ground it rode on to')
+}
+
+// ── the railway: far, along the supply network, out of contact to out of contact ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const owner = split()
+  const reserve = corps(0, id(0, 0))
+  const s = stateOn(m.id, owner, [reserve, corps(1, id(4, 1))])
+  const reach = reachable(m, s, reserve)
+
+  ok(reach.rail.has(id(2, 2)), 'a reserve out of contact can ride the railway further than it marches')
+  ok(!reach.cost[id(3, 1)], 'but not into contact with the enemy')
+  ok(RAIL_ALLOWANCE > 2, 'the railway is the interior line')
+
+  const strained = stateOn(m.id, owner, [corps(0, id(0, 0), { supply: 2 }), corps(1, id(4, 1))])
+  eq(reachable(m, strained, strained.formations[0]).rail.size, 0, 'a formation short of supply does not get a train')
+  const forward = stateOn(m.id, owner, [corps(0, id(3, 1)), corps(1, id(4, 1))])
+  eq(reachable(m, forward, forward.formations[0]).rail.size, 0, 'nor does one already in contact')
+}
+
+// ── mud: on the calendar, halves the march, spares the railway ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const all: Record<string, PlayerId> = {}
+  for (const p of m.ids) all[p] = 0
+  const muddy = [...Array(MUD_CYCLE * 2).keys()].map((t) => t + 1).filter(isMud)
+  ok(muddy.length > 0 && muddy.length < MUD_CYCLE, 'some turns are mud and most are not')
+
+  const tanks = corps(0, id(3, 1), { type: 'armour', supply: 2 })
+  const dry = reachable(m, stateOn(m.id, all, [tanks], { turn: muddy[0] - 1 }), tanks)
+  const wet = reachable(m, stateOn(m.id, all, [tanks], { turn: muddy[0] }), tanks)
+  ok(Object.keys(wet.cost).length < Object.keys(dry.cost).length, 'armour gets less far in the mud')
+}
+
+// ── replacements: a corps rebuilds on a live railhead, and only there ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const owner = split()
+  const cadre = corps(0, id(0, 1), { strength: 1 })
+  const field = corps(0, id(2, 1), { strength: 1 })
+  let g = stateOn(m.id, owner, [cadre, field, corps(1, id(6, 1))])
+  for (let t = 0; t < REPLACEMENT_TURNS; t++) {
+    g = applyMove(g, { type: 'order', formation: cadre.id, order: { type: 'refit' } })
+    g = applyMove(g, { type: 'order', formation: field.id, order: { type: 'refit' } })
+    g = applyMove(g, { type: 'commit' })
+    g = applyMove(g, { type: 'commit' })
+  }
+  eq(g.formations.find((f) => f.id === cadre.id)?.strength, 2, 'refitting on the railhead brings a step back')
+  eq(g.formations.find((f) => f.id === field.id)?.strength, 1, 'refitting in the field does not')
+}
+
+// ── reinforcements: a corps by rail, on the calendar, to the rearmost railhead ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  let g = stateOn(m.id, split(), [corps(0, id(2, 1)), corps(1, id(4, 1))])
+  const before = g.formations.length
+  for (let t = 1; t < REINFORCE_EVERY; t++) {
+    g = applyMove(g, { type: 'commit' })
+    g = applyMove(g, { type: 'commit' })
+  }
+  eq(g.formations.length, before + 2, 'each side receives a corps when the draft falls due')
+  ok(g.formations.some((f) => f.owner === 0 && f.at === id(0, 1)), 'it detrains at the railhead nearest home')
+}
+
+// ── war aims: dealt off a public menu, hidden until given away ──
+{
+  const m = fixture({
+    [id(0, 1)]: { depot: 3, vp: 2 },
+    [id(6, 1)]: { depot: 3, vp: 2 },
+    [id(5, 0)]: { vp: 1 },
+  })
+  const owner = split()
+  const far = corps(0, id(2, 0))
+  const a = corps(0, id(4, 0))
+  const b = corps(0, id(6, 0))
+  const c = corps(0, id(5, 1))
+  owner[id(4, 0)] = 0
+  owner[id(6, 0)] = 0
+  owner[id(5, 1)] = 0
+  let g = stateOn(m.id, owner, [far, a, b, c, corps(1, id(6, 2))])
+  g.sides[0].aims = [id(5, 0), id(6, 1)]
+
+  g = applyMove(g, { type: 'commit' })
+  ok(g.sides[0].revealed.includes(id(5, 0)), 'three formations beside an aim give it away')
+  ok(!g.sides[0].revealed.includes(id(6, 1)), 'the one nobody has approached stays hidden')
+}
+
+// ── fog: what an enemy counter is worth is known on contact, or under recon ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const owner = split()
+  const line = corps(0, id(3, 1))
+  const eyes = corps(0, id(2, 0), { type: 'recon', strength: 1 })
+  const s = stateOn(m.id, owner, [line, eyes, corps(1, id(4, 1)), corps(1, id(6, 1))])
+  const seen = observed(m, s, 0)
+  ok(seen.has(id(4, 1)), 'the province next door is observed')
+  ok(seen.has(id(4, 0)), 'recon sees two provinces out')
+  ok(!seen.has(id(6, 1)), 'the enemy rear is not')
+}
+
 // ── a whole game runs to a settled peace ────────────────────────────
 {
   const m = fixture({
@@ -416,6 +647,14 @@ function split(): Record<string, PlayerId> {
   let g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 7, mapId: m.id })
 
   ok(g.formations.filter((f) => f.owner === 0).length > 0, 'each side deploys an army')
+  ok(
+    g.sides.every((side) => side.aims.length > 0 && side.aims.every((p) => m.province[p].vp > 0 && g.owner[p] !== side.id)),
+    'and is dealt war aims, all of them ground worth something on the far side',
+  )
+  ok(
+    g.sides.every((side) => side.revealed.length === 0),
+    'which the enemy knows nothing of yet',
+  )
   const overstacked = m.ids.filter(
     (p) => g.formations.filter((f) => f.at === p).length > STACK_LIMIT[m.province[p].terrain],
   )
@@ -425,8 +664,6 @@ function split(): Record<string, PlayerId> {
       && g.formations.some((f) => f.at === p && f.owner === 0)),
     'the line is manned at the point of contact, not left in the rear',
   )
-  ok(g.sides[0].aims.length > 0, 'and a set of war aims on the far side of the map')
-
   let steps = 0
   let everStuck = false
   let sinceCommit = 0

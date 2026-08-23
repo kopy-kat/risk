@@ -1534,6 +1534,16 @@
       "a": "naples",
       "b": "palermo",
       "name": "Tyrrhenian Crossing"
+    },
+    {
+      "a": "tangier",
+      "b": "oran",
+      "name": "Alboran Sea"
+    },
+    {
+      "a": "bergen",
+      "b": "inverness",
+      "name": "North Sea Crossing"
     }
   ]
 }

@@ -35,11 +35,11 @@
  */
 import type { PlayerId } from '../../engine/types'
 import { rngFrom } from '../../engine/rng'
-import { attackValue, defendValue } from '../../games/kessel/combat'
+import { attackValue, defendValue, engage } from '../../games/kessel/combat'
 import { evaluate } from '../../games/kessel/evaluate'
 import { applyMove } from '../../games/kessel/game'
 import { DOCTRINES, decideFor } from '../../games/kessel/bot'
-import { STACK_LIMIT, frontage, mapOf } from '../../games/kessel/map'
+import { STACK_LIMIT, mapOf } from '../../games/kessel/map'
 import type { GameMap, ProvinceId } from '../../games/kessel/map'
 import { depthMap, retreatOptions, supplyStates } from '../../games/kessel/supply'
 import type { Formation, FormationId, KesselState, Order } from '../../games/kessel/types'
@@ -84,7 +84,6 @@ export type KesselFault =
   | 'missed-pocket'
   | 'exposed'
   | 'dispersal'
-  | 'unordered'
 
 export const KESSEL_FAULT_LABEL: Record<KesselFault, string> = {
   'thin-odds': 'attacking below the odds that pay',
@@ -93,7 +92,6 @@ export const KESSEL_FAULT_LABEL: Record<KesselFault, string> = {
   'missed-pocket': 'leaving the last way out open',
   exposed: 'standing where you cannot fall back',
   dispersal: 'attacking in too many places at once',
-  unordered: 'leaving formations without orders',
 }
 
 /**
@@ -223,9 +221,7 @@ export function assaultsIn(
   for (const [to, sent] of byTarget) {
     const defenders = s.formations.filter((f) => f.at === to && f.owner !== me)
     if (defenders.length === 0) continue
-    const sources = [...new Set(sent.map((f) => f.at))]
-    const room = Math.min(4, sources.reduce((n, src) => n + frontage(m, src, to), 0))
-    const committed = [...sent].sort((a, b) => b.strength - a.strength).slice(0, room)
+    const committed = engage(m, sent, to)
     const ours = committed.reduce((n, f) => n + attackValue(f), 0)
     const theirs = defenders.reduce((n, f) => n + defendValue(m, f, to), 0)
     out.push({
@@ -316,26 +312,6 @@ export function perturbations(
   const out: Omit<Candidate, 'value'>[] = []
   const name = (p: ProvinceId) => m.province[p].name
   const assaults = assaultsIn(m, s, played, me)
-
-  // ── formations nobody told anything ──
-  //
-  // A formation with no order does not hold: `resolveTurn` only digs in the ones
-  // ordered to hold, so an unordered corps spends the turn standing in the open
-  // losing whatever entrenchment it had. Twenty-six formations is more than
-  // anyone keeps in their head, so this is the commonest way a turn leaks value
-  // and the cheapest to stop.
-  const unordered = s.formations.filter((f) => f.owner === me && !played[f.id])
-  if (unordered.length > 0) {
-    out.push({
-      key: 'orders',
-      label: `your orders with the other ${unordered.length} told to dig in`,
-      orders: unordered.reduce((acc, f) => withOrder(acc, f.id, { type: 'hold' }), played),
-      fault: 'unordered',
-      advice: `${unordered.length} ${
-        unordered.length > 1 ? 'formations were' : 'formation was'
-      } left without orders. An unordered formation does not dig in — it stands in the open for a turn and gets nothing for it.`,
-    })
-  }
 
   // ── attacking below the odds that pay ──
   // A ring already closed is worth forcing at any odds — beaten there, a formation

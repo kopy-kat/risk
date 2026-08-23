@@ -13,7 +13,7 @@ import type { PlayerId } from '../engine/types'
 import { mapOf } from '../games/kessel/map'
 import type { ProvinceId } from '../games/kessel/map'
 import { retreatOptions } from '../games/kessel/supply'
-import type { KesselState, Order } from '../games/kessel/types'
+import type { KesselState } from '../games/kessel/types'
 import { projectMoves } from '../review/kessel/price'
 import type { OrderSet } from '../review/kessel/price'
 import {
@@ -28,6 +28,7 @@ import { getGame } from '../review/store'
 import type { Grade } from '../review/review'
 import { playerColor } from './colors'
 import { KesselMap } from './KesselMap'
+import type { TargetKind } from './KesselMap'
 
 interface Props {
   id: string
@@ -42,7 +43,7 @@ const GRADE_LABEL: Record<Grade, string> = {
   blunder: 'Blunder',
 }
 
-const NO_TARGETS = new Map<ProvinceId, Order['type']>()
+const NO_TARGETS = new Map<ProvinceId, TargetKind>()
 
 export function KesselReview({ id, onExit }: Props) {
   const record = useMemo(() => getGame(id), [id])
@@ -239,7 +240,7 @@ export function KesselReview({ id, onExit }: Props) {
       <main className="stage">
         <KesselMap
           state={painted}
-          acting={null}
+          viewer={null}
           selected={null}
           targets={NO_TARGETS}
           pockets={pockets}
