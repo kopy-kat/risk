@@ -16,10 +16,6 @@ import { replay } from '../review/replay'
 import type { FromReviewWorker } from '../review/review.worker'
 import { getGame } from '../review/store'
 import { MapView } from './MapView'
-import { Calibration } from './Calibration'
-import type { CoachReport } from './Calibration'
-import { bucketsOf, biasOf, brierOf, pastScores, readTurns, scoreGame, trendOf } from '../coach/calibration'
-import { notesFor } from '../coach/store'
 import { playerColor } from './colors'
 import { DEFAULT_GAME } from '../games'
 import { KesselReview } from './KesselReview'
@@ -34,9 +30,8 @@ interface Props {
  *
  * The two games share the layout and the vocabulary and nothing else: Risk
  * grades a move against an exact combat table, Kessel grades a whole order set by
- * resolving it. Dispatching here rather than branching inside keeps every Risk
- * path — the commander's log, the calibration tab, the per-move pricing —
- * untouched by a game that has none of them.
+ * resolving it. Dispatching here rather than branching inside keeps Risk's
+ * per-move pricing untouched by a game that has none of it.
  */
 export function Review({ id, onExit }: Props) {
   const record = useMemo(() => getGame(id), [id])
@@ -117,35 +112,6 @@ function RiskReview({ id, onExit }: Props) {
     [judgements, cursor],
   )
   const notable = useMemo(() => judgements.filter((j) => isNotable(j.grade)), [judgements])
-
-  /** moves, or the calibration report — two questions, so two screens */
-  const [tab, setTab] = useState<'moves' | 'calibration'>('moves')
-
-  /**
-   * Settled predictions, this game's re-derived from the replay already on
-   * screen and every other game's by replaying it. Nothing is read from a stored
-   * outcome: the move list is the only record of what happened, so it is the only
-   * thing allowed to answer.
-   */
-  // every other game has to be replayed to be scored, so it hangs off the record
-  // alone — switching the seat under review must not re-run all of them
-  const past = useMemo(() => (record ? pastScores(record.id) : []), [record])
-
-  const report = useMemo<CoachReport | null>(() => {
-    if (!record || !review) return null
-    const states = review.replay.states
-    const mine = notesFor(record.id)
-    const scored = [...past, ...scoreGame(record, states, mine)]
-    if (!scored.length && !mine.length) return null
-    return {
-      scored,
-      buckets: bucketsOf(scored),
-      brier: brierOf(scored),
-      bias: biasOf(scored),
-      trend: trendOf(scored),
-      turns: readTurns(record, states, mine, subject ?? review.reviewed[0] ?? 0),
-    }
-  }, [record, review, subject, past])
 
   const states = review?.replay.states ?? []
   const state: GameState | null = states[Math.min(cursor, states.length - 1)] ?? null
@@ -281,23 +247,7 @@ function RiskReview({ id, onExit }: Props) {
           </div>
         )}
 
-        {/* only when there is a log to read — the screen doesn't grow a tab for
-            games nobody wrote anything down in */}
-        {report && (
-          <div className="seatpick">
-            <div className="toggle">
-              <button className={tab === 'moves' ? 'on' : ''} onClick={() => setTab('moves')}>Moves</button>
-              <button
-                className={tab === 'calibration' ? 'on' : ''}
-                onClick={() => setTab('calibration')}
-              >
-                Calibration
-              </button>
-            </div>
-          </div>
-        )}
-
-        {summary && tab === 'moves' && (
+        {summary && (
           <div className="verdict">
             {/* The two numbers are deliberately side by side and deliberately
                 separate. One is the part you chose; the other is the part the
@@ -320,8 +270,6 @@ function RiskReview({ id, onExit }: Props) {
       </div>
 
       <main className="stage">
-        {report && tab === 'calibration' ? <Calibration report={report} /> : (
-        <>
         <MapView
           state={state}
           selected={overlay.selected}
@@ -434,8 +382,6 @@ function RiskReview({ id, onExit }: Props) {
             Next mistake ↓
           </button>
         </div>
-        </>
-        )}
       </main>
     </div>
   )
