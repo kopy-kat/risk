@@ -164,7 +164,9 @@ The second game, picked in setup: operational war in Europe over ~140 provinces,
 sides, 26 formations each. **A formation beaten with a line of retreat is pushed back
 at full strength; beaten without one it surrenders.** Encirclement kills, combat only
 pushes — everything else exists to make that rule bite. Rules, map generation and the
-design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine.
+design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine. In
+setup the first side is the **West**, which moves first, and **Swap sides** puts you in
+the East.
 
 **Each side is dealt six war aims** off a public menu — the ten most valuable provinces
 on the other side of the line. The enemy sees the menu, not the deal: an aim is revealed

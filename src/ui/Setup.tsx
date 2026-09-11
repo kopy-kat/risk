@@ -57,6 +57,11 @@ export function Setup({ onStart, onReview }: Props) {
   const update = (i: number, patch: Partial<Seat>) =>
     setSeats((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
 
+  // The first seat is always the West, so changing sides moves who is human, not
+  // the seats themselves — each keeps the name and colour that go together.
+  const swapSides = () =>
+    setSeats((prev) => prev.map((s, j) => (j < 2 ? { ...s, isBot: prev[1 - j].isBot } : s)))
+
   const active = seats.slice(0, count)
   const humans = active.filter((s) => !s.isBot).length
   const bots = active.length - humans
@@ -94,13 +99,23 @@ export function Setup({ onStart, onReview }: Props) {
         <div className="field">
           {/* in Risk the order is drawn at kick-off, so the list is identity
               rather than sequence; a two-sided war has no order to draw */}
-          <span className="mono-label">
-            {game === 'risk' ? 'Seats · turn order drawn at start' : 'Sides'}
-          </span>
+          {game === 'risk' ? (
+            <span className="mono-label">Seats · turn order drawn at start</span>
+          ) : (
+            <span className="mono-label sidepick">
+              Sides
+              <button className="swap" onClick={swapSides}>Swap sides</button>
+            </span>
+          )}
           <div className="seats">
             {active.map((s, i) => (
-              <div className="seat" key={i} style={{ ['--c' as string]: playerColor(i) }}>
+              <div
+                className={`seat ${game === 'kessel' ? 'sided' : ''}`}
+                key={i}
+                style={{ ['--c' as string]: playerColor(i) }}
+              >
                 <span className="dot" />
+                {game === 'kessel' && <span className="side">{i === 0 ? 'West' : 'East'}</span>}
                 <input
                   value={s.name}
                   onChange={(e) => update(i, { name: e.target.value })}

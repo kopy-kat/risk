@@ -448,6 +448,15 @@ kbd {
   background: transparent; border: 0; color: var(--ink);
   font-family: inherit; font-size: 13px; outline: none; width: 100%; min-width: 0;
 }
+.seat.sided { grid-template-columns: 10px 30px 1fr auto; }
+.seat .side { font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.field > .mono-label.sidepick { display: flex; justify-content: space-between; align-items: baseline; }
+.sidepick .swap {
+  padding: 0; background: transparent; border: 0; cursor: pointer;
+  font-size: inherit; letter-spacing: inherit; text-transform: inherit;
+  color: var(--ink-3); transition: color .18s var(--ease);
+}
+.sidepick .swap:hover { color: var(--ink-1); }
 .tiers { display: flex; gap: 7px; }
 .tiers button {
   flex: 1; padding: 13px 0; border: 1px solid var(--border); background: transparent;
