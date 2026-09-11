@@ -307,11 +307,11 @@ built on.
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
 | `npm run sim:kessel` | the same soak for Kessel |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
-| `npm run bench:kessel` | the same benchmark for the three doctrines |
+| `npm run bench:kessel` | the same benchmark for the three doctrines, with the same games split West against East |
 | `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
 | `npm run exploit:kessel` | the same search over Kessel's doctrine space |
 | `npm run fit-eval` | fits the evaluation's weights to outcomes over a mixed population of strategies |
-| `npm run study` | replays exported games and grades every seat, bots included |
+| `npm run study` | replays exported games, Risk or Kessel, and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
 | `npm run review-check:kessel` | the same question for Kessel, against a commander who fights hard and badly |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
