@@ -41,6 +41,7 @@ import { applyMove } from '../../games/kessel/game'
 import { DOCTRINES, decideFor } from '../../games/kessel/bot'
 import { STACK_LIMIT, mapOf } from '../../games/kessel/map'
 import type { GameMap, ProvinceId } from '../../games/kessel/map'
+import { reachable } from '../../games/kessel/movement'
 import { depthMap, retreatOptions, supplyStates } from '../../games/kessel/supply'
 import type { Formation, FormationId, KesselState, Order } from '../../games/kessel/types'
 
@@ -396,15 +397,19 @@ export function perturbations(
   //
   // The other half of the same fault, and the more expensive one. A formation
   // whose chain has failed is not merely unable to attack, it is decaying where
-  // it stands — and supply is drawn on the ground you end the turn on, so one
-  // province back toward the railhead is an order, not a plan.
+  // it stands — and supply is drawn on the ground you end the turn on, so the
+  // nearest ground back on the chain is an order, not a plan. Anywhere within
+  // reach counts, not only next door: a corps two provinces from its chain is
+  // exactly the one about to be sealed off, and one already marching somewhere
+  // that is no nearer its railheads is as stranded as one standing still.
   const depth = depthMap(m, s, me)
   const stranded = s.formations
     .map((f) => {
-      if (f.owner !== me || f.supply > 1 || !idle(played[f.id])) return null
-      const back = (m.adjacency[f.at] ?? [])
-        .filter((n) => s.owner[n] === me && depth[n] < depth[f.at] && roomAt(m, s, n) > 0)
-        .filter((n) => !s.formations.some((x) => x.at === n && x.owner !== me))
+      if (f.owner !== me || f.supply > 1) return null
+      const order = played[f.id]
+      if (order?.type === 'move' && depth[order.to] < depth[f.at]) return null
+      const back = Object.keys(reachable(m, s, f).cost)
+        .filter((n) => s.owner[n] === me && depth[n] < depth[f.at])
         .sort((a, b) => depth[a] - depth[b])[0]
       return back ? { f, back } : null
     })
@@ -416,9 +421,9 @@ export function perturbations(
       label: `your orders with ${stranded.length} ${stranded.length > 1 ? 'formations' : 'formation'} pulled back into supply`,
       orders: stranded.reduce((acc, x) => withOrder(acc, x.f.id, { type: 'move', to: x.back }), played),
       fault: 'idle-strained',
-      advice: `${name(first.f.at)} has outrun its supply and is standing still in it. ${name(
+      advice: `${name(first.f.at)} has outrun its supply and is not heading back to it. ${name(
         first.back,
-      )} is one province back down the chain${
+      )} is within reach down the chain${
         stranded.length > 1 ? `, and ${stranded.length - 1} more are in the same position` : ''
       }.`,
     })
