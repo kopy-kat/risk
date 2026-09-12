@@ -38,6 +38,11 @@ one.
 Topology is the main tuning surface. Edit `data/maps/europe.seeds.json` and
 regenerate — it takes under a second — rather than patching geometry.
 
+Objective values are set so the ten provinces each side's aims are dealt from are worth
+the same to both. Will moves three points per objective point taken or lost, so a side
+whose targets are worth less breaks first. The map fingerprint in the rules version is
+only the map's id and province count, so a change to values needs a `RULES_VERSION` tag.
+
 ## Formations
 
 | field | meaning |
@@ -86,9 +91,11 @@ sector it stands in and where to commit it is never a question.
 trains still run. It is on the calendar for both sides, so an offensive has a date it
 has to have gone in by.
 
-Each side deploys 26, the contact line first and the rest in depth. The starting
-frontier is 14 provinces wide; far fewer than this and the armies never meet, no front
-forms, and with no front there is nothing to flank.
+The West deploys 26 and the East 29, the contact line first and the rest in depth. The
+starting frontier is 14 provinces wide; far fewer than this and the armies never meet,
+no front forms, and with no front there is nothing to flank. The East's extra corps
+offset a map that otherwise hands the West most wars between identical doctrines;
+`npm run bench:kessel -- maneuver maneuver` prints the side split to re-tune against.
 
 ## Activations
 
@@ -102,6 +109,23 @@ A commander who can order every formation every turn is not choosing anything.
 are what changes, not a roll call. A refit stands from turn to turn until the
 formation is whole — full cohesion, and full strength or nowhere to rebuild it — and
 a move or an attack is spent the turn it is given.
+
+## Command
+
+Each side has two headquarters. A formation more than three provinces of its own
+ground from both is out of command: an order to move or attack it is carried out at
+the side's next commit rather than this one, and it takes no other order meanwhile.
+Holding and refitting are immediate.
+
+A headquarters goes up to four provinces through its own ground and commands from
+there the turn after, so sending one forward is a plan and never a way to reach this
+turn's orders. Overrun, it falls back to the nearest ground its side holds out of contact.
+
+Two is the choice this forces: the main line can be commanded, and Norway, the south
+of Italy or the Maghreb then waits a turn for its orders unless a headquarters goes there.
+
+A side with no headquarters commands everything; the grid in `npm run test:kessel`
+places none except where command itself is under test.
 
 ## Supply
 
@@ -177,6 +201,10 @@ each side's stated aims, with everything of value held breaking ties.
 
 So you can win a war you did not conquer, and lose one in which you took ground.
 
+The peace names its margin too: decisive when the two sides' shares of their own aims
+end half apart or more, clear from a quarter, narrow below that or when ground broke
+a tie. The winner is the result; the margin is what refusing terms while ahead can buy.
+
 Weariness is deliberately small. It is the backstop that stops a stalemate running
 forever, and anything large enough to decide games ends every war on the same turn
 regardless of what happened in it.
@@ -205,17 +233,29 @@ a weighted sum. `decideFor` plays any settings, which is what the search hill-cl
 `npm run bench:kessel` measures them on paired seeds with the seats swapped, through
 the same worker pool as Risk's benchmark. It prints Wilson intervals and says so when
 one spans 50%, because a hundred games cannot tell a real edge from a coin flip and
-reporting the raw score as settled is how you end up tuning against noise.
+reporting the raw score as settled is how you end up tuning against noise. The swap
+hides the map, so every pairing also prints its games split West against East, and a
+doctrine against itself measures nothing else.
 
 Maneuver and Elastic both beat Attrition, and Maneuver against Elastic is inside the
 interval. They still make different wars — Attrition against Elastic runs about half
-as long again as either pairing with Maneuver.
+as long again as either pairing with Maneuver. Each against itself, Maneuver and
+Attrition split West and East inside the interval and Elastic leans East.
 
 All three garrison: valuable ground of theirs standing empty with an enemy two
 provinces off is worth about what the province is, and whoever can reach it is
 ordered before the front is. A rear nobody garrisons is a rear one armoured corps
 takes, railhead and all, and the activation budget spent on the line never gets
 round to it.
+
+All three send their headquarters before giving any order, each to the ground in
+reach that commands the most strength the other does not, the contact line counting
+double. They order formations in command before the rest, and none orders an assault
+out of command.
+
+Pricing a doctrine's own pockets — walking a failing corps back to its railheads,
+standing in the last way out behind its line — does not beat the same doctrine without
+it, and weighted heavily it loses.
 
 Bots see the whole board. The fog is the player's.
 
@@ -262,6 +302,10 @@ counterfactual rather than a share of the turn's loss. Six of them: thin odds,
 the culminating point, strained and idle, the pocket left open, standing with no way back,
 and dispersal.
 
+A candidate is an order set, so where a headquarters was sent is not judged — only what
+the orders were worth, with every order out of command resolved the way the engine
+resolves it, a turn late.
+
 The reviewer prices the board as it was, not as the player could see it. Every fault it
 names is computable from what the player could see — odds are only priced against
 defenders in contact, and positions are public — but the value of a whole order set
@@ -297,9 +341,8 @@ Bots see everything and the reviewer scores the whole board; the fog is the play
 experience, which is where it earns its keep. Hidden *position* is not built: it makes
 a fair bot's belief combinatorial and the reviewer's job ill-posed, and in operational
 war the line is known anyway — it is the reserve behind it that is not, and fog of
-strength already hides what the reserve is worth. Order latency — formations outside
-an HQ's command radius executing a turn late — is the next friction worth adding, and
-it carries no hidden state at all.
+strength already hides what the reserve is worth. Headquarters are public for the
+same reason.
 
 ## How we know it isn't shallow
 
@@ -319,7 +362,14 @@ about the rules rather than the bot: a large edge found cheaply means the design
 dominant line and needs changing.
 
 At six generations of ten candidates, seeded by the archived exploiters, the search
-finds nothing that beats Maneuver by more than the confirmation interval: its best
-candidate confirms at 46% ±6 on fresh seeds. That is a weak statement — the budget is
-small and the interval is ±6 points — but it is the only kind of evidence an invented
-design can have, and it is the number to re-run after every rules change.
+finds a line that beats Maneuver: its best candidate confirms at 59% ±6 on fresh seeds,
+an exploitability of nine points over an even split. It attacks at much the same odds
+and wants a ring about as badly, but it pulls formations out to refit far earlier,
+drives at its aims nearly twice as hard, and counterattacks what has outrun its supply
+four times as readily.
+
+That is the signal this number exists to give, and it is unanswered: the rules have a
+line the doctrines do not cope with. Exploitability measured against a hand-tuned
+opponent is partly a statement about the hand tuning, so `npm run fit-doctrine`, which
+fits a champion against the whole archived population, is where answering it starts.
+Re-run both after every rules change.

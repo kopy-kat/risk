@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import type { PlayerId } from '../engine/types'
 import { attackValue, defendValue, engage } from '../games/kessel/combat'
-import { ACTIVATIONS, REPLACEMENT_TURNS, WILL_FLOOR, activationsUsed, broken } from '../games/kessel/game'
+import {
+  ACTIVATIONS, COMMAND_RADIUS, HQ_MOVE, REPLACEMENT_TURNS, WILL_FLOOR, activationsUsed, broken,
+} from '../games/kessel/game'
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
 import { RAIL_ALLOWANCE, allowance, isMud, reachable } from '../games/kessel/movement'
@@ -24,6 +26,9 @@ export interface KesselDockProps {
   state: KesselState
   me: PlayerId
   selected: FormationId | null
+  selectedHq: number | null
+  /** formations of the side to move whose orders are carried out the turn they are given */
+  command: Set<FormationId>
   attack: AttackPreview | null
   /**
    * The board the staged orders would produce. Whether a defender can retreat is
@@ -33,6 +38,7 @@ export interface KesselDockProps {
   projected: KesselState
   primary: PrimaryAction | null
   onClearOrder(): void
+  onClearHq(): void
   onRejectTerms(): void
   /** play the turn out instead of asking for terms — a broken side's other choice */
   onCommit(): void
@@ -45,6 +51,7 @@ export interface KesselDockProps {
 const KESSEL_KEYS: [string, string][] = [
   ['Space', 'Press the highlighted button'],
   ['← →', 'Cycle your formations, the contact line first'],
+  ['G', 'Select a headquarters — again for the other'],
   ['H', 'Hold — what a formation with no order does anyway'],
   ['R', 'Refit — stands until the formation is whole'],
   ['⌫', 'Clear the staged order'],
@@ -247,7 +254,7 @@ function botSlots({ state }: KesselDockProps): Slots {
 }
 
 function phaseSlots(props: KesselDockProps): Slots {
-  const { state, me, selected, projected } = props
+  const { state, me, selected, selectedHq, command, projected } = props
   const m = mapOf(state.mapId)
 
   if (state.phase === 'terms') {
@@ -269,6 +276,26 @@ function phaseSlots(props: KesselDockProps): Slots {
     <span className={`counter ${spent >= ACTIVATIONS ? 'spent' : ''}`}>{ACTIVATIONS - spent}</span>
   )
 
+  const hq = selectedHq === null ? undefined : state.sides[me].hqs[selectedHq]
+  if (selectedHq !== null && hq !== undefined) {
+    const to = state.hqOrders[selectedHq]
+    return {
+      counter,
+      hint: (
+        <>
+          Headquarters {selectedHq + 1} · {m.province[hq].name} · commands {COMMAND_RADIUS} provinces
+          of your ground around it
+        </>
+      ),
+      say: to !== undefined && to !== hq
+        ? <>Going to <b>{m.province[to].name}</b> · it commands from there next turn</>
+        : <>Click where it goes, up to {HQ_MOVE} through your own ground · it commands from there next turn</>,
+      controls: to !== undefined
+        ? <button className="btn ghost" onClick={props.onClearHq}>Call off <kbd>⌫</kbd></button>
+        : undefined,
+    }
+  }
+
   if (broken(state, me) && !f) {
     return {
       counter,
@@ -280,19 +307,28 @@ function phaseSlots(props: KesselDockProps): Slots {
   }
 
   if (!f) {
+    const adrift = mine.filter((x) => !command.has(x.id)).length
     return {
       counter,
-      hint: <>Provinces you can still set moving · <kbd>←</kbd><kbd>→</kbd> cycles the line</>,
+      hint: (
+        <>
+          Provinces you can still set moving · <kbd>←</kbd><kbd>→</kbd> cycles the line ·{' '}
+          <kbd>G</kbd> headquarters
+        </>
+      ),
       say: (
         <>
           Standing still digs in. Click a formation, then where you want it
           {isMud(state.turn) ? ' — mud: the march is half, the trains still run' : ''}
+          {adrift > 0 ? <> · <b>{adrift}</b> out of command, a turn late</> : null}
         </>
       ),
     }
   }
 
   const order = state.orders[f.id]
+  const late = state.delayed[f.id]
+  const commanded = command.has(f.id)
   const trapped = retreatOptions(m, projected, f).length === 0
   const rail = reachable(m, state, f).rail
   const hint = (
@@ -303,20 +339,30 @@ function phaseSlots(props: KesselDockProps): Slots {
       {' · '}<b className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</b>
       {f.rest > 0 && ` · rebuilding ${f.rest}/${REPLACEMENT_TURNS}`}
       {trapped && ' · encircled'}
+      {!commanded && ' · out of command'}
     </>
   )
+
+  if (late?.type === 'move' || late?.type === 'attack') {
+    return {
+      counter,
+      hint,
+      say: <>Carrying out last turn's order · {late.type === 'attack' ? 'attacking' : 'moving to'} <b>{m.province[late.to].name}</b></>,
+    }
+  }
 
   const controls = order ? (
     <button className="btn ghost" onClick={props.onClearOrder}>Clear order <kbd>⌫</kbd></button>
   ) : undefined
+  const delayed = commanded ? null : <> · out of command, <b>carried out next turn</b></>
 
   if (order?.type === 'attack') {
     return {
       counter,
       hint,
       say: order.onward
-        ? <>Attacking <b>{m.province[order.to].name}</b>, then on to <b>{m.province[order.onward].name}</b></>
-        : <>Attacking <b>{m.province[order.to].name}</b>{f.type !== 'infantry' && !isMud(state.turn) ? <> · click further on to <b>exploit</b></> : null}</>,
+        ? <>Attacking <b>{m.province[order.to].name}</b>, then on to <b>{m.province[order.onward].name}</b>{delayed}</>
+        : <>Attacking <b>{m.province[order.to].name}</b>{delayed ?? (f.type !== 'infantry' && !isMud(state.turn) ? <> · click further on to <b>exploit</b></> : null)}</>,
       controls,
     }
   }
@@ -324,7 +370,7 @@ function phaseSlots(props: KesselDockProps): Slots {
     return {
       counter,
       hint,
-      say: <>Moving to <b>{m.province[order.to].name}</b>{rail.has(order.to) ? ' by rail' : ''}</>,
+      say: <>Moving to <b>{m.province[order.to].name}</b>{rail.has(order.to) ? ' by rail' : ''}{delayed}</>,
       controls,
     }
   }
@@ -343,11 +389,13 @@ function phaseSlots(props: KesselDockProps): Slots {
   return {
     counter,
     hint,
-    say: f.supply >= 3 && !broken(state, me)
-      ? <>Click a province · enemy-held <b>attacks</b>, anything else moves · <kbd>R</kbd> refit</>
-      : broken(state, me)
-        ? <>Will spent, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>
-        : <>Short of full supply, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>,
+    say: !commanded
+      ? <>Out of command · a move or an attack now is <b>carried out next turn</b> · <kbd>R</kbd> refit</>
+      : f.supply >= 3 && !broken(state, me)
+        ? <>Click a province · enemy-held <b>attacks</b>, anything else moves · <kbd>R</kbd> refit</>
+        : broken(state, me)
+          ? <>Will spent, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>
+          : <>Short of full supply, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>,
     controls,
   }
 }

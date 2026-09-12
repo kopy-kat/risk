@@ -9,7 +9,7 @@
  * without a winner or carries on after one.
  */
 import { kessel } from '../src/games/kessel'
-import { REPLACEMENT_TURNS } from '../src/games/kessel/game'
+import { HQS_PER_SIDE, REPLACEMENT_TURNS } from '../src/games/kessel/game'
 import { STACK_LIMIT, mapOf } from '../src/games/kessel/map'
 import type { KesselState, Move } from '../src/games/kessel/types'
 import { rngFrom } from '../src/engine/rng'
@@ -50,11 +50,14 @@ function check(s: KesselState, where: string) {
 
   for (const side of s.sides) {
     if (side.will < 0 || side.will > 100) fail(`will out of range (${side.will})`)
+    if (side.hqs.length !== HQS_PER_SIDE) fail(`${side.name} has ${side.hqs.length} headquarters`)
+    if (side.hqs.some((p) => s.owner[p] !== side.id)) fail('a headquarters stands on ground its side does not hold')
   }
 
   const over = s.phase === 'gameOver'
   if (over !== kessel.view(s).over) fail('view disagrees with the phase about whether the war is over')
   if (!over && s.winner !== null) fail('a winner while the war is still on')
+  if (over !== (s.peace !== null)) fail('a peace recorded for a war still on, or none for one that ended')
 
   if (s.phase === 'orders' && Object.keys(s.orders).length > 0) {
     for (const id of Object.keys(s.orders)) {
@@ -63,6 +66,12 @@ function check(s: KesselState, where: string) {
       // A refit stands across turns, so the other side's can be on the board; nothing else of theirs can.
       else if (f.owner !== s.current && s.orders[Number(id)].type !== 'refit') fail("the other side's order on the board")
     }
+  }
+  for (const [id, order] of Object.entries(s.delayed)) {
+    const f = s.formations.find((x) => x.id === Number(id))
+    if (!f) fail('a late order carried for a formation that is gone')
+    else if (order.type !== 'move' && order.type !== 'attack') fail(`a late ${order.type} order`)
+    else if (s.phase === 'orders' && f.owner === s.current && s.orders[f.id]) fail('a formation given an order while one is on its way')
   }
   for (const side of s.sides) {
     if (side.aims.length === 0) fail(`${side.name} has no war aims`)

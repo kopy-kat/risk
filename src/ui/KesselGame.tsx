@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { rngFrom } from '../engine/rng'
 import type { PlayerId, SeatConfig } from '../engine/types'
 import { kessel } from '../games/kessel'
-import { applyMove, broken, createGame, legalMoves } from '../games/kessel/game'
+import { applyMove, broken, createGame, hqReach, inCommand, legalMoves } from '../games/kessel/game'
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
 import { MUD_CYCLE, MUD_TURNS, exploitReach, isMud, reachable } from '../games/kessel/movement'
 import { retreatOptions } from '../games/kessel/supply'
 import { newGameId, saveGame } from '../review/store'
-import type { FormationId, KesselState, LogEntry, Move } from '../games/kessel/types'
+import type { FormationId, KesselState, LogEntry, Move, Order } from '../games/kessel/types'
 import { playerColor } from './colors'
 import type { PrimaryAction } from './Dock'
 import { KesselDock } from './KesselDock'
@@ -54,13 +54,20 @@ function runBots(s0: KesselState, rand: () => number): KesselState {
  * Whether a formation is in a pocket is a question about where everyone stands
  * once the moves have happened, and moves resolve before attacks — so a ring
  * closed by a move staged two clicks ago has to count against the defender
- * being priced now, or the bar prices an attack nobody is about to make.
+ * being priced now, or the bar prices an attack nobody is about to make. A move
+ * out of command is not among them, and one ordered last turn that arrives now is.
  */
-function projectOrders(s: KesselState): KesselState {
-  if (!s.formations.some((f) => s.orders[f.id]?.type === 'move')) return s
+function projectOrders(s: KesselState, command: Set<FormationId>): KesselState {
+  const moving = (id: FormationId, owner: PlayerId): Order | undefined => {
+    const late = s.delayed[id]
+    if (late) return owner === s.current && late.type === 'move' ? late : undefined
+    const order = s.orders[id]
+    return order?.type === 'move' && command.has(id) ? order : undefined
+  }
+  if (!s.formations.some((f) => moving(f.id, f.owner))) return s
   const owner = { ...s.owner }
   const formations = s.formations.map((f) => {
-    const order = s.orders[f.id]
+    const order = moving(f.id, f.owner)
     if (order?.type !== 'move') return f
     owner[order.to] = f.owner
     return { ...f, at: order.to }
@@ -88,6 +95,8 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
   const recordId = useRef(newGameId(Math.floor(Math.random() * 1e9)))
   const [state, setState] = useState<KesselState>(() => createGame({ seats, seed }))
   const [selected, setSelected] = useState<FormationId | null>(null)
+  /** a headquarters being sent somewhere, by index — never at the same time as a formation */
+  const [selectedHq, setSelectedHq] = useState<number | null>(null)
   const [hover, setHover] = useState<ProvinceId | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -141,10 +150,12 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
         const next = applyMove(state, move)
         setError(null)
         setRecap(null)
-        if (move.type === 'order' || move.type === 'clearOrder') setHistory((h) => [...h, state])
-        else {
+        if (move.type === 'order' || move.type === 'clearOrder' || move.type === 'moveHq') {
+          setHistory((h) => [...h, state])
+        } else {
           setHistory([])
           setSelected(null)
+          setSelectedHq(null)
           setLastAttack(null)
         }
         if (move.type === 'order' && move.order.type === 'attack') setLastAttack(move.order.to)
@@ -204,8 +215,10 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     return out
   }, [state, me, isHuman])
 
+  /** Formations of the side to move whose orders this turn are carried out this turn. */
+  const command = useMemo(() => inCommand(m, state, me), [m, state, me])
 
-  const projected = useMemo(() => projectOrders(state), [state])
+  const projected = useMemo(() => projectOrders(state, command), [state, command])
 
   const pockets = useMemo(() => {
     const out = new Set<ProvinceId>()
@@ -230,8 +243,20 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     return out
   }, [sel, isHuman, state, m])
 
+  const hqTargets = useMemo(
+    () =>
+      selectedHq === null || !isHuman || state.phase !== 'orders'
+        ? new Set<ProvinceId>()
+        : hqReach(m, state, me, selectedHq),
+    [selectedHq, isHuman, state, m, me],
+  )
+
   const targets = useMemo(() => {
     const out = new Map<ProvinceId, TargetKind>()
+    if (selectedHq !== null) {
+      for (const p of hqTargets) out.set(p, 'hq')
+      return out
+    }
     if (!sel) return out
     const mine = legal.get(sel.id)
     if (!mine) return out
@@ -239,7 +264,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     for (const [p, kind] of mine) out.set(p, kind === 'move' && rail.has(p) ? 'rail' : kind)
     for (const p of onward) out.set(p, 'onward')
     return out
-  }, [state, m, sel, legal, onward])
+  }, [state, m, sel, legal, onward, selectedHq, hqTargets])
 
   /** Formations in the order the eye sweeps them — the contact line first, west to east. */
   const cycleOrder = useMemo(() => {
@@ -261,6 +286,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
       if (pool.length === 0) return
       const at = pool.findIndex((f) => f.id === selected)
       const next = at === -1 ? (dir > 0 ? 0 : pool.length - 1) : (at + dir + pool.length) % pool.length
+      setSelectedHq(null)
       setSelected(pool[next].id)
     },
     [cycleOrder, selected],
@@ -270,6 +296,15 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     (p: ProvinceId) => {
       if (!isHuman || state.phase !== 'orders') return
       const here = state.formations.filter((f) => f.at === p)
+
+      if (selectedHq !== null) {
+        if (hqTargets.has(p)) {
+          play({ type: 'moveHq', hq: selectedHq, to: p })
+          setSelectedHq(null)
+          return
+        }
+        setSelectedHq(null)
+      }
 
       if (sel) {
         const staged = state.orders[sel.id]
@@ -304,7 +339,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
       if (at === -1) setSelected((ours.find((f) => !state.orders[f.id]) ?? ours[0]).id)
       else setSelected(ours[(at + 1) % ours.length].id)
     },
-    [isHuman, state, sel, selected, legal, onward, play, m, me],
+    [isHuman, state, sel, selected, legal, onward, play, m, me, selectedHq, hqTargets],
   )
 
   const attack = useMemo<AttackPreview | null>(() => {
@@ -343,7 +378,10 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
       if (e.key === 'Escape') {
         e.preventDefault()
         if (showSettings) setShowSettings(false)
-        else setSelected(null)
+        else {
+          setSelected(null)
+          setSelectedHq(null)
+        }
         return
       }
       if (showSettings || state.phase === 'gameOver') return
@@ -363,6 +401,20 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
         cycle(e.key === 'ArrowRight' ? 1 : -1)
         return
       }
+      if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault()
+        const count = state.sides[me].hqs.length
+        setSelected(null)
+        setSelectedHq((h) => (h === null ? (count > 0 ? 0 : null) : h + 1 < count ? h + 1 : null))
+        return
+      }
+      if (selectedHq !== null) {
+        if ((e.key === 'Backspace' || e.key === 'Delete') && state.hqOrders[selectedHq] !== undefined) {
+          e.preventDefault()
+          play({ type: 'moveHq', hq: selectedHq, to: null })
+        }
+        return
+      }
       if (!sel) return
       if (e.key === 'h' || e.key === 'H') {
         e.preventDefault()
@@ -377,7 +429,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [state, primary, undo, cycle, sel, isHuman, showSettings, play])
+  }, [state, primary, undo, cycle, sel, isHuman, showSettings, play, me, selectedHq])
 
   const over = state.phase === 'gameOver'
 
@@ -421,6 +473,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
           state={state}
           viewer={viewer}
           selected={selected}
+          selectedHq={isHuman ? selectedHq : null}
           targets={targets}
           pockets={pockets}
           hover={hover}
@@ -453,10 +506,13 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
           state={state}
           me={me}
           selected={selected}
+          selectedHq={selectedHq}
+          command={command}
           attack={attack}
           projected={projected}
           primary={primary}
           onClearOrder={() => sel && play({ type: 'clearOrder', formation: sel.id })}
+          onClearHq={() => selectedHq !== null && play({ type: 'moveHq', hq: selectedHq, to: null })}
           onRejectTerms={() => play({ type: 'rejectTerms' })}
           onCommit={() => play({ type: 'commit' })}
           onShowSettings={() => setShowSettings((v) => !v)}
@@ -484,7 +540,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
             <div className="sub">
               {state.winner === null
                 ? `the war ends on the line as it stands · turn ${state.turn}`
-                : `achieves its war aims · turn ${state.turn}`}
+                : `achieves its war aims · a ${state.peace?.verdict ?? 'narrow'} peace · turn ${state.turn}`}
             </div>
 
             {/* The peace is scored here and nowhere else: ground taken counts for

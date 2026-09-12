@@ -161,7 +161,7 @@ anyone. Then `npm run bench -- mine general 300`.
 ## Kessel
 
 The second game, picked in setup: operational war in Europe over ~140 provinces, two
-sides, 26 formations each. **A formation beaten with a line of retreat is pushed back
+sides, 26 formations for the West and 29 for the East. **A formation beaten with a line of retreat is pushed back
 at full strength; beaten without one it surrenders.** Encirclement kills, combat only
 pushes — everything else exists to make that rule bite. Rules, map generation and the
 design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine. In
@@ -179,10 +179,17 @@ cycle through them, the contact line first — then click a province: enemy-held
 attacks, anything else moves. **Standing still digs in**, so a formation with no order
 is holding; `R` refits, and a refit stands from turn to turn until the formation is
 whole. After staging an attack with armour or recon, click further on to set where it
-rides to if the ground falls — the exploitation. `⌫` clears the staged order, `Esc`
-deselects, `⌘Z` undoes, and `Space` presses the one dark button — `Commit turn`, or
-`Offer terms` once your will is spent. Terms refused, you fight the turn out: hold,
-refit, move, no attacks, and ask again next turn.
+rides to if the ground falls — the exploitation. `G` selects a headquarters, again for
+the other, and a click sends it. `⌫` clears the staged order or calls the headquarters
+back, `Esc` deselects, `⌘Z` undoes, and `Space` presses the one dark button — `Commit
+turn`, or `Offer terms` once your will is spent. Terms refused, you fight the turn
+out: hold, refit, move, no attacks, and ask again next turn.
+
+**Command.** Each side has two headquarters, drawn as flags. A formation more than
+three provinces of your own ground from both is out of command and drawn faded: an
+order to move or attack it is carried out a turn late, dotted on the map until then,
+and it takes no other order meanwhile. A headquarters moves up to four provinces
+through your own ground and commands from there the next turn; overrun, it falls back.
 
 Movement: infantry 2, armour 4, recon 5, across terrain that costs what it costs, and
 the march ends the moment it enters ground an enemy watches. A formation out of contact
@@ -223,18 +230,22 @@ The map carries the things you can't play without:
   takes its frontage, the best attack value first, four in all — and whether the
   defender has anywhere to fall back to.
 - **Depots** (capacity as pips, struck when cut from home), **objective values** (a
-  diamond), and **war aims** (the diamond filled in that side's colour, the province
-  hatched to match).
+  diamond), **war aims** (the diamond filled in that side's colour, the province
+  hatched to match), and **headquarters** (a flag in the side's colour).
 
 Both sides' **will** sits in the bar against the threshold below which a side can
 only ask for terms. Take the terms and the war ends on the line as it stands, scored
-against what each side said it wanted — so you can win a war you did not conquer.
+against what each side said it wanted — so you can win a war you did not conquer. The
+peace also says by how much: **decisive**, **clear** or **narrow**, by how far apart the
+two sides' shares of their own aims ended, which is what refusing terms while already
+ahead can still buy.
 
 Three doctrines rather than difficulty rungs: **Attrition**, **Maneuver** and **Elastic
 Defence** are one policy at different settings — how much it pays to close a ring rather
 than force a front, how far it will outrun its supply, when it pulls a formation out to
 refit. All three garrison a railhead or a city an enemy is closing on before they spend
-the turn's activations at the front.
+the turn's activations at the front, order what is in command before what is not, and
+send their headquarters wherever they command the most of the line.
 
 ### Reviewing a war
 

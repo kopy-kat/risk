@@ -190,7 +190,7 @@ export function doctrineOrders(
     } catch {
       break
     }
-    if (move.type !== 'order') break
+    if (move.type !== 'order' && move.type !== 'moveHq') break
     try {
       cur = applyMove(cur, move)
     } catch {

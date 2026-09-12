@@ -1,7 +1,7 @@
 import type { PlayerId } from '../../engine/types'
 import type { GameBot } from '../types'
 import { attackValue, defendValue, engage } from './combat'
-import { ACTIVATIONS, activationsUsed, broken } from './game'
+import { ACTIVATIONS, activationsUsed, broken, commandFrom, hqReach, inCommand } from './game'
 import { STACK_LIMIT, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
 import { exploitReach, reachable } from './movement'
@@ -109,6 +109,44 @@ function chokePoints(m: GameMap, s: KesselState, me: PlayerId): Map<ProvinceId, 
 }
 
 /**
+ * Where the headquarters go this turn: each in turn to whatever ground in reach
+ * commands the most of the army the other one does not, a corps counting by its
+ * strength and double on the contact line. Never into contact, where the next
+ * assault overruns it. Staged even when the answer is to stay put, so the
+ * question is asked once a turn rather than before every order.
+ */
+function hqMove(m: GameMap, s: KesselState, me: PlayerId): Move | null {
+  const hqs = s.sides[me].hqs
+  const hq = hqs.findIndex((_, i) => s.hqOrders[i] === undefined)
+  if (hq === -1) return null
+
+  const enemyAt = new Set(s.formations.filter((f) => f.owner !== me).map((f) => f.at))
+  const inContact = (p: ProvinceId) => (m.adjacency[p] ?? []).some((n) => enemyAt.has(n))
+  const mine = s.formations.filter((f) => f.owner === me)
+  const covered = commandFrom(m, s, me, hqs.map((at, i) => s.hqOrders[i] ?? at).filter((_, i) => i !== hq))
+  const canGo = hqReach(m, s, me, hq)
+  // Staying put is a legal relocation from ground the side holds, so an empty
+  // reach means this headquarters is somewhere the rules cannot send it from.
+  if (!canGo.has(hqs[hq])) return null
+
+  let best = hqs[hq]
+  let gain = -1
+  for (const at of canGo) {
+    if (inContact(at)) continue
+    const reach = commandFrom(m, s, me, [at])
+    const g = mine.reduce(
+      (n, f) => n + (!covered.has(f.at) && reach.has(f.at) ? f.strength * (inContact(f.at) ? 2 : 1) : 0),
+      0,
+    )
+    if (g > gain) {
+      gain = g
+      best = at
+    }
+  }
+  return { type: 'moveHq', hq, to: best }
+}
+
+/**
  * The policy itself, for any settings — not just the three named ones. This is what
  * the exploitability search plays: it hill-climbs these parameters looking for a
  * setting the best doctrine has no answer to.
@@ -137,19 +175,25 @@ export function decideFor(
   )
   if (stale) return { type: 'clearOrder', formation: stale.id }
 
-  const pending = mine.filter((f) => !s.orders[f.id])
+  const relocate = hqMove(m, s, me)
+  if (relocate) return relocate
+
+  const pending = mine.filter((f) => !s.orders[f.id] && !s.delayed[f.id])
   if (pending.length === 0) return { type: 'commit' }
 
   // Supply is recomputed at turn start, but orders staged earlier in this same
   // turn move formations, so it is re-read here rather than trusted from state.
   const supply = supplyStates(m, s, me)
   const spent = activationsUsed(s, me)
+  const command = inCommand(m, s, me)
 
   // The budget goes to the contact line first. Ordering formations in whatever
   // sequence they happen to sit in the list spends it on rear areas and leaves
   // the front standing still. Before even the line: whoever stands near valuable
   // ground of ours that is empty with an enemy closing on it — left until the
-  // activations are spent, the rear is never garrisoned and a raid takes it.
+  // activations are spent, the rear is never garrisoned and a raid takes it —
+  // and whoever is in command, because an activation spent out of command buys
+  // nothing this turn.
   const enemyAt = (p: ProvinceId) => s.formations.some((x) => x.at === p && x.owner !== me)
   const within2 = (p: ProvinceId, test: (q: ProvinceId) => boolean) =>
     (m.adjacency[p] ?? []).some((n) => test(n) || (m.adjacency[n] ?? []).some(test))
@@ -167,6 +211,7 @@ export function decideFor(
   const f = [...pending].sort(
     (a, b) =>
       Number(guardian(b)) - Number(guardian(a)) ||
+      Number(command.has(b.id)) - Number(command.has(a.id)) ||
       Number(inContact(b)) - Number(inContact(a)) ||
       b.strength - a.strength,
   )[0]
@@ -174,7 +219,11 @@ export function decideFor(
   const at = { ...f, supply: supply[f.id] ?? f.supply }
   const afford = spent.size < ACTIVATIONS || spent.has(f.at)
 
-  return { type: 'order', formation: f.id, order: orderFor(doctrine, m, s, me, at, rand, afford) }
+  return {
+    type: 'order',
+    formation: f.id,
+    order: orderFor(doctrine, m, s, me, at, rand, afford, command.has(f.id)),
+  }
 }
 
 function orderFor(
@@ -185,6 +234,7 @@ function orderFor(
   f: Formation,
   rand: () => number,
   afford: boolean,
+  commanded: boolean,
 ): Order {
   const neighbours = m.adjacency[f.at] ?? []
   const enemyAt = (p: ProvinceId) => s.formations.filter((x) => x.at === p && x.owner !== me)
@@ -229,7 +279,9 @@ function orderFor(
     return closing + advance + provinceValue(m, n) * 0.2 - strain + guardWorth(n, friendlyAt(n).length)
   }
 
-  if (f.supply >= 3 && !broken(s, me)) {
+  // An assault ordered out of command goes in a turn late, against whatever is
+  // standing there by then — which is not an assault anyone planned.
+  if (commanded && f.supply >= 3 && !broken(s, me)) {
     for (const n of neighbours) {
       const defenders = enemyAt(n)
       if (defenders.length === 0) continue

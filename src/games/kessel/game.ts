@@ -7,9 +7,9 @@ import { STACK_LIMIT, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
 import { ASSAULT_COST, allowance, exploitReach, reachable, routeTo } from './movement'
 import { depthMap, liveDepots, network, retreatTargets, supplyStates } from './supply'
-import type { Formation, KesselState, Move, Order, Side, UnitType } from './types'
+import type { Formation, FormationId, KesselState, Move, Order, Side, UnitType, Verdict } from './types'
 
-export const RULES_VERSION = ['kessel2', 'rear', 'rail6', 'exploit', 'mud10', 'aimsdealt6of10', 'will25'].join('|')
+export const RULES_VERSION = ['kessel2', 'rear', 'rail6', 'exploit', 'mud10', 'aimsdealt6of10', 'will25', 'hq2r3', 'armies26v29', 'aims24'].join('|')
 
 /**
  * Provinces you can set in motion in one turn.
@@ -20,6 +20,20 @@ export const RULES_VERSION = ['kessel2', 'rear', 'rail6', 'exploit', 'mud10', 'a
  * solid manned line is not free.
  */
 export const ACTIVATIONS = 7
+
+/**
+ * Headquarters per side, and how far each one's command reaches: provinces of the
+ * side's own ground, counted from where it stands. A formation beyond every one of
+ * them is out of command, and an order to move or attack reaches it a turn late.
+ *
+ * Two, because a main front and a sideshow is the choice this exists to force: the
+ * line can be commanded, and Norway or the south of Italy then waits a turn for
+ * its orders unless a headquarters goes there and the line goes without.
+ */
+export const HQS_PER_SIDE = 2
+export const COMMAND_RADIUS = 3
+/** How far a headquarters relocates in a turn, through its own side's ground. */
+export const HQ_MOVE = 4
 
 /** At or below this a side can no longer be ordered forward, and may ask for terms. */
 export const WILL_FLOOR = 25
@@ -52,8 +66,13 @@ const ORDER_OF_BATTLE: UnitType[] = ['infantry', 'infantry', 'infantry', 'armour
  * Enough to man the contact line and hold something back. Too few and the armies
  * never touch: they wander toward objectives across open country, no front forms,
  * and with no front there is nothing to flank and no ring to close.
+ *
+ * By side, West then East, and unequal on purpose. The East holds the deep, open
+ * half of the map with its peninsulas at the far end of its railways, and with
+ * equal armies the West wins most wars between identical doctrines. The difference
+ * is whatever brings `npm run bench:kessel -- maneuver maneuver` back to an even split.
  */
-const FORMATIONS_PER_SIDE = 26
+const FORMATIONS_PER_SIDE = [26, 29]
 export const AIMS_PER_SIDE = 6
 /**
  * What each side's aims are dealt from: the most valuable ground on the enemy's
@@ -75,6 +94,13 @@ const HOME_SHARE = 1 / 14
 export const REPLACEMENT_TURNS = 3
 /** A fresh infantry corps arrives at each side's rearmost railhead every this many turns. */
 export const REINFORCE_EVERY = 6
+
+/**
+ * How far apart the two sides' shares of their own aims have to end for a peace to
+ * be more than narrow. The winner is decided by who holds more; this is what makes
+ * refusing terms worth a side's will when it is already ahead.
+ */
+export const VERDICT_MARGIN: Record<'decisive' | 'clear', number> = { decisive: 0.5, clear: 0.25 }
 
 export interface KesselOptions {
   seats: SeatConfig[]
@@ -107,6 +133,7 @@ export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }:
     revealed: [],
     home: id === 0 ? byLon.slice(0, rear) : byLon.slice(byLon.length - rear),
     seen: {},
+    hqs: [],
   }))
 
   const formations: Formation[] = []
@@ -123,9 +150,10 @@ export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }:
 
     const stacked: Record<ProvinceId, number> = {}
     let placed = 0
-    for (let pass = 0; placed < FORMATIONS_PER_SIDE && pass < 3; pass++) {
+    const quota = FORMATIONS_PER_SIDE[side.id]
+    for (let pass = 0; placed < quota && pass < 3; pass++) {
       for (const at of posts) {
-        if (placed >= FORMATIONS_PER_SIDE) break
+        if (placed >= quota) break
         if ((stacked[at] ?? 0) >= STACK_LIMIT[m.province[at].terrain]) continue
         stacked[at] = (stacked[at] ?? 0) + 1
         const type = ORDER_OF_BATTLE[placed % ORDER_OF_BATTLE.length]
@@ -134,6 +162,7 @@ export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }:
       }
     }
   }
+  for (const side of sides) side.hqs = placeHqs(m, owner, formations, side.id)
 
   const s: KesselState = {
     mapId,
@@ -141,6 +170,8 @@ export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }:
     owner,
     formations,
     orders: {},
+    delayed: {},
+    hqOrders: {},
     phase: 'orders',
     current: 0,
     turn: 1,
@@ -151,6 +182,7 @@ export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }:
     winner: null,
     nextFormationId,
     offered: false,
+    peace: null,
   }
 
   // The deal: six off each side's menu, from the game's own generator, so the
@@ -186,6 +218,90 @@ const raise = (id: number, owner: PlayerId, type: UnitType, at: ProvinceId): For
 const value = (m: GameMap, p: ProvinceId) => m.province[p].depot * 2 + m.province[p].vp
 
 /**
+ * Where a side's headquarters start: one at a time, wherever commands the most of
+ * its army, with the contact line counting double because the line is where an
+ * order arriving late costs most. Never on the line itself, where the first
+ * assault would overrun it.
+ */
+function placeHqs(
+  m: GameMap,
+  owner: Record<ProvinceId, PlayerId>,
+  formations: Formation[],
+  p: PlayerId,
+): ProvinceId[] {
+  const own = m.ids.filter((id) => owner[id] === p)
+  const onLine = (id: ProvinceId) => (m.adjacency[id] ?? []).some((n) => owner[n] !== p)
+  const mine = formations.filter((f) => f.owner === p)
+  const reach = new Map(own.map((id) => [id, groundWithin(m, owner, p, [id], COMMAND_RADIUS)]))
+  const picked: ProvinceId[] = []
+  const covered = new Set<FormationId>()
+  for (let i = 0; i < HQS_PER_SIDE; i++) {
+    let best: ProvinceId | null = null
+    let gain = -1
+    for (const id of own) {
+      if (onLine(id) || picked.includes(id)) continue
+      const near = reach.get(id) as Set<ProvinceId>
+      const g = mine.reduce((n, f) => n + (!covered.has(f.id) && near.has(f.at) ? (onLine(f.at) ? 2 : 1) : 0), 0)
+      if (g > gain) {
+        gain = g
+        best = id
+      }
+    }
+    if (best === null) break
+    picked.push(best)
+    for (const f of mine) if ((reach.get(best) as Set<ProvinceId>).has(f.at)) covered.add(f.id)
+  }
+  return picked
+}
+
+/** Provinces `p` holds within `radius` steps of `from`, walking only through ground it holds. */
+function groundWithin(
+  m: GameMap,
+  owner: Record<ProvinceId, PlayerId>,
+  p: PlayerId,
+  from: ProvinceId[],
+  radius: number,
+): Set<ProvinceId> {
+  let ring = from.filter((id) => owner[id] === p)
+  const seen = new Set<ProvinceId>(ring)
+  for (let d = 0; d < radius && ring.length > 0; d++) {
+    const next: ProvinceId[] = []
+    for (const at of ring) {
+      for (const n of m.adjacency[at] ?? []) {
+        if (seen.has(n) || owner[n] !== p) continue
+        seen.add(n)
+        next.push(n)
+      }
+    }
+    ring = next
+  }
+  return seen
+}
+
+/** The ground headquarters standing on `from` would command. */
+export const commandFrom = (m: GameMap, s: KesselState, p: PlayerId, from: ProvinceId[]): Set<ProvinceId> =>
+  groundWithin(m, s.owner, p, from, COMMAND_RADIUS)
+
+/**
+ * The formations whose orders `p` has carried out the turn they are given.
+ *
+ * A side with no headquarters at all is not modelled for command and commands
+ * everything, which is what a scenario or a test that places none gets.
+ */
+export function inCommand(m: GameMap, s: KesselState, p: PlayerId): Set<FormationId> {
+  const mine = s.formations.filter((f) => f.owner === p)
+  if (s.sides[p].hqs.length === 0) return new Set(mine.map((f) => f.id))
+  const reach = commandFrom(m, s, p, s.sides[p].hqs)
+  return new Set(mine.filter((f) => reach.has(f.at)).map((f) => f.id))
+}
+
+/** Where headquarters `hq` of side `p` can be sent this turn, the ground it stands on included. */
+export function hqReach(m: GameMap, s: KesselState, p: PlayerId, hq: number): Set<ProvinceId> {
+  const at = s.sides[p].hqs[hq]
+  return at === undefined ? new Set() : groundWithin(m, s.owner, p, [at], HQ_MOVE)
+}
+
+/**
  * The war aims a side is dealt from: the most valuable ground the enemy holds,
  * as the war opens. Ties go to the better-served province, then to the name, so
  * the menu is the same every time the same map is dealt.
@@ -204,10 +320,12 @@ export function aimMenu(m: GameMap, s: KesselState, p: PlayerId): ProvinceId[] {
 
 const clone = (s: KesselState): KesselState => ({
   ...s,
-  sides: s.sides.map((x) => ({ ...x, aims: [...x.aims], revealed: [...x.revealed] })),
+  sides: s.sides.map((x) => ({ ...x, aims: [...x.aims], revealed: [...x.revealed], hqs: [...x.hqs] })),
   owner: { ...s.owner },
   formations: s.formations.map((f) => ({ ...f })),
   orders: { ...s.orders },
+  delayed: { ...s.delayed },
+  hqOrders: { ...s.hqOrders },
   log: [...s.log],
   moves: s.record ? [...s.moves] : s.moves,
 })
@@ -236,6 +354,7 @@ export function applyMove(s0: KesselState, move: Move): KesselState {
       need(s.phase === 'orders', 'not the order phase')
       const f = s.formations.find((x) => x.id === move.formation)
       need(!!f && f.owner === me, 'not your formation')
+      need(!s.delayed[move.formation], "still carrying out last turn's order")
       need(legalOrder(m, s, f as Formation, move.order), 'illegal order')
       need(
         activationsAfter(s, me, (f as Formation).at, move.order) <= ACTIVATIONS,
@@ -247,6 +366,17 @@ export function applyMove(s0: KesselState, move: Move): KesselState {
     case 'clearOrder': {
       need(s.phase === 'orders', 'not the order phase')
       delete s.orders[move.formation]
+      break
+    }
+    case 'moveHq': {
+      need(s.phase === 'orders', 'not the order phase')
+      need(move.hq >= 0 && move.hq < s.sides[me].hqs.length, 'no such headquarters')
+      if (move.to === null) {
+        delete s.hqOrders[move.hq]
+        break
+      }
+      need(hqReach(m, s, me, move.hq).has(move.to), 'the headquarters cannot get there this turn')
+      s.hqOrders[move.hq] = move.to
       break
     }
     case 'commit': {
@@ -337,10 +467,14 @@ export function legalMoves(s: KesselState, p: PlayerId): Move[] {
   // annihilation, and "fight on" still means something to the side that said it.
   if (broken(s, p) && !s.offered) out.push({ type: 'offerTerms' })
 
+  for (let hq = 0; hq < s.sides[p].hqs.length; hq++) {
+    for (const to of hqReach(m, s, p, hq)) out.push({ type: 'moveHq', hq, to })
+  }
+
   const spent = activationsUsed(s, p)
   const depth = depthMap(m, s, p)
   for (const f of s.formations) {
-    if (f.owner !== p) continue
+    if (f.owner !== p || s.delayed[f.id]) continue
     const orders: Order[] = [{ type: 'hold' }, { type: 'refit' }]
     if (spent.size < ACTIVATIONS || spent.has(f.at)) {
       for (const n of Object.keys(reachable(m, s, f, { depth }).cost)) orders.push({ type: 'move', to: n })
@@ -362,6 +496,24 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
   const standingBefore = s.sides.map((side) => s.formations.filter((f) => f.owner === side.id).length)
 
   const mine = s.formations.filter((f) => f.owner === me)
+
+  // Command, measured on the board the orders were written on. What was ordered
+  // out of command last turn arrives now and is carried out; what is ordered out
+  // of command now sets off, and is carried out next turn.
+  const command = inCommand(m, s, me)
+  const sent: Record<FormationId, Order> = {}
+  for (const f of mine) {
+    const late = s.delayed[f.id]
+    const order = s.orders[f.id]
+    delete s.delayed[f.id]
+    if (late) {
+      s.orders[f.id] = late
+    } else if (order && (order.type === 'move' || order.type === 'attack') && !command.has(f.id)) {
+      sent[f.id] = order
+      delete s.orders[f.id]
+    }
+  }
+
   const ordered = (type: Order['type']) => mine.filter((f) => s.orders[f.id]?.type === type)
 
   // Standing still is digging in, whether or not anybody said so.
@@ -494,8 +646,57 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
     if (f.owner !== me || o.type === 'refit') standing[f.id] = o
   }
   s.orders = standing
+
+  // Headquarters go last, so where they stand commands next turn and never the
+  // turn being resolved — sending one forward is a plan, not a way to reach this
+  // turn's orders.
+  for (const [hq, to] of Object.entries(s.hqOrders)) {
+    if (s.owner[to] === me) s.sides[me].hqs[Number(hq)] = to
+  }
+  s.hqOrders = {}
+  displaceOverrun(m, s)
+  Object.assign(s.delayed, sent)
+
   s.rngState = rng.state
   return updateWill(m, s, me, mineBefore, theirsBefore, standingBefore)
+}
+
+/**
+ * A headquarters whose ground has been taken falls back to the nearest ground its
+ * side still holds out of contact, and commands from there. It is not destroyed:
+ * the cost of being overrun is every order that now arrives late because the staff
+ * is somewhere nobody planned for it to be.
+ */
+function displaceOverrun(m: GameMap, s: KesselState) {
+  for (const side of s.sides) {
+    side.hqs = side.hqs.map((hq) => {
+      if (s.owner[hq] === side.id) return hq
+      const to = nearestQuietGround(m, s, side.id, hq)
+      if (to !== hq) log(s, side.id, `${m.province[hq].name}: headquarters overrun, falls back to ${m.province[to].name}`)
+      return to
+    })
+  }
+}
+
+function nearestQuietGround(m: GameMap, s: KesselState, p: PlayerId, from: ProvinceId): ProvinceId {
+  const enemyAt = new Set(s.formations.filter((f) => f.owner !== p).map((f) => f.at))
+  const quiet = (id: ProvinceId) => !(m.adjacency[id] ?? []).some((n) => enemyAt.has(n))
+  const seen = new Set<ProvinceId>([from])
+  const queue = [from]
+  let fallback: ProvinceId | null = null
+  for (let i = 0; i < queue.length; i++) {
+    const here = queue[i]
+    if (s.owner[here] === p) {
+      if (quiet(here)) return here
+      fallback ??= here
+    }
+    for (const n of m.adjacency[here] ?? []) {
+      if (seen.has(n)) continue
+      seen.add(n)
+      queue.push(n)
+    }
+  }
+  return fallback ?? from
 }
 
 const CORPS: Record<UnitType, string> = {
@@ -646,6 +847,9 @@ function endTurn(m: GameMap, s: KesselState): KesselState {
     const rebuilding = f.strength < STRENGTH[f.type] && railheads.includes(f.at)
     if (f.cohesion >= 100 && !rebuilding) delete s.orders[Number(id)]
   }
+  for (const id of Object.keys(s.delayed)) {
+    if (!s.formations.some((f) => f.id === Number(id))) delete s.delayed[Number(id)]
+  }
 
   if (!s.formations.some((f) => f.owner === next)) return settle(m, s)
   return s
@@ -672,9 +876,17 @@ function settle(m: GameMap, s: KesselState): KesselState {
   const ground = s.sides.map((side) => groundHeld(m, s, side.id))
   const score = aims[0] === aims[1] ? ground : aims
   s.winner = score[0] === score[1] ? null : score[0] > score[1] ? 0 : 1
+  const verdict = verdictOf(aims, s.winner)
+  s.peace = { aims, ground, verdict }
   s.phase = 'gameOver'
-  log(s, s.winner, s.winner === null ? 'the war ends in stalemate' : 'achieves its war aims')
+  log(s, s.winner, s.winner === null ? 'the war ends in stalemate' : `achieves its war aims — a ${verdict} peace`)
   return s
+}
+
+function verdictOf(aims: number[], winner: PlayerId | null): Verdict {
+  if (winner === null) return 'stalemate'
+  const margin = aims[winner] - aims[1 - winner]
+  return margin >= VERDICT_MARGIN.decisive ? 'decisive' : margin >= VERDICT_MARGIN.clear ? 'clear' : 'narrow'
 }
 
 export function view(s: KesselState): GameView {

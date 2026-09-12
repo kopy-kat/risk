@@ -6,8 +6,8 @@
  * arrangement of provinces isn't a rule.
  */
 import {
-  ACTIVATIONS, REINFORCE_EVERY, REPLACEMENT_TURNS, WILL_FLOOR,
-  activationsUsed, applyMove, createGame, legalMoves, view,
+  ACTIVATIONS, HQS_PER_SIDE, REINFORCE_EVERY, REPLACEMENT_TURNS, WILL_FLOOR,
+  activationsUsed, applyMove, createGame, inCommand, legalMoves, view,
 } from '../src/games/kessel/game'
 import { engage } from '../src/games/kessel/combat'
 import { observed } from '../src/games/kessel/intel'
@@ -112,10 +112,13 @@ function stateOn(
       revealed: [],
       home: homeOf(i as PlayerId),
       seen: {},
+      hqs: [],
     })),
     owner,
     formations,
     orders: {},
+    delayed: {},
+    hqOrders: {},
     phase: 'orders',
     current: 0,
     turn: 1,
@@ -126,6 +129,7 @@ function stateOn(
     winner: null,
     nextFormationId: formationSerial,
     offered: false,
+    peace: null,
     ...patch,
   }
 }
@@ -634,6 +638,105 @@ function split(): Record<string, PlayerId> {
   ok(seen.has(id(4, 1)), 'the province next door is observed')
   ok(seen.has(id(4, 0)), 'recon sees two provinces out')
   ok(!seen.has(id(6, 1)), 'the enemy rear is not')
+}
+
+// ── command: out of reach of every headquarters, an order arrives a turn late ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const owner: Record<string, PlayerId> = {}
+  for (const p of m.ids) owner[p] = 0
+  for (let y = 0; y < H; y++) owner[id(6, y)] = 1
+  const near = corps(0, id(1, 1))
+  const far = corps(0, id(4, 1))
+  let g = stateOn(m.id, owner, [near, far, corps(1, id(6, 2))])
+  g.sides[0].hqs = [id(0, 1)]
+
+  const command = inCommand(m, g, 0)
+  ok(command.has(near.id), 'a formation within reach of a headquarters is in command')
+  ok(!command.has(far.id), 'one beyond its reach is not')
+
+  g = applyMove(g, { type: 'order', formation: near.id, order: { type: 'move', to: id(2, 1) } })
+  g = applyMove(g, { type: 'order', formation: far.id, order: { type: 'move', to: id(3, 0) } })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.formations.find((f) => f.id === near.id)?.at, id(2, 1), 'an order in command is carried out the turn it is given')
+  eq(g.formations.find((f) => f.id === far.id)?.at, id(4, 1), 'an order out of command is not')
+  eq(g.delayed[far.id]?.type, 'move', 'it is on its way instead')
+
+  g = applyMove(g, { type: 'commit' })
+  let refused = false
+  try {
+    applyMove(g, { type: 'order', formation: far.id, order: { type: 'hold' } })
+  } catch {
+    refused = true
+  }
+  ok(refused, "a formation carrying out last turn's order cannot be given another")
+  g = applyMove(g, { type: 'commit' })
+  eq(g.formations.find((f) => f.id === far.id)?.at, id(3, 0), 'the order is carried out a turn late')
+  ok(!g.delayed[far.id], 'after which the formation is free to be ordered again')
+}
+
+// ── headquarters: sent through their own ground, commanding from there next turn ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const f = corps(0, id(3, 1))
+  let g = stateOn(m.id, split(), [f, corps(1, id(6, 1))])
+  g.sides[0].hqs = [id(0, 0)]
+  ok(!inCommand(m, g, 0).has(f.id), 'four provinces from its headquarters, a formation is out of command')
+
+  let tooFar = false
+  try {
+    applyMove(g, { type: 'moveHq', hq: 0, to: id(3, 2) })
+  } catch {
+    tooFar = true
+  }
+  ok(tooFar, 'a headquarters cannot be sent further than it travels in a turn')
+
+  g = applyMove(g, { type: 'moveHq', hq: 0, to: id(2, 1) })
+  ok(!inCommand(m, g, 0).has(f.id), 'sending it commands nothing until the turn resolves')
+  g = applyMove(g, { type: 'commit' })
+  eq(g.sides[0].hqs[0], id(2, 1), 'then it stands where it was sent')
+  ok(inCommand(m, g, 0).has(f.id), 'and commands from there')
+}
+
+// ── an overrun headquarters falls back rather than being lost ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const hq = id(3, 1)
+  const defender = corps(0, hq, { cohesion: 1 })
+  const attacker = corps(1, id(4, 1))
+  let g = stateOn(m.id, split(), [defender, attacker], { current: 1 })
+  g.sides[0].hqs = [hq]
+  g = applyMove(g, { type: 'order', formation: attacker.id, order: { type: 'attack', to: hq } })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.owner[hq], 1, 'the ground under the headquarters is taken')
+  eq(g.sides[0].hqs.length, 1, 'the headquarters is not lost')
+  eq(g.owner[g.sides[0].hqs[0]], 0, 'it falls back to ground its side still holds')
+}
+
+// ── each side opens with its headquarters on its own ground ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3, vp: 2 }, [id(6, 1)]: { depot: 3, vp: 2 } })
+  const g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 3, mapId: m.id })
+  ok(
+    g.sides.every((side) => side.hqs.length === HQS_PER_SIDE && side.hqs.every((p) => g.owner[p] === side.id)),
+    'each side opens with its headquarters on its own ground',
+  )
+}
+
+// ── the peace says by how much ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3, vp: 2 }, [id(6, 1)]: { depot: 3, vp: 2 } })
+  const owner = split()
+  owner[id(6, 1)] = 0
+  let g = stateOn(m.id, owner, [corps(0, id(1, 1)), corps(1, id(5, 1))])
+  g.sides[0].aims = [id(6, 1)]
+  g.sides[1].aims = [id(0, 1)]
+  g.sides[0].will = WILL_FLOOR
+  g.sides[1].will = WILL_FLOOR
+  g = applyMove(g, { type: 'offerTerms' })
+  eq(g.phase, 'gameOver', 'two broken sides end the war')
+  eq(g.winner, 0, 'the side holding its aims wins it')
+  eq(g.peace?.verdict, 'decisive', 'and all of them held against none is a decisive peace')
 }
 
 // ── a whole game runs to a settled peace ────────────────────────────

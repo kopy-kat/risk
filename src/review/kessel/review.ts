@@ -175,7 +175,7 @@ function decisionsOf(r: Replay<KesselState>, record: GameRecord): Decision[] {
   let start = 0
   for (let i = 0; i < record.moves.length && i + 1 < r.states.length; i++) {
     const mv = record.moves[i] as Move
-    if (mv.type === 'order' || mv.type === 'clearOrder') continue
+    if (mv.type === 'order' || mv.type === 'clearOrder' || mv.type === 'moveHq') continue
     if (mv.type === 'commit') {
       const s = r.states[start]
       if (s && s.phase === 'orders' && s.current === r.states[i].current) {

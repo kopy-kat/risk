@@ -17,7 +17,7 @@ import type { PlayerId } from '../src/engine/types'
 import { kessel } from '../src/games/kessel'
 import { DOCTRINES, KESSEL_BOTS } from '../src/games/kessel/bot'
 import { WIN_SCORE, assess, evaluate } from '../src/games/kessel/evaluate'
-import { applyMove, createGame } from '../src/games/kessel/game'
+import { applyMove, createGame, inCommand } from '../src/games/kessel/game'
 import { STACK_LIMIT, mapOf, registerMap } from '../src/games/kessel/map'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
 import { stepBot } from '../src/games/kessel/play'
@@ -95,11 +95,11 @@ function stateOn(
     mapId,
     sides: [0, 1].map((i) => ({
       id: i, name: `S${i}`, color: i, bot: null, alive: true, will: 100, aims: [],
-      revealed: [], home: homeOf(i as PlayerId), seen: {},
+      revealed: [], home: homeOf(i as PlayerId), seen: {}, hqs: [],
     })),
-    owner, formations, orders: {}, phase: 'orders', current: 0, turn: 1,
+    owner, formations, orders: {}, delayed: {}, hqOrders: {}, phase: 'orders', current: 0, turn: 1,
     log: [], moves: [], record: false, rngState: 12345, winner: null,
-    nextFormationId: formationSerial + 1000, offered: false,
+    nextFormationId: formationSerial + 1000, offered: false, peace: null,
     ...patch,
   }
 }
@@ -354,12 +354,13 @@ eq(
 // thin the charge really is the better turn, and a check that demanded otherwise
 // would be demanding the evaluation lie.
 {
-  const r = reviews[0]
   let boards = 0
   const win = { assault: 0, rout: 0 }
   const gap = { assault: 0, rout: 0 }
 
-  for (const j of r.judgements.slice(0, 40)) {
+  // All three wars rather than one: over two dozen boards a proportion moves by a
+  // board either way with whichever game happened to be played.
+  for (const [r, j] of reviews.flatMap((r) => r.judgements.slice(0, 20).map((j) => [r, j] as const))) {
     const s = r.replay.states[j.index]
     const m = mapOf(s.mapId)
     const seeds = seedsFor(j.commit)
@@ -367,10 +368,13 @@ eq(
     const strengthAt = (p: string) =>
       s.formations.filter((v) => v.at === p).reduce((n, v) => n + v.strength, 0)
 
+    // Built only from formations in command: an order out of command is carried
+    // out next turn, so a charge that includes them is smaller than it looks.
+    const command = inCommand(m, s, j.player)
     const assault: OrderSet = {}
     const rout: OrderSet = {}
     for (const f of s.formations) {
-      if (f.owner !== j.player) continue
+      if (f.owner !== j.player || !command.has(f.id)) continue
       const target = (m.adjacency[f.at] ?? [])
         .filter((n) => s.formations.some((x) => x.at === n && x.owner !== j.player))
         .sort((x, y) => strengthAt(y) - strengthAt(x))[0]
@@ -402,8 +406,11 @@ eq(
     win.rout >= boards * 0.9,
     `giving up the front prices worse than a doctrine's turn on ${win.rout}/${boards} boards`,
   )
+  // About two thirds is what these rules produce, and the floor sits under that
+  // rather than at it: this is a guard against the evaluation drifting, not a
+  // record of today's number. The wide margin below is the claim being made.
   ok(
-    win.assault >= boards * 0.7,
+    win.assault >= boards * 0.6,
     `charging every stack in reach prices worse on ${win.assault}/${boards} boards`,
   )
   ok(

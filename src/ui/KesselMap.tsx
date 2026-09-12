@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PlayerId } from '../engine/types'
-import { REPLACEMENT_TURNS, STRENGTH } from '../games/kessel/game'
+import { COMMAND_RADIUS, REPLACEMENT_TURNS, STRENGTH, inCommand } from '../games/kessel/game'
 import { observed } from '../games/kessel/intel'
 import { mapOf } from '../games/kessel/map'
 import type { Province, ProvinceId, Terrain } from '../games/kessel/map'
@@ -11,7 +11,7 @@ import type { Formation, FormationId, KesselState, Order, Sighting } from '../ga
 import { playerColor } from './colors'
 
 /** What a click on a highlighted province would do. */
-export type TargetKind = 'move' | 'rail' | 'attack' | 'onward'
+export type TargetKind = 'move' | 'rail' | 'attack' | 'onward' | 'hq'
 
 export interface KesselMapProps {
   state: KesselState
@@ -22,6 +22,8 @@ export interface KesselMapProps {
    */
   viewer: PlayerId | null
   selected: FormationId | null
+  /** the viewer's headquarters being sent somewhere, by index */
+  selectedHq?: number | null
   /** where the selected formation may go, and what happens when it gets there */
   targets: Map<ProvinceId, TargetKind>
   /**
@@ -105,6 +107,8 @@ const TYPE_NAME: Record<Formation['type'], string> = {
   recon: 'Recon',
 }
 
+type ArrowKind = 'move' | 'rail' | 'attack' | 'onward' | 'late' | 'hq'
+
 /** Gentle arc across the water, the way the Risk map draws a sea route. */
 function seaPath(pa: [number, number], pb: [number, number]) {
   const [x1, y1] = pa
@@ -135,7 +139,7 @@ function orderPath(a: Province, b: Province) {
 }
 
 export function KesselMap({
-  state, viewer, selected, targets, pockets, hover, onPick, onHover,
+  state, viewer, selected, selectedHq = null, targets, pockets, hover, onPick, onHover,
 }: KesselMapProps) {
   const m = mapOf(state.mapId)
   const colorOf = (p: PlayerId) => playerColor(state.sides[p]?.color ?? p)
@@ -145,6 +149,15 @@ export function KesselMap({
     () => (viewer === null ? null : observed(m, state, viewer)),
     [m, state, viewer],
   )
+
+  /** The viewer's own formations beyond every headquarters: anything ordered to them arrives a turn late. */
+  const adrift = useMemo(() => {
+    const out = new Set<FormationId>()
+    if (viewer === null) return out
+    const commanded = inCommand(m, state, viewer)
+    for (const f of state.formations) if (f.owner === viewer && !commanded.has(f.id)) out.add(f.id)
+    return out
+  }, [m, state, viewer])
 
   /** The clipped plate: the ground the map actually covers, before the bar's room. */
   const plate = useMemo(() => {
@@ -255,7 +268,7 @@ export function KesselMap({
   }, [fit])
 
   // The view is the map's own business, so its keys are bound here. None of them
-  // is one the bar wants: it takes Space, the arrows, H, R, ⌫, Esc and ⌘Z.
+  // is one the bar wants: it takes Space, the arrows, G, H, R, ⌫, Esc and ⌘Z.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
@@ -373,7 +386,7 @@ export function KesselMap({
   }, [state.formations])
 
   const arrows = useMemo(() => {
-    const out: { key: string; d: string; kind: 'move' | 'rail' | 'attack' | 'onward' }[] = []
+    const out: { key: string; d: string; kind: ArrowKind; c?: string }[] = []
     const depth: Partial<Record<PlayerId, Record<ProvinceId, number>>> = {}
     for (const f of state.formations) {
       const order = state.orders[f.id]
@@ -392,8 +405,30 @@ export function KesselMap({
         })
       }
     }
+    // Orders on their way are the viewer's own business; the enemy's are not drawn.
+    for (const f of state.formations) {
+      if (viewer !== null && f.owner !== viewer) continue
+      const late = state.delayed[f.id]
+      if (late?.type !== 'move' && late?.type !== 'attack') continue
+      out.push({ key: `${f.id}:late`, d: orderPath(m.province[f.at], m.province[late.to]), kind: 'late' })
+    }
+    if (viewer === null || viewer === state.current) {
+      const hqs = state.sides[state.current].hqs
+      for (const [hq, to] of Object.entries(state.hqOrders)) {
+        const from = hqs[Number(hq)]
+        if (from === undefined || from === to) continue
+        out.push({
+          key: `hq${hq}`,
+          d: orderPath(m.province[from], m.province[to]),
+          kind: 'hq',
+          c: colorOf(state.current),
+        })
+      }
+    }
     return out
-  }, [m, state])
+    // colorOf reads only the seat palette, which is fixed for the whole game
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m, state, viewer])
 
   const selectedAt = selected === null
     ? null
@@ -572,8 +607,9 @@ export function KesselMap({
               <path
                 key={a.key}
                 className={`korder ${a.kind}`}
+                style={a.c ? { ['--c' as string]: a.c } : undefined}
                 d={a.d}
-                markerEnd={`url(#k-head-${a.kind})`}
+                markerEnd={`url(#k-head-${a.kind === 'late' || a.kind === 'hq' ? 'move' : a.kind})`}
               />
             ))}
           </g>
@@ -590,12 +626,33 @@ export function KesselMap({
                     y={m.province[at].cy + (i - (all.length - 1) / 2) * STACK_DY}
                     color={colorOf(f.owner)}
                     selected={f.id === selected}
+                    adrift={adrift.has(f.id)}
                     order={viewer === null || f.owner === viewer ? state.orders[f.id] : undefined}
                     sighting={hidden ? (viewer === null ? null : state.sides[viewer].seen[f.id] ?? null) : undefined}
                     turn={state.turn}
                   />
                 )
               }),
+            )}
+          </g>
+
+          {/* Headquarters are public — a staff is not hidden the way a counter's
+              worth is — and sit off the stack's lower corner, clear of depots and
+              objectives. */}
+          <g pointerEvents="none">
+            {state.sides.flatMap((side) =>
+              side.hqs.map((at, i) => (
+                <g
+                  key={`${side.id}:${i}`}
+                  className="khq"
+                  transform={`translate(${m.province[at].cx - 20},${m.province[at].cy + 22})`}
+                  style={{ ['--c' as string]: colorOf(side.id) }}
+                >
+                  {side.id === state.current && selectedHq === i && <circle className="ring" cx={3} cy={-7} r={10} />}
+                  <path className="staff" d="M0 0 V-14" />
+                  <path className="flag" d="M0 -14 H9 L6.5 -10.5 L9 -7 H0 Z" />
+                </g>
+              )),
             )}
           </g>
 
@@ -612,6 +669,9 @@ export function KesselMap({
               m.province[readout].depot > 0 ? `depot ${m.province[readout].depot}` : null,
               m.province[readout].vp > 0 ? `${m.province[readout].vp} vp` : null,
               claim[readout] !== undefined ? `${state.sides[claim[readout]].name} war aim` : null,
+              ...state.sides
+                .filter((side) => side.hqs.includes(readout))
+                .map((side) => `${side.name} headquarters`),
             ].filter(Boolean).join(' · ')}
           </div>
           {(garrison.get(readout) ?? []).map((f) => {
@@ -640,6 +700,7 @@ export function KesselMap({
                 <span className="n">
                   {f.strength} str · {Math.round(f.cohesion)} coh
                   {f.rest > 0 ? ` · rebuilding ${f.rest}/${REPLACEMENT_TURNS}` : ''}
+                  {adrift.has(f.id) ? ' · out of command' : ''}
                 </span>
                 <span className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</span>
               </div>
@@ -665,6 +726,18 @@ export function KesselMap({
           <b>Encircled</b>
           <em>surrenders if beaten</em>
         </span>
+        <span className="row hq">
+          <i className="pip" />
+          <b>Headquarters</b>
+          <em>commands {COMMAND_RADIUS} around it</em>
+        </span>
+        {viewer !== null && (
+          <span className="row adrift">
+            <i className="pip" />
+            <b>Out of command</b>
+            <em>orders a turn late</em>
+          </span>
+        )}
         {viewer !== null && (
           <span className="row fog">
             <i className="pip" />
@@ -678,13 +751,15 @@ export function KesselMap({
 }
 
 function Counter({
-  f, x, y, color, selected, order, sighting, turn,
+  f, x, y, color, selected, adrift, order, sighting, turn,
 }: {
   f: Formation
   x: number
   y: number
   color: string
   selected: boolean
+  /** one of the viewer's own, beyond every headquarters */
+  adrift: boolean
   order: Order | undefined
   /**
    * Set when the viewer cannot see this counter: what they last knew of it, or
@@ -723,7 +798,7 @@ function Counter({
 
   const cut = f.supply === 0
   return (
-    <g className={`kcounter s${f.supply} ${selected ? 'sel' : ''}`} style={{ ['--c' as string]: color }}>
+    <g className={`kcounter s${f.supply} ${selected ? 'sel' : ''} ${adrift ? 'adrift' : ''}`} style={{ ['--c' as string]: color }}>
       {selected && <rect className="halo" x={x0 - 3} y={y0 - 3} width={CW + 6} height={CH + 6} rx={3} />}
       <rect className="body" x={x0} y={y0} width={CW} height={CH} rx={1.5} />
       {cut && <rect className="cut" x={x0} y={y0} width={CW} height={CH} rx={1.5} fill="url(#k-cut)" />}

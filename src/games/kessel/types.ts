@@ -87,6 +87,23 @@ export interface Side {
   home: ProvinceId[]
   /** last sighting of every enemy formation that has ever been observed, by id */
   seen: Record<FormationId, Sighting>
+  /**
+   * Where this side's headquarters stand, always on its own ground. A formation
+   * further than `COMMAND_RADIUS` provinces of that ground from every one of them
+   * is out of command, and an order to move or attack reaches it a turn late.
+   */
+  hqs: ProvinceId[]
+}
+
+/** How far apart the peace left the two sides. The winner is the result; this is by how much. */
+export type Verdict = 'decisive' | 'clear' | 'narrow' | 'stalemate'
+
+export interface Peace {
+  /** each side's share of its own war aims held, by objective value */
+  aims: number[]
+  /** objective value each side holds anywhere, which decides a tie on aims */
+  ground: number[]
+  verdict: Verdict
 }
 
 export interface KesselState {
@@ -100,6 +117,14 @@ export interface KesselState {
    * until the formation is whole again, so it can outlive the turn it was given.
    */
   orders: Record<FormationId, Order>
+  /**
+   * Orders given to formations out of command, carried out at their side's next
+   * commit instead of the one they were given at. A formation carrying one cannot
+   * be given another.
+   */
+  delayed: Record<FormationId, Order>
+  /** headquarters relocations staged this turn, by index into the mover's `hqs` */
+  hqOrders: Record<number, ProvinceId>
   phase: Phase
   current: PlayerId
   turn: number
@@ -111,6 +136,8 @@ export interface KesselState {
   nextFormationId: FormationId
   /** terms were offered this turn and refused, so the side must fight the turn out */
   offered: boolean
+  /** how the war ended, once it has */
+  peace: Peace | null
 }
 
 export interface LogEntry {
@@ -123,6 +150,8 @@ export interface LogEntry {
 export type Move =
   | { type: 'order'; formation: FormationId; order: Order }
   | { type: 'clearOrder'; formation: FormationId }
+  /** send a headquarters somewhere when the turn resolves; `to: null` calls the move off */
+  | { type: 'moveHq'; hq: number; to: ProvinceId | null }
   /** resolve every staged order at once — the one button that ends a turn */
   | { type: 'commit' }
   | { type: 'offerTerms' }

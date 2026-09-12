@@ -306,7 +306,7 @@
       "lat": 43.3,
       "terrain": "urban",
       "depot": 2,
-      "vp": 1
+      "vp": 2
     },
     {
       "id": "lille",
@@ -326,7 +326,7 @@
       "lat": 50.85,
       "terrain": "urban",
       "depot": 0,
-      "vp": 1
+      "vp": 2
     },
     {
       "id": "antwerp",
@@ -366,7 +366,7 @@
       "lat": 51.92,
       "terrain": "urban",
       "depot": 2,
-      "vp": 1
+      "vp": 2
     },
     {
       "id": "amsterdam",
@@ -396,7 +396,7 @@
       "lat": 51.46,
       "terrain": "urban",
       "depot": 3,
-      "vp": 2
+      "vp": 3
     },
     {
       "id": "frankfurt",
@@ -436,7 +436,7 @@
       "lat": 53.55,
       "terrain": "urban",
       "depot": 2,
-      "vp": 1
+      "vp": 2
     },
     {
       "id": "berlin",
@@ -606,7 +606,7 @@
       "lat": 45.46,
       "terrain": "urban",
       "depot": 2,
-      "vp": 2
+      "vp": 3
     },
     {
       "id": "genoa",
@@ -1406,7 +1406,7 @@
       "lat": 36.75,
       "terrain": "urban",
       "depot": 2,
-      "vp": 1
+      "vp": 2
     },
     {
       "id": "constantine",
