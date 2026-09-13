@@ -4,13 +4,14 @@ import type { TerritoryId } from '../engine/board'
 import { bestTradeIn, createGame, applyMove, territoriesOf } from '../engine/game'
 import type { SeatConfig } from '../engine/game'
 import { rngFrom, shuffle } from '../engine/rng'
-import type { GameMode, GameState, Move } from '../engine/types'
+import type { GameState, Move } from '../engine/types'
 import { BOT_BY_KEY } from '../bots'
 import { easyBot } from '../bots/easy'
 import { stepBot } from '../bots/play'
 import { MapView } from './MapView'
 import { Dock } from './Dock'
 import type { PrimaryAction } from './Dock'
+import { KesselGame } from './KesselGame'
 import { Setup } from './Setup'
 import { Review } from './Review'
 import { playerColor } from './colors'
@@ -86,8 +87,14 @@ export function App() {
   const savedTurn = useRef(-1)
   /** the game being reviewed, or null while playing */
   const [reviewing, setReviewing] = useState<string | null>(null)
+  /**
+   * A Kessel game, which shares nothing with Risk but the shell — different
+   * rules, different map, different bar. Only the seats cross over, so it owns
+   * its own state rather than trying to be a phase of this one.
+   */
+  const [kesselSeats, setKesselSeats] = useState<SeatConfig[] | null>(null)
 
-  const start = useCallback((seats: SeatConfig[], mode: GameMode = 'classic') => {
+  const start = useCallback((seats: SeatConfig[]) => {
     const s = Math.floor(Math.random() * 1e9)
     // one number reproduces the whole game: the deal, the dice, and the bots
     botSeed.current = s ^ 0x9e3779b9
@@ -96,7 +103,7 @@ export function App() {
     assisted.current = []
     savedTurn.current = -1
     setSeed(s)
-    setGame(createGame({ seats: drawForTurnOrder(seats, s), seed: s, mode }))
+    setGame(createGame({ seats: drawForTurnOrder(seats, s), seed: s }))
     setSelected(null)
     setFortifyTo(null)
     setAutoSetup(false)
@@ -189,7 +196,6 @@ export function App() {
       botSeed: botSeed.current,
       // colour travels with the seat, since turn order is drawn rather than fixed
       seats: game.players.map((p) => ({ name: p.name, bot: p.bot, color: p.color })),
-      mode: game.mode,
       moves: game.moves,
       assisted: assisted.current,
       winner: game.winner,
@@ -410,7 +416,21 @@ export function App() {
   }, [game, primary, cancel, showSettings, undo, isHuman, range])
 
   if (reviewing) return <Review id={reviewing} onExit={() => setReviewing(null)} />
-  if (!game) return <Setup onStart={start} onReview={setReviewing} />
+  if (kesselSeats)
+    return (
+      <KesselGame
+        seats={kesselSeats}
+        onExit={() => setKesselSeats(null)}
+        onReview={(id) => { setKesselSeats(null); setReviewing(id) }}
+      />
+    )
+  if (!game)
+    return (
+      <Setup
+        onStart={(seats, picked) => (picked === 'kessel' ? setKesselSeats(seats) : start(seats))}
+        onReview={setReviewing}
+      />
+    )
 
   const phaseIndex = { deploy: 0, attack: 1, occupy: 1, fortify: 2, setup: 0, gameOver: 2 }[game.phase]
   // Only dim during initial placement. Once the game is running you need to read
@@ -517,9 +537,7 @@ export function App() {
               <h1 style={{ margin: 0 }}>{game.players[game.winner].name}</h1>
             </div>
             <div className="sub">
-              {game.mode === 'capitals' && territoriesOf(game, game.winner).length < TERRITORY_IDS.length
-                ? `holds every capital after ${game.turn} turns`
-                : `takes the world in ${game.turn} turns · ${territoriesOf(game, game.winner).length}/${TERRITORY_IDS.length} territories`}
+              {`takes the world in ${game.turn} turns · ${territoriesOf(game, game.winner).length}/${TERRITORY_IDS.length} territories`}
             </div>
             <div className="endgame-actions">
               {game.players.some((p) => !p.bot) && (

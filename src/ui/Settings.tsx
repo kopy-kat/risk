@@ -14,17 +14,23 @@ const KEYS: [string, string][] = [
 interface Props {
   seed: number
   onClose(): void
+  /** the keyboard of whichever game is on the board */
+  keys?: [string, string][]
+  note?: string
 }
 
 /** Small popover above the bar — for the knobs that aren't worth permanent space. */
-export function Settings({ seed, onClose }: Props) {
+export function Settings({
+  seed,
+  onClose,
+  keys = KEYS,
+  note = "Attacks roll until the territory falls or you're down to one army.",
+}: Props) {
   return (
     <>
       <div className="popover-scrim" onClick={onClose} />
       <div className="popover" role="dialog" aria-label="Settings">
-        <p className="note">
-          Attacks roll until the territory falls or you're down to one army.
-        </p>
+        <p className="note">{note}</p>
         <div className="row seedrow">
           <span className="mono-label">Seed</span>
           <button
@@ -40,7 +46,7 @@ export function Settings({ seed, onClose }: Props) {
 
         <div className="keys">
           <span className="mono-label">Keys</span>
-          {KEYS.map(([k, what]) => (
+          {keys.map(([k, what]) => (
             <div className="keyrow" key={k}>
               <dt><kbd>{k}</kbd></dt>
               <dd>{what}</dd>

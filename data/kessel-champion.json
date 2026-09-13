@@ -1,0 +1,18 @@
+{
+  "winRate": 0.4483333333333333,
+  "against": [
+    "kessel-attrition",
+    "kessel-maneuver",
+    "kessel-elastic",
+    "archived0",
+    "archived1"
+  ],
+  "params": {
+    "attackRatio": 1.4605835553285558,
+    "encirclement": 1.112204177679422,
+    "refitBelow": 25.952256157577587,
+    "objectivePull": 0.3688975818574949,
+    "overreach": 0.16009302133933903,
+    "counterattack": 1.4281580932113636
+  }
+}

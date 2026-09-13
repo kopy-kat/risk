@@ -17,10 +17,29 @@ import type { FromReviewWorker } from '../review/review.worker'
 import { getGame } from '../review/store'
 import { MapView } from './MapView'
 import { playerColor } from './colors'
+import { DEFAULT_GAME } from '../games'
+import { KesselReview } from './KesselReview'
 
 interface Props {
   id: string
   onExit(): void
+}
+
+/**
+ * Which review a record opens.
+ *
+ * The two games share the layout and the vocabulary and nothing else: Risk
+ * grades a move against an exact combat table, Kessel grades a whole order set by
+ * resolving it. Dispatching here rather than branching inside keeps Risk's
+ * per-move pricing untouched by a game that has none of it.
+ */
+export function Review({ id, onExit }: Props) {
+  const record = useMemo(() => getGame(id), [id])
+  return (record?.game ?? DEFAULT_GAME) === 'kessel' ? (
+    <KesselReview id={id} onExit={onExit} />
+  ) : (
+    <RiskReview id={id} onExit={onExit} />
+  )
 }
 
 const GRADE_LABEL: Record<Grade, string> = {
@@ -32,7 +51,7 @@ const GRADE_LABEL: Record<Grade, string> = {
 }
 
 
-export function Review({ id, onExit }: Props) {
+function RiskReview({ id, onExit }: Props) {
   const record = useMemo(() => getGame(id), [id])
   const [review, setReview] = useState<GameReview | null>(null)
   const [cursor, setCursor] = useState(0)

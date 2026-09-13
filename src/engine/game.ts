@@ -2,7 +2,7 @@ import { ADJACENCY, CONTINENT_IDS, CONTINENTS, TERRITORIES_IN, TERRITORY_IDS, TE
 import type { TerritoryId } from './board'
 import { CASH_VALUES, buildDeck, cashValue, findSets, isValidSet } from './cards'
 import { rngFrom, rollDie, shuffle } from './rng'
-import type { Card, GameMode, GameState, LogEntry, Move, Player, PlayerId } from './types'
+import type { Card, GameState, LogEntry, Move, Player, PlayerId, SeatConfig } from './types'
 
 /** Classic starting-army counts by player count. */
 const START_ARMIES: Record<number, number> = { 2: 40, 3: 35, 4: 30, 5: 25, 6: 20 }
@@ -33,34 +33,13 @@ export const RULES_VERSION = [
   'match2:onboard',
 ].join('|')
 
-/**
- * The fingerprint a game in this mode replays under. Classic keeps the bare
- * `RULES_VERSION` so every game recorded before modes existed stays replayable;
- * the other modes append a token, which also stops an older build from silently
- * replaying a supply game under classic rules — the boards would diverge.
- */
-export const rulesFor = (mode: GameMode = 'classic'): string =>
-  mode === 'classic' ? RULES_VERSION : `${RULES_VERSION}|mode:${mode}`
-
-export interface SeatConfig {
-  name: string
-  /** bot registry key, or null for a human seat */
-  bot: string | null
-  /**
-   * Palette slot, if it should differ from the seat index. Turn order is the seat
-   * index and gets shuffled, so a player's colour has to be able to travel with
-   * them — otherwise you pick Crimson in setup and start the game as Jade.
-   */
-  color?: number
-}
+export type { SeatConfig }
 
 export interface NewGameOptions {
   seats: SeatConfig[]
   seed?: number
   /** Keep the move list. Defaults on; see `GameState.record`. */
   record?: boolean
-  /** Rule set. Defaults to classic; see `GameMode`. */
-  mode?: GameMode
 }
 
 // ─────────────────────────── queries ───────────────────────────
@@ -71,60 +50,11 @@ export const territoriesOf = (s: GameState, p: PlayerId): TerritoryId[] =>
 export const continentsHeldBy = (s: GameState, p: PlayerId) =>
   CONTINENT_IDS.filter((c) => TERRITORIES_IN[c].every((t) => s.owner[t] === p))
 
-/**
- * floor(territories / 3), min 3, plus continent bonuses. In supply mode only
- * supplied territories count, and a continent pays only while its tiles are in
- * supply — a fully-held continent is internally connected, but it can still be
- * an island cut off from the main body.
- */
+/** floor(territories / 3), min 3, plus continent bonuses. */
 export function reinforcementFor(s: GameState, p: PlayerId): number {
-  if (s.mode !== 'supply') {
-    const base = Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
-    const bonus = continentsHeldBy(s, p).reduce((sum, c) => sum + CONTINENTS[c].bonus, 0)
-    return base + bonus
-  }
-  const supplied = suppliedOf(s, p)
-  const base = Math.max(3, Math.floor(supplied.size / 3))
-  const bonus = continentsHeldBy(s, p)
-    .filter((c) => TERRITORIES_IN[c].every((t) => supplied.has(t)))
-    .reduce((sum, c) => sum + CONTINENTS[c].bonus, 0)
+  const base = Math.max(3, Math.floor(territoriesOf(s, p).length / 3))
+  const bonus = continentsHeldBy(s, p).reduce((sum, c) => sum + CONTINENTS[c].bonus, 0)
   return base + bonus
-}
-
-/**
- * The territories `p` can supply: the largest connected group they hold, by
- * tile count, ties to the group carrying more armies. Everything outside it is
- * cut off — no income, no deploys, and attrition at the owner's turn start.
- *
- * Largest-by-tiles deliberately, not by armies: measured by armies, a single
- * roaming stack would out-vote the homeland and the mode would punish nothing.
- */
-export function suppliedOf(s: GameState, p: PlayerId): Set<TerritoryId> {
-  const mine = new Set(territoriesOf(s, p))
-  let best: Set<TerritoryId> | null = null
-  let bestArmies = 0
-  while (mine.size) {
-    const [start] = mine
-    const group = new Set<TerritoryId>([start])
-    const queue = [start]
-    mine.delete(start)
-    let armies = s.troops[start]
-    while (queue.length) {
-      const cur = queue.pop() as TerritoryId
-      for (const n of ADJACENCY[cur]) {
-        if (!mine.has(n)) continue
-        mine.delete(n)
-        group.add(n)
-        queue.push(n)
-        armies += s.troops[n]
-      }
-    }
-    if (!best || group.size > best.size || (group.size === best.size && armies > bestArmies)) {
-      best = group
-      bestArmies = armies
-    }
-  }
-  return best ?? new Set()
 }
 
 /**
@@ -202,7 +132,7 @@ const nextAlive = (s: GameState, after: PlayerId): PlayerId => {
 
 // ─────────────────────────── setup ───────────────────────────
 
-export function createGame({ seats, seed = 1, record = true, mode = 'classic' }: NewGameOptions): GameState {
+export function createGame({ seats, seed = 1, record = true }: NewGameOptions): GameState {
   if (seats.length < 2 || seats.length > 6) throw new Error('Risk supports 2–6 players')
   const rng = rngFrom(seed)
 
@@ -251,8 +181,6 @@ export function createGame({ seats, seed = 1, record = true, mode = 'classic' }:
     record,
     rngState: rng.state,
     winner: null,
-    mode,
-    capitals: {},
   }
   log(s, null, `${players.length} players · territories dealt · place your remaining armies`)
   return s
@@ -274,12 +202,8 @@ export function legalMoves(s: GameState): Move[] {
       const sets = findSets(me.cards).map((cards) => ({ type: 'tradeCards', cards }) as Move)
       // Holding five or more cards forces a trade before anything else.
       if (me.cards.length >= HAND_LIMIT && sets.length) return sets
-      // Cut-off territories take no reinforcements — the largest group always
-      // exists and is always supplied, so there is always somewhere to deploy.
-      const supplied = s.mode === 'supply' ? suppliedOf(s, p) : null
       const deploys: Move[] = []
       for (const t of mine) {
-        if (supplied && !supplied.has(t)) continue
         deploys.push({ type: 'deploy', territory: t, count: 1 })
         if (s.toDeploy > 1) deploys.push({ type: 'deploy', territory: t, count: s.toDeploy })
       }
@@ -343,7 +267,6 @@ function clone(s: GameState): GameState {
     pendingOccupation: s.pendingOccupation ? { ...s.pendingOccupation } : null,
     lastBattle: s.lastBattle ? { ...s.lastBattle } : null,
     lastBlitz: s.lastBlitz ? { ...s.lastBlitz } : null,
-    capitals: { ...s.capitals },
   }
 }
 
@@ -407,10 +330,6 @@ export function applyMove(state: GameState, move: Move): GameState {
       expect(me.reserve > 0, 'no armies left to place')
       s.troops[move.territory]++
       me.reserve--
-      if (s.mode === 'capitals' && s.capitals[p] === undefined) {
-        s.capitals[p] = move.territory
-        log(s, p, `founded their capital in ${name(move.territory)}`)
-      }
       if (s.players.some((q) => q.reserve > 0)) {
         // hand to the next player who still has armies
         let n = p
@@ -450,10 +369,6 @@ export function applyMove(state: GameState, move: Move): GameState {
       expect(s.owner[move.territory] === p, 'not your territory')
       expect(me.cards.length < HAND_LIMIT || !findSets(me.cards).length, 'you must trade a set first')
       expect(move.count >= 1 && move.count <= s.toDeploy, 'bad deploy count')
-      expect(
-        s.mode !== 'supply' || suppliedOf(s, p).has(move.territory),
-        'territory is out of supply',
-      )
       s.troops[move.territory] += move.count
       s.toDeploy -= move.count
       if (s.toDeploy === 0) s.phase = 'attack'
@@ -593,9 +508,7 @@ function claim(s: GameState, from: TerritoryId, to: TerritoryId, moved: number) 
   s.conqueredThisTurn = true
   s.troops[from] -= moved
   s.troops[to] = moved
-  const founder = s.players.find((q) => s.capitals[q.id] === to)
-  if (founder) log(s, p, `captured ${founder.name}'s capital, ${name(to)}`, loser)
-  else log(s, p, `took ${name(to)} from ${s.players[loser].name}`, loser)
+  log(s, p, `took ${name(to)} from ${s.players[loser].name}`, loser)
   s.pendingOccupation = { from, to, moved, min: 0, max: s.troops[from] - 1 }
   s.phase = 'occupy'
   maybeEliminate(s, loser, p)
@@ -609,23 +522,6 @@ function beginTurn(s: GameState, p: PlayerId) {
   s.current = p
   s.turn++
   s.phase = 'deploy'
-  // Cut-off territories wither: a third of the armies above the last one, every
-  // turn they stay cut off. Applied before income is counted so the player sees
-  // the loss and their reinforcements on the same board. No dice — deterministic
-  // attrition is what keeps replays exact.
-  if (s.mode === 'supply') {
-    const supplied = suppliedOf(s, p)
-    let lost = 0
-    let tiles = 0
-    for (const t of territoriesOf(s, p)) {
-      if (supplied.has(t) || s.troops[t] <= 1) continue
-      const loss = Math.ceil((s.troops[t] - 1) / 3)
-      s.troops[t] -= loss
-      lost += loss
-      tiles++
-    }
-    if (lost) log(s, p, `out of supply · lost ${lost} ${lost === 1 ? 'army' : 'armies'} in ${tiles} cut-off ${tiles === 1 ? 'territory' : 'territories'}`)
-  }
   s.toDeploy = reinforcementFor(s, p)
   s.conqueredThisTurn = false
   s.canFortify = true
@@ -692,19 +588,9 @@ function maybeEliminate(s: GameState, loser: PlayerId, victor: PlayerId) {
 
 function checkWinner(s: GameState) {
   const alive = s.players.filter((p) => p.alive)
-  const holdsAll = alive.length === 1 || territoriesOf(s, s.current).length === TERRITORY_IDS.length
-  // The capitals win: every founded capital held at once, the founder's own
-  // included. Capitals exist for everyone the moment setup ends, so the check is
-  // inert until then — and a dead founder's capital still counts.
-  const holdsCapitals =
-    s.mode === 'capitals' &&
-    s.players.every((q) => {
-      const cap = s.capitals[q.id]
-      return cap !== undefined && s.owner[cap] === s.current
-    })
-  if (alive.length === 1 || holdsAll || holdsCapitals) {
+  if (alive.length === 1 || territoriesOf(s, s.current).length === TERRITORY_IDS.length) {
     s.winner = alive.length === 1 ? alive[0].id : s.current
     s.phase = 'gameOver'
-    log(s, s.winner, holdsAll ? 'wins the world' : 'holds every capital')
+    log(s, s.winner, 'wins the world')
   }
 }

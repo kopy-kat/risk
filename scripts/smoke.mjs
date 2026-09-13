@@ -57,7 +57,31 @@ const stale = {
   id: 'stale-smoke',
 }
 
-const seeded = JSON.stringify([solo, hotseat, stale])
+// A war, for the other review screen. Seat 0 is recorded as human while a
+// doctrine played it, the same trick — and capped short, because a Kessel review
+// resolves a dozen alternative order sets five times for every turn.
+const { kessel } = await import('../src/games/kessel/index.ts')
+const { createGame: createWar } = await import('../src/games/kessel/game.ts')
+const { stepBot: stepWarBot } = await import('../src/games/kessel/play.ts')
+
+function war(seed, doctrine, turnCap = 24) {
+  const seats = [{ name: 'Crimson', bot: null }, { name: 'Azure', bot: `kessel-${doctrine}` }]
+  const rng = rngFrom((seed ^ 0x9e3779b9) >>> 0)
+  const bots = Object.fromEntries(kessel.bots.map((b) => [b.key, b]))
+  let s = createWar({ seats: [{ name: 'Crimson', bot: `kessel-${doctrine}` }, seats[1]], seed })
+  while (s.phase !== 'gameOver' && s.turn < turnCap) {
+    s = stepWarBot(s, bots[s.sides[s.current].bot], () => rng.next())
+  }
+  return {
+    id: `${seed}-war`, schema: 1, rules: kessel.rulesVersion, seed, botSeed: seed ^ 0x9e3779b9,
+    game: 'kessel', seats, moves: s.moves, assisted: [], winner: s.winner, turns: s.turn,
+    finished: s.phase === 'gameOver', savedAt: Date.now() - 30_000,
+  }
+}
+
+const kesselGame = war(20260901, 'attrition')
+
+const seeded = JSON.stringify([solo, hotseat, stale, kesselGame])
 
 // ── serve the build ────────────────────────────────────────────────
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT)], { stdio: 'ignore' })
@@ -75,6 +99,22 @@ const browser = await chromium.launch({ channel: 'chrome' })
 const errors = []
 const failures = []
 let checks = 0
+/**
+ * Wait until the deploy sizer belongs to the player.
+ *
+ * Turn order is drawn at kick-off from an unseeded shuffle, so the bots may move
+ * first and the bar carries their recap until it is dismissed. Waiting on the
+ * sizer alone hangs on exactly the deals where somebody else went first.
+ */
+async function reachDeploy(page) {
+  for (let i = 0; i < 40; i++) {
+    if (await page.locator('.dock .amount').isVisible().catch(() => false)) return
+    await page.keyboard.press('Space')
+    await page.waitForTimeout(250)
+  }
+  throw new Error('never reached a deploy phase')
+}
+
 const ok = (cond, what) => { checks++; if (!cond) failures.push(what) }
 
 async function open(withHistory) {
@@ -216,7 +256,7 @@ async function open(withHistory) {
   const page = await open(false)
   await page.getByRole('button', { name: 'Begin deployment' }).click()
   await page.getByRole('button', { name: /Auto-place rest/ }).click()
-  await page.waitForSelector('.dock .amount', { timeout: 60000 })
+  await reachDeploy(page)
 
   // your turn: place the lot, then hand over
   await page.locator('.terr.clickable').first().click({ modifiers: ['Shift'] })
@@ -244,6 +284,69 @@ async function open(withHistory) {
 
   ok((await lines()) === said, 'the replayed turns produce the same recap')
   ok(JSON.stringify(await moves()) === JSON.stringify(played), 'and exactly the same move list')
+  await page.close()
+}
+
+// ── E) a Kessel war opens its own review ───────────────────────────
+// The record's game tag decides which screen it opens, so this is the check that
+// the two do not cross: the war has to reach a screen that grades whole order
+// sets in steps, and the Risk records above have to be untouched by it.
+{
+  const page = await open(true)
+  await page.getByRole('button', { name: 'Kessel' }).click()
+  await page.waitForTimeout(200)
+  ok(
+    (await page.locator('.games .game').count()) === 1,
+    'the Kessel heading lists only the war',
+  )
+
+  await page.locator('.games .game .open').first().click()
+  await page.waitForSelector('.rev-bar', { timeout: 120000 })
+  await page.waitForTimeout(400)
+
+  ok((await page.locator('.kmap').count()) === 1, 'the war is replayed on the Kessel map')
+  const ticks = await page.locator('.rev-bar .tick').count()
+  ok(ticks > 5, `the tape has one tick per turn of orders, got ${ticks}`)
+  const units = await page.locator('.review .stat .u').allInnerTexts()
+  ok(
+    units.some((u) => /STEPS \/ TURN/i.test(u)) && units.some((u) => /VS EXPECTED/i.test(u)),
+    `loss and the resolution are reported separately, in steps — got ${units.join(' | ')}`,
+  )
+
+  await page.getByRole('button', { name: /Next mistake/ }).click()
+  await page.waitForTimeout(250)
+  const grade = await page.locator('.rev-panel .grade').innerText()
+  ok(/MISTAKE|BLUNDER/i.test(grade), `jumping lands on a mistake, got "${grade.split('\n')[0]}"`)
+  ok(
+    (await page.locator('.rev-panel .line.better').count()) === 1,
+    'a mistake shows the order set that would have been better',
+  )
+  // Whether any *particular* war contains a fault the reviewer can name is not
+  // something it promises — a turn can price worse than every alternative without
+  // one order being the reason. That the detectors fire is asserted on constructed
+  // boards in test-kessel-review; what belongs here is that a named fix renders
+  // properly when there is one.
+  let advice = ''
+  for (let i = 0; i < 8 && !advice; i++) {
+    if ((await page.locator('.rev-panel .fix').count()) > 0) {
+      advice = await page.locator('.rev-panel .fix .v').first().innerText()
+      break
+    }
+    await page.getByRole('button', { name: /Next mistake/ }).click()
+    await page.waitForTimeout(200)
+  }
+  ok(advice === '' || advice.length > 30, `a named fix reads as a sentence about the board, got "${advice}"`)
+
+  // the map draws the recommendation the way the live game draws staged orders
+  const better = await page.locator('.korder').count()
+  await page.locator('.rev-panel .line').first().click()
+  await page.waitForTimeout(200)
+  const played = await page.locator('.korder').count()
+  ok(better !== played || better > 0, 'both order sets are drawn on the map')
+
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(250)
+  ok((await page.locator('.panel h1').count()) > 0, 'escape returns to the setup screen')
   await page.close()
 }
 

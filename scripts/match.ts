@@ -11,8 +11,15 @@ import { makePolicyBot } from '../src/bots/pool'
 import type { Policy } from '../src/bots/pool'
 import { createGame } from '../src/engine/game'
 import { rngFrom } from '../src/engine/rng'
+import { KESSEL_BOTS, decideFor } from '../src/games/kessel/bot'
+import type { Doctrine } from '../src/games/kessel/bot'
+import { createGame as createKessel } from '../src/games/kessel/game'
+import { stepBot as stepKessel } from '../src/games/kessel/play'
+import '../src/games/kessel'
 
 export interface Job {
+  /** which game's rules to play under; Risk when absent */
+  game?: string
   /** bot keys in play order */
   order: string[]
   seed: number
@@ -25,6 +32,11 @@ export interface Job {
    * free — registering thousands of throwaway bots up front would not.
    */
   policies?: Record<string, Policy>
+  /**
+   * Kessel's equivalent: doctrines built for this game alone. Six numbers, so
+   * they structured-clone to a worker for free.
+   */
+  doctrines?: Record<string, Doctrine>
 }
 
 export interface Outcome {
@@ -34,7 +46,32 @@ export interface Outcome {
 }
 
 /** Everything derives from `seed`, so the same job always produces the same game. */
-export function playMatch({ order, seed, turnCap, policies }: Job): Outcome {
+export function playMatch(job: Job): Outcome {
+  return job.game === 'kessel' ? playKessel(job) : playRisk(job)
+}
+
+function playKessel({ order, seed, turnCap, doctrines }: Job): Outcome {
+  const rng = rngFrom(seed ^ 0x5bf03635)
+  const bots = Object.fromEntries(KESSEL_BOTS.map((b) => [b.key, b]))
+  const seats = order.map((key) => {
+    const probe = doctrines?.[key]
+    if (!probe) return bots[key]
+    return { key, name: key, blurb: '', decide: (s: never, me: number, r: () => number) =>
+      decideFor(probe, s, me, r) }
+  })
+
+  let s = createKessel({
+    seats: order.map((bot, i) => ({ name: `P${i}`, bot })),
+    seed,
+    record: false,
+  })
+  while (s.phase !== 'gameOver' && s.turn < turnCap) {
+    s = stepKessel(s, seats[s.current] as never, () => rng.next())
+  }
+  return { winner: s.winner, turns: s.turn }
+}
+
+function playRisk({ order, seed, turnCap, policies }: Job): Outcome {
   const rng = rngFrom(seed ^ 0x5bf03635)
   const bots = policies
     ? { ...BOT_BY_KEY, ...Object.fromEntries(

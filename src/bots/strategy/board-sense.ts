@@ -69,11 +69,8 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), h
  * from the way the bot would actually play them.
  */
 export function garrisonFor(s: GameState, me: PlayerId, t: TerritoryId): number {
-  // A capital is the one tile whose loss can hand somebody the game outright,
-  // so its floor is higher than any ordinary border's.
-  const capital = s.mode === 'capitals' && s.capitals[me] === t
-  if (!isBorder(s, me, t)) return capital ? 2 : 1
-  return clamp(Math.ceil(pressure(s, me, t) * 0.55), capital ? 4 : 2, 12)
+  if (!isBorder(s, me, t)) return 1
+  return clamp(Math.ceil(pressure(s, me, t) * 0.55), 2, 12)
 }
 
 export interface ContinentStanding {
@@ -184,9 +181,5 @@ export function aggressorsAgainst(s: GameState, me: PlayerId, sinceTurns = 2): M
   return out
 }
 
-/**
- * Income a player is collecting right now. The engine's own calculation, so it
- * stays honest in every mode — in supply mode cut-off ground pays nothing, and a
- * bot pricing it as income would defend the wrong tiles.
- */
+/** Income a player is collecting right now — the engine's own calculation. */
 export const incomeOf = (s: GameState, p: PlayerId): number => reinforcementFor(s, p)

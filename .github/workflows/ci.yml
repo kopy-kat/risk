@@ -37,10 +37,23 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Kessel's rules run on a synthetic grid rather than the real map — a rule
+      # that only holds on one arrangement of provinces isn't a rule.
+      - name: Kessel unit tests
+        run: npm run test:kessel
+
+      - name: Kessel reviewer unit tests
+        run: npm run test:kessel-review
+
       # 300 seeded bot-vs-bot games, asserting board invariants after every move.
       # Catches "the game is broken" in a way unit tests can't.
       - name: Soak test
         run: npm run sim -- 300
+
+      # The same for Kessel, where it earns its place: it caught stacks
+      # overfilling on retreat within one run of being written.
+      - name: Kessel soak test
+        run: npm run sim:kessel -- 100
 
       - name: Build
         run: npm run build
@@ -70,3 +83,12 @@ jobs:
       # `npm run review-check 40` locally before changing any weights.
       - name: Reviewer calibration
         run: npm run review-check -- 8
+
+      # Kessel's reviewer prices a whole order set, and the space of better order
+      # sets is wide enough that mean loss carries real variance — 64 games per
+      # pair is where the difference between a competent doctrine and a reckless
+      # one clears its own error bar. Fewer resolves nothing and would read as a
+      # broken reviewer rather than a thin sample. Games are seeded, so this is
+      # deterministic rather than flaky.
+      - name: Kessel reviewer calibration
+        run: npm run review-check:kessel 64

@@ -25,8 +25,6 @@ export interface RecapRow {
   territories: number
   /** players this one knocked out */
   killed: PlayerId[]
-  /** capitals mode: whose capitals this player took in the window */
-  capitals: PlayerId[]
 }
 
 function holdings(s: GameState) {
@@ -67,16 +65,8 @@ export function recapBetween(before: GameState, after: GameState): RecapRow[] {
       .map((q) => q.id)
     const armies = now.armies[p.id] - was.armies[p.id]
     const territories = now.territories[p.id] - was.territories[p.id]
-    // a capital changing into this player's hands is worth its own words — it is
-    // the scoreline of the mode
-    const capitals = after.players
-      .filter((q) => {
-        const cap = after.capitals[q.id]
-        return cap !== undefined && after.owner[cap] === p.id && before.owner[cap] !== p.id
-      })
-      .map((q) => q.id)
-    if (armies || territories || killed.length || capitals.length)
-      rows.push({ player: p.id, armies, territories, killed, capitals })
+    if (armies || territories || killed.length)
+      rows.push({ player: p.id, armies, territories, killed })
   }
   return rows
 }
@@ -92,12 +82,6 @@ export function describeRow(row: RecapRow, name: (p: PlayerId) => string): strin
   const bits: string[] = []
   if (row.territories) bits.push(`${signed(row.territories)} ${plural(row.territories, 'territory', 'territories')}`)
   if (row.armies) bits.push(`${signed(row.armies)} ${plural(row.armies, 'army', 'armies')}`)
-  if (row.capitals.length)
-    bits.push(
-      row.capitals
-        .map((q) => (q === row.player ? 'retook their capital' : `took ${name(q)}'s capital`))
-        .join(' · '),
-    )
   if (row.killed.length) bits.push(`eliminated ${row.killed.map(name).join(', ')}`)
   return bits.join(' · ')
 }

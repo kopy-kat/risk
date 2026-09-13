@@ -4,6 +4,10 @@ Risk for a laptop: the classic 42-territory board, driven from the keyboard, aga
 bots that actually play well. 2–6 seats, any mix of humans and bots, no accounts and
 no server — it's a static page that runs entirely in the browser.
 
+Two games share the shell. Setup picks between **Risk** and **Kessel**, an operational
+wargame on a 142-province map of Europe where formations are pushed back by combat and
+destroyed only when they cannot retreat — see [Kessel](#kessel) below.
+
 ```bash
 npm install
 npm run dev        # then open the URL it prints
@@ -36,33 +40,13 @@ Standard Risk, as implemented in `src/engine`:
 When a set pictures more than one territory you hold, the +2 goes to one in contact
 with an enemy rather than asking you — armies behind the lines do nothing.
 
-## Modes
-
-Picked once in setup, next to difficulty. Games record their mode, so saving,
-replay and review work in every mode — and exports from before modes existed
-replay as Classic.
-
-- **Classic** — the rules above, unchanged.
-- **Capitals** — your first setup placement founds your capital, starred on the
-  map in your colour for the whole game. Hold every capital at once — your own
-  included — and you win on the spot. Losing yours doesn't knock you out, and a
-  dead player's capital still counts. Games turn on garrisons, feints and
-  decapitation strikes.
-- **Supply** — only your largest connected group of territories is in supply.
-  Cut-off territories (hatched on the map) earn no income, take no
-  reinforcements, and lose a third of their armies above one at the start of
-  your turn; a continent pays its bonus only while every tile of it is
-  supplied. Encirclement is a weapon: split an empire and the smaller half
-  starves. Initial placement is unrestricted — consolidating a scattered deal
-  into one body is the opening puzzle.
-
 ## Features
 
 **One key does everything.** `Space` presses the one dark button in the bottom bar —
 confirm an occupation, end an attack, end a turn, skip the bots. `←` `→` size a move
 and `Shift`+`←` `→` take it to the minimum or the maximum. `Esc` deselects, `⌘Z`
-undoes, `Shift`+click deploys everything at once. That is the whole list; the button
-label carries its own hint, so nothing needs memorising.
+undoes, and `Shift`+click deploys everything at once. That is the whole list; the
+button label carries its own hint, so nothing needs memorising.
 
 - **No sidebar.** All controls live in a floating bottom bar; the map gets the screen.
   The bar keeps one footprint for the whole game, so nothing you aim at moves when a
@@ -174,6 +158,121 @@ Add it to `BOTS` in `src/bots/index.ts` (weakest first) and it appears as a diff
 rung in setup; add it to `BENCH_LADDER` instead to have it ranked without offering it to
 anyone. Then `npm run bench -- mine general 300`.
 
+## Kessel
+
+The second game, picked in setup: operational war in Europe over ~140 provinces, two
+sides, 26 formations for the West and 29 for the East. **A formation beaten with a line of retreat is pushed back
+at full strength; beaten without one it surrenders.** Encirclement kills, combat only
+pushes — everything else exists to make that rule bite. Rules, map generation and the
+design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine. In
+setup the first side is the **West**, which moves first, and **Swap sides** puts you in
+the East.
+
+**Each side is dealt six war aims** off a public menu — the ten most valuable provinces
+on the other side of the line. The enemy sees the menu, not the deal: an aim is revealed
+when you take it, attack it, or mass three formations beside it. The peace is scored on
+aims held, so the map shows yours hatched in your colour and theirs only as they are
+given away.
+
+A turn is orders, then one resolve. Select a formation — click it, or `←` `→` to
+cycle through them, the contact line first — then click a province: enemy-held
+attacks, anything else moves. **Standing still digs in**, so a formation with no order
+is holding; `R` refits, and a refit stands from turn to turn until the formation is
+whole. After staging an attack with armour or recon, click further on to set where it
+rides to if the ground falls — the exploitation. `G` selects a headquarters, again for
+the other, and a click sends it. `⌫` clears the staged order or calls the headquarters
+back, `Esc` deselects, `⌘Z` undoes, and `Space` presses the one dark button — `Commit
+turn`, or `Offer terms` once your will is spent. Terms refused, you fight the turn
+out: hold, refit, move, no attacks, and ask again next turn.
+
+**Command.** Each side has two headquarters, drawn as flags. A formation more than
+three provinces of your own ground from both is out of command and drawn faded: an
+order to move or attack it is carried out a turn late, dotted on the map until then,
+and it takes no other order meanwhile. A headquarters moves up to four provinces
+through your own ground and commands from there the next turn; overrun, it falls back.
+
+Movement: infantry 2, armour 4, recon 5, across terrain that costs what it costs, and
+the march ends the moment it enters ground an enemy watches. A formation out of contact
+and in full supply can instead ride the **railway** six along its own supply network,
+starting and ending out of contact — the interior line. Two turns in every ten are
+**mud**: the march halves, the trains still run, and the topbar counts down to it.
+
+Supply enters the map at each side's **rear** — the ten westmost and ten eastmost
+provinces — and flows through friendly ground the enemy does not overlook. Depots are
+railheads on that line: one cut off from home issues nothing, and is drawn struck
+through. A corps under strength that refits on a live railhead regains a step every
+three turns; a fresh infantry corps arrives by rail at each side's largest railhead
+every six turns, for both sides alike.
+
+**The map zooms.** Fifty-two counters over 142 provinces is crowded where it matters,
+so scroll or pinch to zoom about the pointer, drag to pan, `+` `−` to zoom about the
+middle and `0` to fit. It goes to 4×, and the counters grow with the ground rather
+than floating over it at a fixed size. Beyond the theatre the plate ends in a drawn
+neatline with the off-map sheet showing past it — the coastline is clipped to a
+lon/lat box, and that is where the box is.
+
+The map carries the things you can't play without:
+
+- **Fog.** Ownership and the number of counters on a province are public — a front
+  line is known. What a counter is worth is known only where you can see: beside your
+  formations, or within two of your recon. Elsewhere it is drawn from what you last
+  saw, with how many turns ago in the corner, or as `?` if never. Bots see everything.
+- **Supply, in four bands.** Supplied · strained · failing · cut off, on a strip down
+  each counter, with the key above the bar. Anything short of full supply cannot start
+  an attack — that is the culminating point, and it is what a strained counter's broken
+  outline means. A cut-off counter is hatched and struck through; it is losing strength
+  every turn while an enemy presses it.
+- **Pockets.** A province whose garrison has nowhere to retreat is ringed in red,
+  measured against the board *this turn's staged moves* would produce — so a ring you
+  are about to close counts before you press the button.
+- **The odds, before you commit.** Staging or hovering an attack prices it in the bar:
+  the force ratio, how many of your formations the borders actually admit — each border
+  takes its frontage, the best attack value first, four in all — and whether the
+  defender has anywhere to fall back to.
+- **Depots** (capacity as pips, struck when cut from home), **objective values** (a
+  diamond), **war aims** (the diamond filled in that side's colour, the province
+  hatched to match), and **headquarters** (a flag in the side's colour).
+
+Both sides' **will** sits in the bar against the threshold below which a side can
+only ask for terms. Take the terms and the war ends on the line as it stands, scored
+against what each side said it wanted — so you can win a war you did not conquer. The
+peace also says by how much: **decisive**, **clear** or **narrow**, by how far apart the
+two sides' shares of their own aims ended, which is what refusing terms while already
+ahead can still buy.
+
+Three doctrines rather than difficulty rungs: **Attrition**, **Maneuver** and **Elastic
+Defence** are one policy at different settings — how much it pays to close a ring rather
+than force a front, how far it will outrun its supply, when it pulls a formation out to
+refit. All three garrison a railhead or a city an enemy is closing on before they spend
+the turn's activations at the front, order what is in command before what is not, and
+send their headquarters wherever they command the most of the line.
+
+### Reviewing a war
+
+Wars are stored and reviewed like Risk games, and the screen is the same one — but the
+unit of judgement is different. You stage orders for twenty-six formations and press one
+button, so **the decision is the whole turn**, and a turn is priced against whole
+alternatives: what each doctrine would have ordered from that board, and your own orders
+with one thing changed. Each candidate is resolved through the engine five times under
+different generator states and averaged, because the ±15% on the cohesion bill decides a
+step loss or a surrender often enough to price the roll instead of the plan. **Loss** is
+the gap to the best alternative, in *steps*; **luck** is what the one resolution that
+happened did against that average. Neither can reach the other.
+
+The one-change alternatives are what makes it advice. Each names a fault and carries what
+fixing only that was measured to be worth — *"The corps in Basel had one way out — Zurich
+— and Freiburg could have stood in it."* Counted across the war they become the habits
+panel: *leaving the last way out open, 4× −70*. The faults are
+attacking under the odds an assault has to clear, advancing past your own supply, leaving
+a formation strained and idle, leaving an enemy's last way out open, standing where you
+cannot fall back, and attacking in too many places at once. The review sees the whole
+board; the fog is yours, not its.
+
+`npm run review-check:kessel` is the check that this measures skill rather than noise,
+and `npm run test:kessel-review` the one that pins the properties it rests on.
+[`KESSEL.md`](KESSEL.md) has the position evaluation, the numbers and where it is still
+weak.
+
 ## Development
 
 The rules live in `src/engine` as pure functions — no React, no dependencies.
@@ -184,13 +283,20 @@ built on.
 | command | what it does |
 | --- | --- |
 | `npm test` | assertions over the rules (cards, combat, reinforcement, placement) |
+| `npm run test:kessel` | Kessel's rules — supply, encirclement, retreat, the settled peace |
+| `npm run test:kessel-review` | the Kessel reviewer's arithmetic: loss floored and blind to the roll, luck averaging to nothing |
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
+| `npm run sim:kessel` | the same soak for Kessel |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
+| `npm run bench:kessel` | the same benchmark for the three doctrines, with the same games split West against East |
 | `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
+| `npm run exploit:kessel` | the same search over Kessel's doctrine space |
 | `npm run fit-eval` | fits the evaluation's weights to outcomes over a mixed population of strategies |
-| `npm run study` | replays exported games and grades every seat, bots included |
+| `npm run study` | replays exported games, Risk or Kessel, and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
+| `npm run review-check:kessel` | the same question for Kessel, against a commander who fights hard and badly |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
+| `npm run gen-map` | builds `data/maps/europe.json` — province shapes, adjacency and label anchors — from seed points and the coastline |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `oxlint` over `src` and `scripts` |
 
