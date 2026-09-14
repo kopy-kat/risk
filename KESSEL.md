@@ -242,6 +242,11 @@ interval. They still make different wars — Attrition against Elastic runs abou
 as long again as either pairing with Maneuver. Each against itself, Maneuver and
 Attrition split West and East inside the interval and Elastic leans East.
 
+What is left of the lean is doctrine-specific rather than a level still to be set.
+Equal armies with depots enough for the East to start fully supplied swings Maneuver
+twenty points the other way while Attrition and Elastic stay even, so no single corps
+count or depot capacity evens all three: this split is the tightest of them.
+
 All three garrison: valuable ground of theirs standing empty with an enemy two
 provinces off is worth about what the province is, and whoever can reach it is
 ordered before the front is. A rear nobody garrisons is a rear one armoured corps
