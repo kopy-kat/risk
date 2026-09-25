@@ -10,22 +10,16 @@
  * Kept in one place because a second copy would drift, and the two scripts using
  * it are meant to be comparable.
  */
+import { DOCTRINE_RANGE } from '../src/games/kessel/bot'
 import type { Doctrine } from '../src/games/kessel/bot'
 import type { Job } from './match'
 import { playGames } from './parallel'
 
 export const TURN_CAP = 600
 
-export type Params = Omit<Doctrine, 'key' | 'name' | 'blurb'>
+export type Params = Omit<Doctrine, 'key' | 'name' | 'blurb' | 'caution'>
 
-export const SPACE: Record<keyof Params, { lo: number; hi: number }> = {
-  attackRatio: { lo: 0.8, hi: 2.5 },
-  encirclement: { lo: 0, hi: 3 },
-  refitBelow: { lo: 0, hi: 80 },
-  objectivePull: { lo: 0, hi: 2 },
-  overreach: { lo: 0, hi: 1 },
-  counterattack: { lo: 0, hi: 3 },
-}
+export const SPACE = DOCTRINE_RANGE
 
 export const KEYS = Object.keys(SPACE) as (keyof Params)[]
 

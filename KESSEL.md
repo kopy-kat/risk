@@ -224,6 +224,87 @@ Will decays; two things push the other way, both on a calendar both sides can re
   A side that is losing can hold for the next draft; one that is winning had better
   finish before it arrives.
 
+## Missions
+
+A mission is data in `src/games/kessel/missions.ts` fought under the war's rules: its
+own map, who holds what, where each side's supply enters, a fixed order of battle, one
+list of objectives for both sides, a turn limit and an optional reinforcement
+timetable. Shared objectives make the two sides' shares sum to one, so the peace reads
+as the battle — decisive at three quarters of the value held, clear at five eighths.
+The id carries a version; bump it on any edit, because the version is part of the rules
+string a saved move list replays under.
+
+**Maps are generated, not drawn.** Europe's provinces are a city each, so a pocket on it
+is one province's neighbours and supply never runs out. A mission map is a seeds file —
+`data/maps/<id>.seeds.json`, a town per province with lon/lat, terrain, depot and value
+— run through `npm run gen-map -- --map=<id>`. The coastline is clipped from Europe's
+with `--fetch=<geojson>`, so no download is needed.
+
+Depots are capacity, not just railheads: each point serves two of draw, armour draws
+two. Size a side's depots to its army or it opens short of supply and cannot attack.
+Put the rear depots beyond two provinces of the front, or every doctrine garrisons them
+instead of fighting — but a depot next to an enemy formation is dead from turn one, and
+so is every bridgehead whose only road home runs past one. The generator decides who
+borders whom, so check its output: `test:kessel` fails any mission whose player opens
+short of supply.
+
+**Sedan** (`sedan@1`, 68 provinces, 15 German formations against 12 Allied, 12 turns).
+The Allied north starts in contact in Belgium — anything out of contact rides the
+railway, and an Allied army free to rail home on turn one leaves nothing to encircle.
+Played from the German side over 200 seeds against Attrition, Maneuver wins 8% and
+holds 22% of the objectives' value on average; Attrition and Elastic win about 1%. Bots
+are weak attackers here, which is the point of the calibration: a player better than
+Maneuver should win it, and not every time. Played by someone who moves their
+headquarters and starves garrisons before storming them, it is a rout — which is what
+levels are for.
+
+**Kiev** (`kiev@2`, 56 provinces, 14 German formations in two wings against 17 Soviet,
+two more by rail on turns 3 and 5, 10 turns so the mud is the deadline). The pincers are
+three to four provinces from Lokhvytsia each, and the northern wing draws on a railhead
+at Novhorod-Siverskyi because Gomel alone leaves it strained at the start. Most of the
+value is the ring, not the city, and the briefing says so. Maneuver wins 6% over 400
+seeds and holds 30% of the value.
+
+**Bastogne** (`bastogne@1`, 50 provinces, the player defending as the United States). Thirteen German
+formations against seven thin American ones, four more by rail on turns 2–5, and German
+depots a point short of their army's draw — the fuel that ran out. The objectives are the
+two road hubs, the Meuse crossings and Liège. A defence is scored by `destroy`: holding is
+one star, four German corps destroyed two, six — or breaking them early — three. With the
+doctrines defending over 200 seeds, Maneuver holds 73% and Elastic 57%, but Elastic takes
+three stars ten times as often, because three stars need the counterattack. The enemy does
+not learn here: caution only makes an attacker attack less.
+
+**Uranus** (`uranus@1`, 49 provinces, the Soviet Union). Two pincers from the Don
+bridgeheads and the southern steppe meet at Kalach, against Romanian flanks, a garrison
+at Kalach, and three German corps by rail to Kotelnikovo on turns 3–5 to break the ring.
+Soviet supply enters at Yelan and Sadovoye on the map's edges, and a reserve corps holds
+Frolovo, the Kletskaya bridgehead's only road home. Stalingrad is an objective, and its
+garrison holds it however surrounded, so the decisive result means taking the city as
+well as closing the ring. Maneuver wins 7% over 300 seeds.
+
+**The enemy that learns.** After each commit, `tellsOn` reads the share of the enemy's
+line the mover has left with at most one way out. `adapt` averages it over the mission
+records still stored and sets `caution` to six times that, capped at 2. That is the whole
+of it, because it is the only habit a defending doctrine has an answer to: raising
+`counterattack` against a player whose spearheads run short of supply changed nothing at
+Sedan or Kiev, since a doctrine holding a line rarely attacks, and raising
+`encirclement` against a player who stands with one way back helped at Sedan and made
+Kiev easier by pulling the line apart to stand in choke points.
+
+`caution` is the defender's missing reflex: a corps in contact with one way out or none
+is ordered first, loses that much by holding, and gains it by reaching ground with two.
+A garrison on one of its side's aims is exempt — ground held counts at the peace however
+surrounded, so walking off it gives away what the ring could not. The war's doctrines
+have none, so the war is unchanged, and it is outside the exploit search. Against
+Maneuver it cuts the corps a defender loses to pockets by about a fifth; above 2 it
+starts costing objectives.
+
+**Levels.** Three stars raise a mission a level, to four: each takes a turn off the limit
+and adds an enemy infantry corps by rail on turn 2, which is all `levelled` does. The
+level is stored on the record, so a replay sets the mission up the same way. At the top
+level Sedan is nine turns against fifteen Allied corps, and no doctrine wins it in 200
+games.
+
 ## Bots
 
 Three doctrines — Attrition, Maneuver, Elastic Defence — as one parameterised policy
@@ -247,6 +328,9 @@ provinces off is worth about what the province is, and whoever can reach it is
 ordered before the front is. A rear nobody garrisons is a rear one armoured corps
 takes, railhead and all, and the activation budget spent on the line never gets
 round to it.
+
+A side holding every aim it has is pulled back onto them rather than toward enemy
+ground, which is a mission defender's whole brief.
 
 All three send their headquarters before giving any order, each to the ground in
 reach that commands the most strength the other does not, the contact line counting

@@ -31,6 +31,10 @@ export interface CreateOptions {
   seats: SeatConfig[]
   seed?: number
   record?: boolean
+  /** a scenario the game ships, by id, in place of its default setup */
+  scenario?: string
+  /** how much harder the scenario is set, where the game has such a thing */
+  level?: number
 }
 
 /**
@@ -55,4 +59,6 @@ export interface GameDef<S, M> {
   legalMoves(s: S, p: PlayerId): M[]
   view(s: S): GameView
   bots: GameBot<S, M>[]
+  /** the scenarios it can set up, by id — a record of one it no longer has cannot be replayed */
+  scenarios?: string[]
 }

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import type { SeatConfig } from '../engine/game'
 import { DEFAULT_GAME, GAMES, GAME_BY_KEY } from '../games'
-import { deleteGame, isReplayable, listGames } from '../review/store'
+import { MISSIONS, MISSION_BY_ID, missionKey, starLine } from '../games/kessel/missions'
+import { deleteGame, isReplayable, listGames, missionLevels, missionStars } from '../review/store'
+
 import type { GameRecord } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[], game: string): void
+  onStart(seats: SeatConfig[], game: string, scenario?: string): void
   onReview(id: string): void
 }
 
@@ -40,6 +42,14 @@ export function Setup({ onStart, onReview }: Props) {
   const [seats, setSeats] = useState<Seat[]>(
     PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
+  const [stars] = useState(missionStars)
+  const [levels] = useState(missionLevels)
+  // A mission is open once the one before it has been won. Start on the first
+  // one not yet won, which is where the ladder left off.
+  const open = MISSIONS.map((_, i) => i === 0 || (stars[missionKey(MISSIONS[i - 1].id)] ?? 0) > 0)
+  const [mission, setMission] = useState(
+    () => (MISSIONS.find((x, i) => open[i] && !stars[missionKey(x.id)]) ?? MISSIONS[0]).id,
+  )
 
   // Only games of the kind you're picking — a Risk record under the Kessel
   // heading is a game you cannot open from there anyway.
@@ -56,11 +66,6 @@ export function Setup({ onStart, onReview }: Props) {
 
   const update = (i: number, patch: Partial<Seat>) =>
     setSeats((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
-
-  // The first seat is always the West, so changing sides moves who is human, not
-  // the seats themselves — each keeps the name and colour that go together.
-  const swapSides = () =>
-    setSeats((prev) => prev.map((s, j) => (j < 2 ? { ...s, isBot: prev[1 - j].isBot } : s)))
 
   const active = seats.slice(0, count)
   const humans = active.filter((s) => !s.isBot).length
@@ -88,6 +93,29 @@ export function Setup({ onStart, onReview }: Props) {
           ))}
         </div>
 
+        {game === 'kessel' && (
+          <div className="field gamepick missions">
+            <span className="mono-label">Missions</span>
+            {MISSIONS.map((x, i) => (
+              <button
+                key={x.id}
+                className={`pickcard ${x.id === mission ? 'on' : ''}`}
+                disabled={!open[i]}
+                onClick={() => setMission(x.id)}
+              >
+                <span className="pickname">
+                  <span className="nm">{x.name}</span>
+                  <span className="status">{open[i] ? starLine(stars[missionKey(x.id)] ?? 0) : 'locked'}</span>
+                </span>
+                <span className="bl">
+                  {x.date} · {x.sides[x.player]} · {x.turns - (levels[missionKey(x.id)] ?? 0)} turns
+                  {(levels[missionKey(x.id)] ?? 0) > 0 && ` · level ${(levels[missionKey(x.id)] ?? 0) + 1}`}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {counts.length > 1 && (
           <div className="field">
             <span className="mono-label">Players</span>
@@ -99,26 +127,15 @@ export function Setup({ onStart, onReview }: Props) {
           </div>
         )}
 
+        {/* a mission seats you on its side against its own enemy, so only Risk has seats to pick */}
+        {game === 'risk' && (
         <div className="field">
-          {/* in Risk the order is drawn at kick-off, so the list is identity
-              rather than sequence; a two-sided war has no order to draw */}
-          {game === 'risk' ? (
-            <span className="mono-label">Seats · turn order drawn at start</span>
-          ) : (
-            <span className="mono-label sidepick">
-              Sides
-              <button className="swap" onClick={swapSides}>Swap sides</button>
-            </span>
-          )}
+          {/* the order is drawn at kick-off, so the list is identity rather than sequence */}
+          <span className="mono-label">Seats · turn order drawn at start</span>
           <div className="seats">
             {active.map((s, i) => (
-              <div
-                className={`seat ${game === 'kessel' ? 'sided' : ''}`}
-                key={i}
-                style={{ ['--c' as string]: playerColor(i) }}
-              >
+              <div className="seat" key={i} style={{ ['--c' as string]: playerColor(i) }}>
                 <span className="dot" />
-                {game === 'kessel' && <span className="side">{i === 0 ? 'West' : 'East'}</span>}
                 <input
                   value={s.name}
                   onChange={(e) => update(i, { name: e.target.value })}
@@ -132,11 +149,12 @@ export function Setup({ onStart, onReview }: Props) {
             ))}
           </div>
         </div>
+        )}
 
-        {bots > 0 && (
+        {bots > 0 && game === 'risk' && (
           <div className="field">
             {/* one rung for every bot in the game — mixed tables read as a handicap match */}
-            <span className="mono-label">{game === 'risk' ? 'Difficulty' : 'Doctrine'}</span>
+            <span className="mono-label">Difficulty</span>
             <div className="tiers">
               {def.bots.map((b) => (
                 <button
@@ -162,10 +180,11 @@ export function Setup({ onStart, onReview }: Props) {
                 color: i,
               })),
               game,
+              game === 'kessel' ? mission : undefined,
             )
           }
         >
-          {humans === 0 ? 'Watch the bots' : game === 'risk' ? 'Begin deployment' : 'Take the field'}
+          {game === 'kessel' ? 'Read the briefing' : humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>
 
         {past.length > 0 && (
@@ -206,8 +225,9 @@ function PastGame({
 }) {
   const stale = !isReplayable(game)
   const outcome = useMemo(() => {
-    if (game.winner !== null) return `${game.seats[game.winner].name} won`
-    return game.finished ? 'finished' : 'unfinished'
+    const where = game.scenario ? `${MISSION_BY_ID[game.scenario]?.name ?? 'mission'} · ` : ''
+    if (game.winner !== null) return `${where}${game.seats[game.winner].name} won`
+    return where + (game.finished ? 'finished' : 'unfinished')
   }, [game])
 
   return (

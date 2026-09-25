@@ -13,7 +13,11 @@ import { createGame } from '../src/engine/game'
 import { rngFrom } from '../src/engine/rng'
 import { KESSEL_BOTS, decideFor } from '../src/games/kessel/bot'
 import type { Doctrine } from '../src/games/kessel/bot'
+import { meanTells, tellsOn } from '../src/games/kessel/adapt'
+import type { Tells } from '../src/games/kessel/adapt'
 import { createGame as createKessel } from '../src/games/kessel/game'
+import { mapOf } from '../src/games/kessel/map'
+import { missionOf, starsFor } from '../src/games/kessel/missions'
 import { stepBot as stepKessel } from '../src/games/kessel/play'
 import '../src/games/kessel'
 
@@ -37,12 +41,22 @@ export interface Job {
    * they structured-clone to a worker for free.
    */
   doctrines?: Record<string, Doctrine>
+  /** a Kessel mission to fight instead of the war */
+  scenario?: string
+  level?: number
 }
 
 export interface Outcome {
   /** index into the seat list, or null if the game hit the turn cap */
   winner: number | null
   turns: number
+  /** Kessel's peace, when it has one */
+  /** Kessel mission: the stars the player's side earned */
+  stars?: number
+  /** Kessel: each seat's share of its aims at the peace */
+  aims?: number[]
+  /** Kessel: each seat's tells, read off the board it left after every commit */
+  tells?: (Tells | null)[]
 }
 
 /** Everything derives from `seed`, so the same job always produces the same game. */
@@ -50,7 +64,7 @@ export function playMatch(job: Job): Outcome {
   return job.game === 'kessel' ? playKessel(job) : playRisk(job)
 }
 
-function playKessel({ order, seed, turnCap, doctrines }: Job): Outcome {
+function playKessel({ order, seed, turnCap, doctrines, scenario, level }: Job): Outcome {
   const rng = rngFrom(seed ^ 0x5bf03635)
   const bots = Object.fromEntries(KESSEL_BOTS.map((b) => [b.key, b]))
   const seats = order.map((key) => {
@@ -64,11 +78,23 @@ function playKessel({ order, seed, turnCap, doctrines }: Job): Outcome {
     seats: order.map((bot, i) => ({ name: `P${i}`, bot })),
     seed,
     record: false,
+    scenario,
+    level,
   })
+  const m = mapOf(s.mapId)
+  const seen: Tells[][] = order.map(() => [])
   while (s.phase !== 'gameOver' && s.turn < turnCap) {
-    s = stepKessel(s, seats[s.current] as never, () => rng.next())
+    const mover = s.current
+    const phase = s.phase
+    s = stepKessel(s, seats[mover] as never, () => rng.next())
+    if (phase === 'orders' && s.current !== mover) {
+      const t = tellsOn(m, s, mover)
+      if (t) seen[mover].push(t)
+    }
   }
-  return { winner: s.winner, turns: s.turn }
+  const mission = scenario ? missionOf(scenario) : null
+  const stars = mission ? starsFor(s, mission.player, mission) : undefined
+  return { winner: s.winner, turns: s.turn, stars, aims: s.peace?.aims, tells: seen.map(meanTells) }
 }
 
 function playRisk({ order, seed, turnCap, policies }: Job): Outcome {

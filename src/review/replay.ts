@@ -47,7 +47,7 @@ export function replay<S = GameState>(record: GameRecord): Replay<S> {
   const states: S[] = []
   let s: S
   try {
-    s = def.create({ seats: record.seats, seed: record.seed }) as S
+    s = def.create({ seats: record.seats, seed: record.seed, scenario: record.scenario, level: record.level }) as S
   } catch (e) {
     return { record, states: [], error: message(e) }
   }

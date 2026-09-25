@@ -11,6 +11,7 @@
 import { kessel } from '../src/games/kessel'
 import { HQS_PER_SIDE, REPLACEMENT_TURNS } from '../src/games/kessel/game'
 import { STACK_LIMIT, mapOf } from '../src/games/kessel/map'
+import { MISSIONS } from '../src/games/kessel/missions'
 import type { KesselState, Move } from '../src/games/kessel/types'
 import { rngFrom } from '../src/engine/rng'
 
@@ -76,6 +77,7 @@ function check(s: KesselState, where: string) {
   for (const side of s.sides) {
     if (side.aims.length === 0) fail(`${side.name} has no war aims`)
   }
+  if (s.turnLimit !== undefined && !over && s.turn > s.turnLimit) fail('a mission fought past its last turn')
 }
 
 const bots = kessel.bots
@@ -90,10 +92,13 @@ for (let g = 0; g < GAMES; g++) {
   const seat = [a, b]
   const rng = rngFrom(g * 7919 + 13)
 
+  // Every fourth game is a mission, taken in turn.
+  const scenario = g % 4 === 3 ? MISSIONS[Math.floor(g / 4) % MISSIONS.length].id : undefined
   let s = kessel.create({
     seats: [{ name: a.name, bot: a.key }, { name: b.name, bot: b.key }],
     seed: g + 1,
     record: false,
+    scenario,
   }) as KesselState
   check(s, 'start')
 

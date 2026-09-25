@@ -1,5 +1,6 @@
 import type { PlayerId } from '../../engine/types'
 import type { ProvinceId } from './map'
+import type { Arrival } from './missions'
 
 export type FormationId = number
 
@@ -138,6 +139,10 @@ export interface KesselState {
   offered: boolean
   /** how the war ended, once it has */
   peace: Peace | null
+  /** a mission settles when this turn has been fought out; a war has none */
+  turnLimit?: number
+  /** a mission's reinforcement timetable, replacing the war's corps every sixth turn */
+  arrivals?: Arrival[]
 }
 
 export interface LogEntry {

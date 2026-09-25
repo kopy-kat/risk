@@ -34,6 +34,24 @@ export interface Doctrine {
    * plan if you take it back from an enemy who can no longer hold it.
    */
   counterattack: number
+  /**
+   * How much it will give up to pull a corps out of a closing ring. None of the war's
+   * doctrines has any; it is what an enemy learns from a player who keeps pocketing it.
+   */
+  caution?: number
+}
+
+/**
+ * How far each setting may go — the space `npm run exploit:kessel` searches, and the
+ * bounds a doctrine that has learned from its opponent is held to.
+ */
+export const DOCTRINE_RANGE: Record<Exclude<keyof Doctrine, 'key' | 'name' | 'blurb' | 'caution'>, { lo: number; hi: number }> = {
+  attackRatio: { lo: 0.8, hi: 2.5 },
+  encirclement: { lo: 0, hi: 3 },
+  refitBelow: { lo: 0, hi: 80 },
+  objectivePull: { lo: 0, hi: 2 },
+  overreach: { lo: 0, hi: 1 },
+  counterattack: { lo: 0, hi: 3 },
 }
 
 export const DOCTRINES: Doctrine[] = [
@@ -208,8 +226,11 @@ export function decideFor(
   )
   const guardian = (f: Formation) => threatened.size > 0 && within2(f.at, (q) => threatened.has(q))
   const inContact = (f: Formation) => (m.adjacency[f.at] ?? []).some(enemyAt)
+  // A cautious doctrine gets its cornered corps out before anything else.
+  const cornered = (x: Formation) => (doctrine.caution ?? 0) > 0 && isCornered(m, s, x)
   const f = [...pending].sort(
     (a, b) =>
+      Number(cornered(b)) - Number(cornered(a)) ||
       Number(guardian(b)) - Number(guardian(a)) ||
       Number(command.has(b.id)) - Number(command.has(a.id)) ||
       Number(inContact(b)) - Number(inContact(a)) ||
@@ -261,15 +282,23 @@ function orderFor(
   // Holding is worth the entrenchment — and the ground, if this is the only
   // formation between a valuable province and an enemy close enough to walk in.
   const alone = friendlyAt(f.at).length === 1
+  // With caution, a corps in contact with one way out or none is worth getting
+  // out: holding costs it, and any ground with two ways back is worth reaching.
+  const caution = d.caution ?? 0
+  const cornered = caution > 0 && isCornered(m, s, f)
+  const openAt = (p: ProvinceId) =>
+    (m.adjacency[p] ?? []).filter((n) => s.owner[n] === me && enemyAt(n).length === 0).length >= 2
   let best: { order: Order; score: number } = {
     order: { type: 'hold' },
-    score: dugInWorth(f) + (alone ? guardWorth(f.at, 0) : 0),
+    score: dugInWorth(f) + (alone ? guardWorth(f.at, 0) : 0) - (cornered ? caution : 0),
   }
   // Out of activations, the only orders left are the free ones.
   if (!afford) return best.order
 
+  // With every aim in hand the pull is back onto them: a side that has what it
+  // came for defends it rather than marching off to take ground it was never after.
   const goals = s.sides[me].aims.filter((p) => s.owner[p] !== me)
-  const pull = distanceTo(m, goals.length > 0 ? goals : m.ids.filter((p) => s.owner[p] !== me))
+  const pull = distanceTo(m, goals.length > 0 ? goals : s.sides[me].aims)
 
   /** What standing on `n` would be worth, from `from` — the same yardstick for a march and an exploitation. */
   const groundWorth = (from: ProvinceId, n: ProvinceId) => {
@@ -333,7 +362,8 @@ function orderFor(
   for (const n of Object.keys(reachable(m, s, f).cost)) {
     if (enemyAt(n).length > 0) continue
     if (friendlyAt(n).length >= STACK_LIMIT[m.province[n].terrain]) continue
-    const score = groundWorth(f.at, n) + rand() * 0.1
+    const escape = cornered && openAt(n) ? caution : 0
+    const score = groundWorth(f.at, n) + escape + rand() * 0.1
     if (score > best.score) best = { order: { type: 'move', to: n }, score }
   }
 
@@ -342,6 +372,16 @@ function orderFor(
 
 
 const sameTarget = (o: Order, n: ProvinceId) => o.type === 'attack' && o.to === n
+
+/**
+ * In contact, with one way out or none — the formation a ring is closing on. Not a
+ * garrison on one of its side's aims: held ground counts at the peace whether or not
+ * a ring has closed round it, so walking off it gives away what the ring could not.
+ */
+const isCornered = (m: GameMap, s: KesselState, f: Formation) =>
+  !s.sides[f.owner].aims.includes(f.at) &&
+  (m.adjacency[f.at] ?? []).some((n) => s.formations.some((x) => x.at === n && x.owner !== f.owner)) &&
+  retreatOptions(m, s, f).length <= 1
 
 /** Holding is worth more the longer it has been held — entrenchment is real value. */
 const dugInWorth = (f: Formation) => 0.5 + f.dug * 0.3

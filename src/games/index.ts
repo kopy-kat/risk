@@ -28,7 +28,11 @@ export const DEFAULT_GAME = risk.key
  * what stops a build that does not know a game from replaying it under the rules
  * of one it does — the boards would diverge and the replay would look plausible.
  */
-export const rulesFor = (game = DEFAULT_GAME): string =>
-  GAME_BY_KEY[game]?.rulesVersion ?? `unknown|game:${game}`
+export const rulesFor = (game = DEFAULT_GAME, scenario?: string): string => {
+  const def = GAME_BY_KEY[game]
+  if (!def) return `unknown|game:${game}`
+  if (scenario === undefined) return def.rulesVersion
+  return def.scenarios?.includes(scenario) ? `${def.rulesVersion}|${scenario}` : `unknown|scenario:${scenario}`
+}
 
 export type { GameDef, GameView, GameBot, CreateOptions } from './types'

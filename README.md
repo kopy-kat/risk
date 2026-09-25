@@ -5,8 +5,9 @@ bots that actually play well. 2–6 seats, any mix of humans and bots, no accoun
 no server — it's a static page that runs entirely in the browser.
 
 Two games share the shell. Setup picks between **Risk** and **Kessel**, an experimental
-operational wargame on a 142-province map of Europe where formations are pushed back
-by combat and destroyed only when they cannot retreat — see [Kessel](#kessel) below.
+operational wargame played as a ladder of short historical missions, where formations
+are pushed back by combat and destroyed only when they cannot retreat. See
+[Kessel](#kessel) below.
 
 ```bash
 npm install
@@ -160,15 +161,41 @@ anyone. Then `npm run bench -- mine general 300`.
 
 ## Kessel
 
-The second game, picked in setup: operational war in Europe over ~140 provinces, two
-sides, 26 formations for the West and 29 for the East. **A formation beaten with a line of retreat is pushed back
-at full strength; beaten without one it surrenders.** Encirclement kills, combat only
+The second game, picked in setup: operational war as a ladder of historical battles.
+**A formation beaten with a line of retreat is pushed back at full strength; beaten
+without one it surrenders.** Encirclement kills, combat only
 pushes — everything else exists to make that rule bite. Rules, map generation and the
-design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine. In
-setup the first side is the **West**, which moves first, and **Swap sides** puts you in
-the East.
+design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine.
 
-**Each side is dealt six war aims** off a public menu — the ten most valuable provinces
+### Missions
+
+Picking Kessel opens a ladder of historical battles, each a short fight on its own
+map at a scale where a pocket is several provinces across: a fixed order of battle,
+one set of objectives both sides contest, and a turn limit:
+
+- **Sedan, May 1940** — Germany, through the Ardennes to the Channel.
+- **Kiev, September 1941** — Germany, two panzer pincers meeting behind Kyiv before the mud.
+- **Bastogne, December 1944** — the United States, holding the road hubs and the Meuse.
+- **Uranus, November 1942** — the Soviet Union, ringing Stalingrad and holding the ring.
+
+The briefing names the objectives; hold more than half their value when the last turn
+has been fought and you have won. The margin is the stars — ★ narrow, ★★ clear, ★★★
+decisive — and a win of any kind opens the next mission. In a defence you start with
+everything, so holding is ★ and the other stars are for enemy corps destroyed, or for
+breaking the attack before the last turn. Three stars also raise that mission a level, up to
+four: each is a turn shorter, with one more enemy corps arriving by rail on turn 2.
+
+**The enemy learns you.** After every commit the board you leave is read for how much
+of the enemy's line you have left with one way out or none. Averaged over your recent
+missions, that teaches it caution: a corps with the ring closing on it is ordered
+first and walks out rather than dig in, unless it is standing on an objective. The
+briefing says when it has noticed. Nothing is hidden and nothing is random.
+
+The full war — 142 provinces of Europe, 26 formations for the West and 29 for the East,
+no turn limit — is not offered in setup. Its engine, bots and benchmarks are unchanged,
+`KesselGame` still plays it when started without a scenario, and saved wars still review.
+
+**In the war, each side is dealt six war aims** off a public menu — the ten most valuable provinces
 on the other side of the line. The enemy sees the menu, not the deal: an aim is revealed
 when you take it, attack it, or mass three formations beside it. The peace is scored on
 aims held, so the map shows yours hatched in your colour and theirs only as they are
@@ -289,6 +316,7 @@ built on.
 | `npm run sim:kessel` | the same soak for Kessel |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
 | `npm run bench:kessel` | the same benchmark for the three doctrines, with the same games split West against East |
+| `npm run bench:missions` | each mission played from your side by every doctrine, then again against the enemy adapted to its tells; `--level N` plays it N levels up |
 | `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
 | `npm run exploit:kessel` | the same search over Kessel's doctrine space |
 | `npm run fit-eval` | fits the evaluation's weights to outcomes over a mixed population of strategies |
@@ -296,7 +324,7 @@ built on.
 | `npm run review-check` | checks the reviewer measures skill, not noise |
 | `npm run review-check:kessel` | the same question for Kessel, against a commander who fights hard and badly |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
-| `npm run gen-map` | builds `data/maps/europe.json` — province shapes, adjacency and label anchors — from seed points and the coastline |
+| `npm run gen-map` | builds `data/maps/europe.json` — province shapes, adjacency and label anchors — from seed points and the coastline; `-- --map=sedan` builds a mission's |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `oxlint` over `src` and `scripts` |
 
