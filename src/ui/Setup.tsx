@@ -79,7 +79,10 @@ export function Setup({ onStart, onReview }: Props) {
               className={`pickcard ${g.key === game ? 'on' : ''}`}
               onClick={() => chooseGame(g.key)}
             >
-              <span className="nm">{g.name}</span>
+              <span className="pickname">
+                <span className="nm">{g.name}</span>
+                {g.key === 'kessel' && <span className="status">Experimental</span>}
+              </span>
               <span className="bl">{g.blurb}</span>
             </button>
           ))}

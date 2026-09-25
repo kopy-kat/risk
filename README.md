@@ -4,9 +4,9 @@ Risk for a laptop: the classic 42-territory board, driven from the keyboard, aga
 bots that actually play well. 2–6 seats, any mix of humans and bots, no accounts and
 no server — it's a static page that runs entirely in the browser.
 
-Two games share the shell. Setup picks between **Risk** and **Kessel**, an operational
-wargame on a 142-province map of Europe where formations are pushed back by combat and
-destroyed only when they cannot retreat — see [Kessel](#kessel) below.
+Two games share the shell. Setup picks between **Risk** and **Kessel**, an experimental
+operational wargame on a 142-province map of Europe where formations are pushed back
+by combat and destroyed only when they cannot retreat — see [Kessel](#kessel) below.
 
 ```bash
 npm install

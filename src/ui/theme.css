@@ -970,10 +970,17 @@ kbd {
   font-family: inherit; transition: all .2s var(--ease);
 }
 .pickcard:hover { border-color: var(--rule); }
+.pickcard .pickname { display: flex; align-items: center; gap: 9px; }
 .pickcard .nm { font-family: 'Instrument Serif', serif; font-size: 21px; line-height: 1; color: var(--ink-2); }
+.pickcard .status {
+  padding: 2px 5px; border: 1px solid var(--border); border-radius: 2px;
+  font-size: 7.5px; line-height: 1.2; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--ink-3);
+}
 .pickcard .bl { font-size: 10.5px; color: var(--ink-3); line-height: 1.4; }
 .pickcard.on { background: var(--ink); border-color: var(--ink); }
 .pickcard.on .nm { color: var(--paper); }
+.pickcard.on .status { border-color: var(--ink-3); color: color-mix(in srgb, var(--paper) 62%, transparent); }
 .pickcard.on .bl { color: color-mix(in srgb, var(--paper) 62%, transparent); }
 
 .kdock .cap b { color: var(--ink-2); font-weight: 500; }
