@@ -25,7 +25,8 @@
     "study": "tsx scripts/study.ts",
     "review-check": "tsx scripts/review-check.ts",
     "review-check:kessel": "tsx scripts/review-check-kessel.ts",
-    "smoke": "tsx scripts/smoke.mjs"
+    "smoke": "tsx scripts/smoke.mjs",
+    "bench:missions": "tsx scripts/bench-missions.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

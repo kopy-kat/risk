@@ -9,6 +9,7 @@
 import type { SeatConfig } from '../engine/game'
 import { rulesFor } from '../games'
 import type { Move as RiskMove, PlayerId } from '../engine/types'
+import type { Tells } from '../games/kessel/adapt'
 import type { Move as KesselMove } from '../games/kessel/types'
 
 /** A move of whichever game the record names — never a mixture. */
@@ -35,6 +36,12 @@ export interface GameRecord {
   seats: SeatConfig[]
   /** Which game was played. Absent means `'risk'`. */
   game?: string
+  /** the scenario it was set up from, when not the game's default */
+  scenario?: string
+  /** the level the scenario was set at, when above the first */
+  level?: number
+  /** Kessel: the human side's tells over the game, which is what the next enemy learns from */
+  tells?: Tells | null
   moves: RecordedMove[]
   /**
    * Indices of moves the app played on a human's behalf, i.e. "auto-place rest".
@@ -55,7 +62,7 @@ export interface GameRecord {
  * that looks plausible and is wrong.
  */
 export const isReplayable = (r: GameRecord): boolean =>
-  r.schema === SCHEMA && r.rules === rulesFor(r.game)
+  r.schema === SCHEMA && r.rules === rulesFor(r.game, r.scenario)
 
 function read(): GameRecord[] {
   try {
@@ -84,6 +91,38 @@ function write(games: GameRecord[]): void {
   }
 }
 
+/**
+ * Mission progress — best stars, and the level each mission is now set at — kept
+ * apart from the games: records are evicted past `MAX_GAMES`, and a ladder you
+ * have climbed should not fall away with them.
+ */
+const STARS_KEY = 'risk.missions.v1'
+const LEVEL_KEY = 'risk.missions.level.v1'
+
+function bests(key: string): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+
+/** Only ever raises: progress is the best you have done, not the last. */
+function raise(key: string, mission: string, n: number): void {
+  const best = bests(key)
+  if ((best[mission] ?? 0) >= n) return
+  try {
+    localStorage.setItem(key, JSON.stringify({ ...best, [mission]: n }))
+  } catch {
+    /* storage is unusable; the ladder simply doesn't advance */
+  }
+}
+
+export const missionStars = () => bests(STARS_KEY)
+export const recordStars = (mission: string, stars: number) => raise(STARS_KEY, mission, stars)
+export const missionLevels = () => bests(LEVEL_KEY)
+export const recordLevel = (mission: string, level: number) => raise(LEVEL_KEY, mission, level)
+
 /** Newest first. */
 export function listGames(): GameRecord[] {
   return read().sort((a, b) => b.savedAt - a.savedAt)
@@ -102,7 +141,7 @@ export function saveGame(record: Omit<GameRecord, 'schema' | 'rules' | 'savedAt'
   const full: GameRecord = {
     ...record,
     schema: SCHEMA,
-    rules: rulesFor(record.game),
+    rules: rulesFor(record.game, record.scenario),
     savedAt: Date.now(),
   }
   const rest = read().filter((g) => g.id !== full.id)

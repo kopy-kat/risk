@@ -7,6 +7,8 @@ import { STACK_LIMIT, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
 import { ASSAULT_COST, allowance, exploitReach, reachable, routeTo } from './movement'
 import { depthMap, liveDepots, network, retreatTargets, supplyStates } from './supply'
+import { levelled, missionOf } from './missions'
+import type { Mission } from './missions'
 import type { Formation, FormationId, KesselState, Move, Order, Side, UnitType, Verdict } from './types'
 
 export const RULES_VERSION = ['kessel2', 'rear', 'rail6', 'exploit', 'mud10', 'aimsdealt6of10', 'will25', 'hq2r3', 'armies26v29', 'aims24'].join('|')
@@ -107,65 +109,44 @@ export interface KesselOptions {
   seed?: number
   record?: boolean
   mapId?: string
+  /** a mission id; its map, order of battle, objectives and turn limit replace the generated war */
+  scenario?: string
+  /** how many times the mission has been mastered — see `levelled` */
+  level?: number
 }
 
-export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }: KesselOptions): KesselState {
+interface Deployment {
+  owner: Record<ProvinceId, PlayerId>
+  home: [ProvinceId[], ProvinceId[]]
+  formations: Formation[]
+}
+
+export function createGame({
+  seats, seed = 1, record = true, mapId = 'europe', scenario, level = 0,
+}: KesselOptions): KesselState {
   if (seats.length !== 2) throw new Error('Kessel is a two-sided game')
-  const m = mapOf(mapId)
-
-  const byLon = [...m.ids].sort((a, b) => m.province[a].cx - m.province[b].cx)
-  const half = Math.floor(byLon.length / 2)
-  const rear = Math.max(1, Math.round(byLon.length * HOME_SHARE))
-
-  const owner: Record<ProvinceId, PlayerId> = {}
-  byLon.forEach((id, i) => {
-    owner[id] = i < half ? 0 : 1
-  })
+  const mission = scenario === undefined ? null : levelled(missionOf(scenario), level)
+  const m = mapOf(mission ? mission.mapId : mapId)
+  const { owner, home, formations } = mission ? fromMission(m, mission) : generate(m)
 
   const sides: Side[] = seats.map((seat, id) => ({
     id,
-    name: seat.name,
+    name: mission ? mission.sides[id] : seat.name,
     color: seat.color ?? id,
     bot: seat.bot,
     alive: true,
     will: 100,
-    aims: [],
-    revealed: [],
-    home: id === 0 ? byLon.slice(0, rear) : byLon.slice(byLon.length - rear),
+    // A battle's objectives are no secret: both sides can see what the ground is for.
+    aims: mission ? [...mission.aims] : [],
+    revealed: mission ? [...mission.aims] : [],
+    home: home[id],
     seen: {},
     hqs: [],
   }))
-
-  const formations: Formation[] = []
-  let nextFormationId = 0
-  for (const side of sides) {
-    const mine = byLon.filter((id) => owner[id] === side.id)
-    const onContact = (id: ProvinceId) => (m.adjacency[id] ?? []).some((n) => owner[n] !== side.id)
-    // The line first, then depth behind it — an army that starts on its own
-    // railheads has to march to the war before it can fight one.
-    const posts = [
-      ...mine.filter(onContact).sort((a, b) => value(m, b) - value(m, a)),
-      ...mine.filter((id) => !onContact(id)).sort((a, b) => value(m, b) - value(m, a)),
-    ]
-
-    const stacked: Record<ProvinceId, number> = {}
-    let placed = 0
-    const quota = FORMATIONS_PER_SIDE[side.id]
-    for (let pass = 0; placed < quota && pass < 3; pass++) {
-      for (const at of posts) {
-        if (placed >= quota) break
-        if ((stacked[at] ?? 0) >= STACK_LIMIT[m.province[at].terrain]) continue
-        stacked[at] = (stacked[at] ?? 0) + 1
-        const type = ORDER_OF_BATTLE[placed % ORDER_OF_BATTLE.length]
-        formations.push(raise(nextFormationId++, side.id, type, at))
-        placed++
-      }
-    }
-  }
   for (const side of sides) side.hqs = placeHqs(m, owner, formations, side.id)
 
   const s: KesselState = {
-    mapId,
+    mapId: m.id,
     sides,
     owner,
     formations,
@@ -180,26 +161,79 @@ export function createGame({ seats, seed = 1, record = true, mapId = 'europe' }:
     record,
     rngState: seed | 0,
     winner: null,
-    nextFormationId,
+    nextFormationId: formations.length,
     offered: false,
     peace: null,
+    ...(mission && { turnLimit: mission.turns, arrivals: mission.arrivals ?? [] }),
   }
 
   // The deal: six off each side's menu, from the game's own generator, so the
   // same seed is the same war and neither side chose anything the other can read.
-  const rng = rngFrom(s.rngState)
-  for (const side of s.sides) {
-    const menu = aimMenu(m, s, side.id)
-    while (side.aims.length < AIMS_PER_SIDE && menu.length > 0) {
-      side.aims.push(menu.splice(Math.floor(rng.next() * menu.length), 1)[0])
+  if (!mission) {
+    const rng = rngFrom(s.rngState)
+    for (const side of s.sides) {
+      const menu = aimMenu(m, s, side.id)
+      while (side.aims.length < AIMS_PER_SIDE && menu.length > 0) {
+        side.aims.push(menu.splice(Math.floor(rng.next() * menu.length), 1)[0])
+      }
     }
+    s.rngState = rng.state
   }
-  s.rngState = rng.state
 
   const states = supplyStates(m, s, 0)
   for (const f of s.formations) if (f.owner === 0) f.supply = states[f.id] ?? 0
   for (const side of s.sides) side.seen = updateSightings(m, s, side.id)
   return s
+}
+
+/** The war: the map split down the middle by longitude, each side's army dealt onto its half. */
+function generate(m: GameMap): Deployment {
+  const byLon = [...m.ids].sort((a, b) => m.province[a].cx - m.province[b].cx)
+  const half = Math.floor(byLon.length / 2)
+  const rear = Math.max(1, Math.round(byLon.length * HOME_SHARE))
+
+  const owner: Record<ProvinceId, PlayerId> = {}
+  byLon.forEach((id, i) => {
+    owner[id] = i < half ? 0 : 1
+  })
+
+  const formations: Formation[] = []
+  for (const side of [0, 1] as PlayerId[]) {
+    const mine = byLon.filter((id) => owner[id] === side)
+    const onContact = (id: ProvinceId) => (m.adjacency[id] ?? []).some((n) => owner[n] !== side)
+    // The line first, then depth behind it — an army that starts on its own
+    // railheads has to march to the war before it can fight one.
+    const posts = [
+      ...mine.filter(onContact).sort((a, b) => value(m, b) - value(m, a)),
+      ...mine.filter((id) => !onContact(id)).sort((a, b) => value(m, b) - value(m, a)),
+    ]
+
+    const stacked: Record<ProvinceId, number> = {}
+    let placed = 0
+    const quota = FORMATIONS_PER_SIDE[side]
+    for (let pass = 0; placed < quota && pass < 3; pass++) {
+      for (const at of posts) {
+        if (placed >= quota) break
+        if ((stacked[at] ?? 0) >= STACK_LIMIT[m.province[at].terrain]) continue
+        stacked[at] = (stacked[at] ?? 0) + 1
+        const type = ORDER_OF_BATTLE[placed % ORDER_OF_BATTLE.length]
+        formations.push(raise(formations.length, side, type, at))
+        placed++
+      }
+    }
+  }
+  return { owner, home: [byLon.slice(0, rear), byLon.slice(byLon.length - rear)], formations }
+}
+
+function fromMission(m: GameMap, mission: Mission): Deployment {
+  const held = new Set(mission.held)
+  const owner: Record<ProvinceId, PlayerId> = {}
+  for (const id of m.ids) owner[id] = held.has(id) ? 0 : 1
+  const formations = mission.formations.map((f, i) => ({
+    ...raise(i, f.side, f.type, f.at),
+    ...(f.strength !== undefined && { strength: f.strength }),
+  }))
+  return { owner, home: [[...mission.home[0]], [...mission.home[1]]], formations }
 }
 
 const raise = (id: number, owner: PlayerId, type: UnitType, at: ProvinceId): Formation => ({
@@ -821,12 +855,18 @@ function endTurn(m: GameMap, s: KesselState): KesselState {
   // rail to the rearmost railhead still standing. It gives the clock a second
   // hand — a side that is losing can hold for the next draft, and one that is
   // winning had better finish before it arrives.
-  if (next === 0 && s.turn % REINFORCE_EVERY === 0) {
-    for (const side of s.sides) {
-      const where = rearmostRailhead(m, s, side.id)
+  // A battle has its own timetable instead: what arrives, and when.
+  if (next === 0) {
+    const due = s.arrivals
+      ? s.arrivals.filter((a) => a.turn === s.turn)
+      : s.turn % REINFORCE_EVERY === 0
+        ? s.sides.map((side) => ({ side: side.id, type: 'infantry' as UnitType }))
+        : []
+    for (const a of due) {
+      const where = rearmostRailhead(m, s, a.side)
       if (where === null) continue
-      s.formations.push(raise(s.nextFormationId++, side.id, 'infantry', where))
-      log(s, side.id, `${m.province[where].name}: a fresh infantry corps arrives by rail`)
+      s.formations.push(raise(s.nextFormationId++, a.side, a.type, where))
+      log(s, a.side, `${m.province[where].name}: ${CORPS[a.type]} arrives by rail`)
     }
   }
 
@@ -852,6 +892,7 @@ function endTurn(m: GameMap, s: KesselState): KesselState {
   }
 
   if (!s.formations.some((f) => f.owner === next)) return settle(m, s)
+  if (s.turnLimit !== undefined && s.turn > s.turnLimit) return settle(m, s)
   return s
 }
 

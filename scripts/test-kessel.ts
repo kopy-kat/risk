@@ -12,7 +12,11 @@ import {
 import { engage } from '../src/games/kessel/combat'
 import { observed } from '../src/games/kessel/intel'
 import { MUD_CYCLE, RAIL_ALLOWANCE, exploitReach, isMud, reachable } from '../src/games/kessel/movement'
-import { STACK_LIMIT, registerMap } from '../src/games/kessel/map'
+import { DOCTRINES, decideFor } from '../src/games/kessel/bot'
+import type { Doctrine } from '../src/games/kessel/bot'
+import { STACK_LIMIT, mapOf, registerMap } from '../src/games/kessel/map'
+import { MISSIONS } from '../src/games/kessel/missions'
+import { adapt } from '../src/games/kessel/adapt'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
 import { depthMap, liveDepots, retreatOptions, retreatTargets, supplyStates } from '../src/games/kessel/supply'
 import type { Formation, KesselState, UnitType } from '../src/games/kessel/types'
@@ -790,6 +794,107 @@ function split(): Record<string, PlayerId> {
   ok(v.standing.every((n) => n >= 0 && n <= 1), 'standing is a share of the win condition')
   ok(Math.abs(v.standing.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'and the shares sum to one')
   ok(steps < 60000, 'a war reaches a settled peace rather than running forever')
+}
+
+// ── a mission settles when its last turn has been fought ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3, vp: 2 } })
+  let g = stateOn(m.id, split(), [corps(0, id(1, 1)), corps(1, id(5, 1))], { turnLimit: 2 })
+  for (const side of g.sides) side.aims = [id(6, 1)]
+  for (let i = 0; i < 3 && g.phase !== 'gameOver'; i++) {
+    g = applyMove(g, { type: 'commit' })
+    g = applyMove(g, { type: 'commit' })
+  }
+  eq(g.phase, 'gameOver', 'the battle ends once the limit has been fought out')
+  eq(g.turn, 3, 'and not a turn before')
+  eq(g.winner, 1, 'won by whoever holds the shared objective')
+}
+
+// ── a mission's timetable replaces the war's reinforcements ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  let g = stateOn(m.id, split(), [corps(0, id(1, 1)), corps(1, id(5, 1))], {
+    arrivals: [{ turn: 2, side: 1, type: 'armour' }],
+  })
+  g = applyMove(g, { type: 'commit' })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.formations.filter((f) => f.owner === 1 && f.type === 'armour').length, 1, 'what is due arrives on its turn')
+  eq(g.formations.filter((f) => f.owner === 0).length, 1, 'and nothing else does')
+  g = stateOn(m.id, split(), [corps(0, id(1, 1)), corps(1, id(5, 1))], { arrivals: [], turn: REINFORCE_EVERY - 1 })
+  g = applyMove(g, { type: 'commit' })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.formations.length, 2, 'an empty timetable means no drafts at all, not the war’s')
+}
+
+// ── a side holding everything it came for stays on it ──
+{
+  // No depot near the aim, so nothing but the aim itself can hold the corps back.
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { vp: 1 } })
+  const g = stateOn(m.id, split(), [corps(0, id(0, 0)), corps(1, id(5, 1))], { current: 1 })
+  for (const side of g.sides) side.aims = [id(6, 1)]
+  const attrition = DOCTRINES.find((d) => d.key === 'attrition') as Doctrine
+  const move = decideFor(attrition, g, 1, () => 0.5)
+  const to = move.type === 'order' && move.order.type === 'move' ? move.order.to : null
+  eq(to, id(6, 1), 'it stands on what it came for rather than marching into ground it never wanted')
+}
+
+// ── a cautious doctrine walks out of a closing ring; the war's doctrines stand ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const owner = split()
+  owner[id(4, 0)] = 0
+  owner[id(4, 2)] = 0
+  const g = stateOn(
+    m.id,
+    owner,
+    [corps(0, id(3, 1)), corps(0, id(4, 0)), corps(0, id(4, 2)), corps(1, id(4, 1), { dug: 3 })],
+    { current: 1 },
+  )
+  for (const side of g.sides) side.aims = [id(5, 1)]
+  const attrition = DOCTRINES.find((d) => d.key === 'attrition') as Doctrine
+  const order = (d: Doctrine) => {
+    const mv = decideFor(d, g, 1, () => 0.5)
+    return mv.type === 'order' ? mv.order : null
+  }
+  eq(order(attrition)?.type, 'hold', 'dug in with one way out, the war’s doctrine holds')
+  const out = order({ ...attrition, caution: 3 })
+  eq(out?.type === 'move' ? out.to : null, id(5, 1), 'a cautious one takes the way out')
+  const t = adapt(attrition, { rings: 0.4 })
+  ok((t.doctrine.caution ?? 0) > 0 && t.lesson !== null, 'and caution is what a player who keeps pocketing it teaches')
+}
+
+// ── every mission deploys legally ──
+for (const mission of MISSIONS) {
+  const g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], scenario: mission.id })
+  const mm = mapOf(g.mapId)
+  ok(g.formations.every((f) => g.owner[f.at] === f.owner), `${mission.id}: every formation starts on its own ground`)
+  ok(
+    mm.ids.every((p) => g.formations.filter((f) => f.at === p).length <= STACK_LIMIT[mm.province[p].terrain]),
+    `${mission.id}: and within what the terrain will hold`,
+  )
+  ok(
+    mission.aims.every((p) => mm.province[p]?.vp > 0) && g.sides.every((s) => s.revealed.length === mission.aims.length),
+    `${mission.id}: its objectives are worth something and known to both sides`,
+  )
+  ok(
+    mission.home.every((h, side) => h.length > 0 && h.every((p) => g.owner[p] === side)),
+    `${mission.id}: each side's supply enters on its own ground`,
+  )
+  // A corps that opens short of supply cannot attack on turn one, which reads as a
+  // rule the player broke rather than a map that was drawn wrong.
+  const short = g.formations.filter((f) => f.owner === mission.player && f.supply < 3).map((f) => f.at)
+  eq(short.join(','), '', `${mission.id}: the player's army opens in full supply`)
+  ok(
+    mm.ids.every((p) => (mm.adjacency[p] ?? []).every((n) => (mm.adjacency[n] ?? []).includes(p))),
+    `${mission.id}: its map's borders run both ways`,
+  )
+  const hard = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], scenario: mission.id, level: 2 })
+  eq(hard.turnLimit, mission.turns - 2, `${mission.id}: two levels up it is two turns shorter`)
+  eq(
+    hard.arrivals?.filter((a) => a.turn === 2 && a.side !== mission.player).length,
+    (mission.arrivals ?? []).filter((a) => a.turn === 2 && a.side !== mission.player).length + 2,
+    `${mission.id}: and the enemy has two more corps coming`,
+  )
 }
 
 console.log(`\n${passed} assertions passed`)

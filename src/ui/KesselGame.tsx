@@ -2,12 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { rngFrom } from '../engine/rng'
 import type { PlayerId, SeatConfig } from '../engine/types'
 import { kessel } from '../games/kessel'
+import { adapt, meanTells, tellsOn } from '../games/kessel/adapt'
+import type { Tells } from '../games/kessel/adapt'
+import { DOCTRINES, decideFor } from '../games/kessel/bot'
+import type { Doctrine } from '../games/kessel/bot'
 import { applyMove, broken, createGame, hqReach, inCommand, legalMoves } from '../games/kessel/game'
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
+import { MAX_LEVEL, MISSIONS, corpsLost, levelled, missionKey, missionOf, starLine, starsFor } from '../games/kessel/missions'
 import { MUD_CYCLE, MUD_TURNS, exploitReach, isMud, reachable } from '../games/kessel/movement'
 import { retreatOptions } from '../games/kessel/supply'
-import { newGameId, saveGame } from '../review/store'
+import { listGames, missionLevels, missionStars, newGameId, recordLevel, recordStars, saveGame } from '../review/store'
 import type { FormationId, KesselState, LogEntry, Move, Order } from '../games/kessel/types'
 import { playerColor } from './colors'
 import type { PrimaryAction } from './Dock'
@@ -23,12 +28,37 @@ const BOT_MOVE_CAP = 20_000
 
 interface Props {
   seats: SeatConfig[]
+  /** a mission to fight instead of the war */
+  scenario?: string
+  /** start a mission from the end screen — the same one again, or the next */
+  onPlay(scenario: string): void
   onExit(): void
   /** open the review for the war just played, by its record id */
   onReview(id: string): void
 }
 
-const botFor = (key: string | null) => (key ? kessel.bots.find((b) => b.key === key) : undefined)
+type Decide = (s: KesselState, me: PlayerId, rand: () => number) => Move
+
+const botFor = (key: string | null): Decide | undefined =>
+  key ? kessel.bots.find((b) => b.key === key)?.decide : undefined
+
+/**
+ * A mission seats you on its side and the enemy on the other, fighting its
+ * doctrine as adapted to the tells your recent missions left on the board.
+ */
+function missionSetup(scenario: string) {
+  const level = missionLevels()[missionKey(scenario)] ?? 0
+  const mission = levelled(missionOf(scenario), level)
+  const base = DOCTRINES.find((d) => d.key === mission.enemy) as Doctrine
+  const seats: SeatConfig[] = mission.sides.map((name, i) => ({
+    name,
+    bot: i === mission.player ? null : `kessel-${base.key}`,
+    color: i,
+  }))
+  const learned = listGames().flatMap((r) => (r.scenario && r.tells ? [r.tells] : []))
+  // Caution is a defender's lesson; an enemy on the attack that learned it would only attack less.
+  return { mission, level, seats, ...adapt(base, mission.destroy ? null : meanTells(learned)) }
+}
 
 /**
  * One side's whole turn. A turn is twenty-six orders and then a commit, and
@@ -37,13 +67,15 @@ const botFor = (key: string | null) => (key ? kessel.bots.find((b) => b.key === 
  * board worth showing. Stopping at the change of side is what keeps an all-bot
  * game watchable turn by turn rather than running to the peace in one frame.
  */
-function runBots(s0: KesselState, rand: () => number): KesselState {
+function runBots(s0: KesselState, rand: () => number, enemy: Doctrine | null): KesselState {
   let s = s0
+  const seat = s.sides[s.current].bot
+  const decide: Decide | undefined =
+    seat && enemy ? (st, me, r) => decideFor(enemy, st, me, r) : botFor(seat)
+  if (!decide) return s
   for (let i = 0; i < BOT_MOVE_CAP; i++) {
     if (s.phase === 'gameOver' || s.current !== s0.current) break
-    const bot = botFor(s.sides[s.current].bot)
-    if (!bot) break
-    s = applyMove(s, bot.decide(s, s.current, rand))
+    s = applyMove(s, decide(s, s.current, rand))
   }
   return s
 }
@@ -90,10 +122,16 @@ const aimReport = (m: GameMap, s: KesselState, p: PlayerId) => {
   return { aims, total, got, share: total === 0 ? 0 : got / total }
 }
 
-export function KesselGame({ seats, onExit, onReview }: Props) {
+export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props) {
   const [seed] = useState(() => Math.floor(Math.random() * 1e9))
   const recordId = useRef(newGameId(Math.floor(Math.random() * 1e9)))
-  const [state, setState] = useState<KesselState>(() => createGame({ seats, seed }))
+  const [setup] = useState(() => (scenario ? missionSetup(scenario) : null))
+  const [state, setState] = useState<KesselState>(() =>
+    createGame({ seats: setup ? setup.seats : seats, seed, scenario, level: setup?.level }),
+  )
+  const [briefed, setBriefed] = useState(!setup)
+  /** your tells, read off the board you leave the enemy after every commit */
+  const tells = useRef<Tells[]>([])
   const [selected, setSelected] = useState<FormationId | null>(null)
   /** a headquarters being sent somewhere, by index — never at the same time as a formation */
   const [selectedHq, setSelectedHq] = useState<number | null>(null)
@@ -119,9 +157,18 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     const over = state.phase === 'gameOver'
     if (!over && state.turn === savedTurn.current) return
     savedTurn.current = state.turn
+    if (over && setup) {
+      const key = missionKey(setup.mission.id)
+      const stars = starsFor(state, setup.mission.player, setup.mission)
+      recordStars(key, stars)
+      if (stars === 3) recordLevel(key, Math.min(MAX_LEVEL, setup.level + 1))
+    }
     saveGame({
       id: recordId.current,
       game: 'kessel',
+      scenario,
+      level: setup?.level || undefined,
+      tells: setup ? meanTells(tells.current) : undefined,
       seed,
       botSeed: seed ^ 0x9e3779b9,
       seats: state.sides.map((x) => ({ name: x.name, bot: x.bot, color: x.color })),
@@ -131,7 +178,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
       turns: state.turn,
       finished: over,
     })
-  }, [state, seed])
+  }, [state, seed, scenario, setup])
 
   const m = mapOf(state.mapId)
   const me = state.current
@@ -148,6 +195,10 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     (move: Move) => {
       try {
         const next = applyMove(state, move)
+        if (move.type === 'commit') {
+          const t = tellsOn(m, next, me)
+          if (t) tells.current.push(t)
+        }
         setError(null)
         setRecap(null)
         if (move.type === 'order' || move.type === 'clearOrder' || move.type === 'moveHq') {
@@ -164,7 +215,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
         setError(e instanceof Error ? e.message : String(e))
       }
     },
-    [state],
+    [state, m, me],
   )
 
   const undo = useCallback(() => {
@@ -175,12 +226,13 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
   }, [history])
 
   useEffect(() => {
-    if (state.phase === 'gameOver' || !state.sides[state.current].bot) return
+    if (!briefed || state.phase === 'gameOver' || !state.sides[state.current].bot) return
     // the effect re-runs on every board, so reading it from the closure is
     // correct — and keeps the generator out of a state updater
-    const id = setTimeout(() => setState(runBots(state, () => rng.current.next())), BOT_DELAY)
+    const enemy = setup?.doctrine ?? null
+    const id = setTimeout(() => setState(runBots(state, () => rng.current.next(), enemy)), BOT_DELAY)
     return () => clearTimeout(id)
-  }, [state])
+  }, [state, briefed, setup])
 
   /** Mark where the other side's turn began, and report it when control comes back. */
   useEffect(() => {
@@ -375,6 +427,13 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!briefed) {
+        if (e.key === ' ') {
+          e.preventDefault()
+          setBriefed(true)
+        }
+        return
+      }
       if (e.key === 'Escape') {
         e.preventDefault()
         if (showSettings) setShowSettings(false)
@@ -429,7 +488,7 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [state, primary, undo, cycle, sel, isHuman, showSettings, play, me, selectedHq])
+  }, [state, primary, undo, cycle, sel, isHuman, showSettings, play, me, selectedHq, briefed])
 
   const over = state.phase === 'gameOver'
 
@@ -439,8 +498,25 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
         <div className="wordmark">KESSEL<span>.</span></div>
         <div className="mono-label">
           Turn {String(state.turn).padStart(2, '0')}
-          {isMud(state.turn) ? ' · mud' : ` · mud in ${mudIn(state.turn)}`}
+          {state.turnLimit !== undefined && ` of ${state.turnLimit}`}
+          {isMud(state.turn)
+            ? ' · mud'
+            : state.turnLimit === undefined || state.turn + mudIn(state.turn) <= state.turnLimit
+              ? ` · mud in ${mudIn(state.turn)}`
+              : ''}
         </div>
+        {/* the score as it would settle now, so a battle is never lost by surprise */}
+        {setup && (() => {
+          const r = aimReport(m, state, setup.mission.player)
+          return (
+            <div
+              className="mono-label objectives"
+              title={r.aims.map((id) => `${m.province[id].name} ${m.province[id].vp} — ${state.owner[id] === setup.mission.player ? 'yours' : 'theirs'}`).join('\n')}
+            >
+              Objectives {r.got}/{r.total} · {r.got * 2 > r.total ? 'winning' : 'losing'}
+            </div>
+          )
+        })()}
         <div className="spacer" />
         {error && <div className="mono-label err">{error}</div>}
 
@@ -522,7 +598,53 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
         />
       </main>
 
-      {over && (
+      {setup && !briefed && (
+        <div className="overlay">
+          <div className="panel briefing">
+            <span className="mono-label">{setup.mission.date}</span>
+            <h1>{setup.mission.name.toUpperCase()}<span>.</span></h1>
+            <p className="situation">{setup.mission.briefing}</p>
+            <div className="field kpeace" style={{ ['--c' as string]: playerColor(setup.mission.player) }}>
+              <span className="mono-label">
+                Objectives · hold more than half their value after turn {setup.mission.turns}
+              </span>
+              <div className="aims">
+                {setup.mission.aims.map((id) => (
+                  <span key={id} className="aim held">{m.province[id].name} · {m.province[id].vp}</span>
+                ))}
+              </div>
+            </div>
+            {setup.mission.destroy && (
+              <p className="lesson">
+                Hold and you win. ★★ for destroying {setup.mission.destroy[0]} of their corps,
+                ★★★ for {setup.mission.destroy[1]} — or for breaking them before the last turn.
+              </p>
+            )}
+            {setup.level > 0 && (
+              <p className="lesson">
+                Level {setup.level + 1}: you have beaten this decisively before, so it is {setup.level} turn
+                {setup.level > 1 ? 's' : ''} shorter and the enemy has {setup.level} more corps arriving on turn 2.
+              </p>
+            )}
+            {setup.lesson && <p className="lesson">{setup.lesson}</p>}
+            <button className="go" onClick={() => setBriefed(true)}>Take the field</button>
+          </div>
+        </div>
+      )}
+
+      {over && setup && (
+        <MissionEnd
+          state={state}
+          mission={setup.mission.id}
+          level={setup.level}
+          player={setup.mission.player}
+          onPlay={onPlay}
+          onReview={() => onReview(recordId.current)}
+          onExit={onExit}
+        />
+      )}
+
+      {over && !setup && (
         <div className="overlay">
           <div className="panel">
             <div
@@ -579,6 +701,71 @@ export function KesselGame({ seats, onExit, onReview }: Props) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function MissionEnd({
+  state, mission, level, player, onPlay, onReview, onExit,
+}: {
+  state: KesselState
+  mission: string
+  level: number
+  player: PlayerId
+  onPlay(scenario: string): void
+  onReview(): void
+  onExit(): void
+}) {
+  const m = mapOf(state.mapId)
+  const defence = missionOf(mission).destroy
+  const stars = starsFor(state, player, missionOf(mission))
+  const next = MISSIONS[MISSIONS.findIndex((x) => x.id === mission) + 1]
+  // the save that records these stars runs after this renders, so count them here too
+  const passed = Math.max(stars, missionStars()[missionKey(mission)] ?? 0) > 0
+  const r = aimReport(m, state, player)
+
+  return (
+    <div className="overlay">
+      <div className="panel">
+        <div className="winner" style={{ ['--c' as string]: playerColor(state.sides[player].color) }}>
+          <span className="dot" />
+          <h1 style={{ margin: 0 }}>{stars > 0 ? 'Victory' : 'Defeat'}</h1>
+        </div>
+        <div className="sub">
+          <span className="stars">{starLine(stars)}</span>
+          {' · '}
+          {stars === 0
+            ? state.winner === null
+              ? 'neither side carried it'
+              : 'the enemy carried it'
+            : defence
+              ? `held · ${corpsLost(state, (1 - player) as PlayerId)} enemy corps destroyed`
+              : `a ${state.peace?.verdict} win`}
+          {` · ${r.got}/${r.total} vp`}
+        </div>
+        <div className="field kpeace" style={{ ['--c' as string]: playerColor(state.sides[player].color) }}>
+          <div className="aims">
+            {r.aims.map((id) => (
+              <span key={id} className={`aim ${state.owner[id] === player ? 'held' : ''}`}>
+                {m.province[id].name}
+              </span>
+            ))}
+          </div>
+        </div>
+        {stars === 3 && level < MAX_LEVEL && (
+          <p className="lesson">Mastered. Played again it is level {level + 2}: a turn shorter, a corps more for the enemy.</p>
+        )}
+        <div className="endgame-actions">
+          <button className="btn ghost" onClick={onReview}>Review</button>
+          <button className="btn ghost" onClick={onExit}>Missions</button>
+          <button className={next && passed ? 'btn ghost' : 'go'} onClick={() => onPlay(mission)}>
+            {stars === 3 && level < MAX_LEVEL ? `Level ${level + 2}` : 'Retry'}
+          </button>
+          {next && passed && (
+            <button className="go" onClick={() => onPlay(next.id)}>Next · {next.name}</button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
