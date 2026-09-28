@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react'
 import type { SeatConfig } from '../engine/game'
 import { DEFAULT_GAME, GAMES, GAME_BY_KEY } from '../games'
-import { deleteGame, isReplayable, listGames } from '../review/store'
+import { CAMPAIGNS } from '../games/kessel/campaigns'
+import { MISSION_BY_ID, levelled } from '../games/kessel/missions'
+import { campaignProgress, deleteGame, isReplayable, listGames, restartCampaign } from '../review/store'
+
 import type { GameRecord } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[], game: string): void
+  onStart(seats: SeatConfig[]): void
+  /** a Kessel battle: the campaign's next, or one already reached, fought as practice */
+  onCampaign(scenario: string, practice: boolean): void
   onReview(id: string): void
 }
 
@@ -32,7 +37,7 @@ const defaultBot = (game: string) => {
   return bots[Math.min(1, bots.length - 1)].key
 }
 
-export function Setup({ onStart, onReview }: Props) {
+export function Setup({ onStart, onCampaign, onReview }: Props) {
   const [game, setGame] = useState(DEFAULT_GAME)
   const [count, setCount] = useState(4)
   const [saved, setPast] = useState<GameRecord[]>(() => listGames())
@@ -40,6 +45,14 @@ export function Setup({ onStart, onReview }: Props) {
   const [seats, setSeats] = useState<Seat[]>(
     PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
+  const [campaign, setCampaign] = useState(CAMPAIGNS[0].id)
+  /** a battle already reached, picked to practise; null is the campaign's next */
+  const [practise, setPractise] = useState<string | null>(null)
+  const readProgress = () => Object.fromEntries(CAMPAIGNS.map((c) => [c.id, campaignProgress(c.id)]))
+  const [progress, setProgress] = useState(readProgress)
+  const chosen = CAMPAIGNS.find((c) => c.id === campaign) ?? CAMPAIGNS[0]
+  const run = progress[chosen.id].run
+  const upNext = chosen.missions[run.at]
 
   // Only games of the kind you're picking — a Risk record under the Kessel
   // heading is a game you cannot open from there anyway.
@@ -56,11 +69,6 @@ export function Setup({ onStart, onReview }: Props) {
 
   const update = (i: number, patch: Partial<Seat>) =>
     setSeats((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
-
-  // The first seat is always the West, so changing sides moves who is human, not
-  // the seats themselves — each keeps the name and colour that go together.
-  const swapSides = () =>
-    setSeats((prev) => prev.map((s, j) => (j < 2 ? { ...s, isBot: prev[1 - j].isBot } : s)))
 
   const active = seats.slice(0, count)
   const humans = active.filter((s) => !s.isBot).length
@@ -88,6 +96,80 @@ export function Setup({ onStart, onReview }: Props) {
           ))}
         </div>
 
+        {game === 'kessel' && (
+          <div className="field gamepick missions">
+            <span className="mono-label">Campaigns</span>
+            {CAMPAIGNS.map((c) => {
+              const p = progress[c.id]
+              return (
+                <button
+                  key={c.id}
+                  className={`pickcard ${c.id === campaign ? 'on' : ''}`}
+                  onClick={() => {
+                    setCampaign(c.id)
+                    setPractise(null)
+                  }}
+                >
+                  <span className="pickname">
+                    <span className="nm">{c.name}</span>
+                    <span className="status">
+                      {p.best > 0 ? `best ${p.best}/${c.missions.length * 3}★` : 'not yet won'}
+                      {p.level > 0 && ` · level ${p.level + 1}`}
+                    </span>
+                  </span>
+                  <span className="bl">
+                    {c.side} · {c.missions.length} battle{c.missions.length > 1 ? 's' : ''}
+                    {p.run.at > 0 && ` · on battle ${p.run.at + 1}`} · {c.blurb}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {game === 'kessel' && (
+          <div className="field gamepick missions">
+            <span className="mono-label">
+              {chosen.name} · battles
+              {run.at > 0 && (
+                <button
+                  className="export"
+                  onClick={() => {
+                    restartCampaign(chosen.id)
+                    setProgress(readProgress())
+                    setPractise(null)
+                  }}
+                >
+                  Restart
+                </button>
+              )}
+            </span>
+            {chosen.missions.map((x, i) => {
+              const next = i === run.at
+              const open = next || i < progress[chosen.id].reached
+              const on = practise === null ? next : practise === x.id
+              return (
+                <button
+                  key={x.id}
+                  className={`pickcard ${on ? 'on' : ''}`}
+                  disabled={!open}
+                  onClick={() => setPractise(next ? null : x.id)}
+                >
+                  <span className="pickname">
+                    <span className="nm">{x.name}</span>
+                    <span className="status">
+                      {i < run.at ? '★'.repeat(run.stars[i]) + '☆'.repeat(3 - run.stars[i]) : next ? 'next' : open ? 'practice' : 'locked'}
+                    </span>
+                  </span>
+                  <span className="bl">
+                    {x.date} · {levelled(x, next ? progress[chosen.id].level : 0).turns} turns
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {counts.length > 1 && (
           <div className="field">
             <span className="mono-label">Players</span>
@@ -99,26 +181,15 @@ export function Setup({ onStart, onReview }: Props) {
           </div>
         )}
 
+        {/* a mission seats you on its side against its own enemy, so only Risk has seats to pick */}
+        {game === 'risk' && (
         <div className="field">
-          {/* in Risk the order is drawn at kick-off, so the list is identity
-              rather than sequence; a two-sided war has no order to draw */}
-          {game === 'risk' ? (
-            <span className="mono-label">Seats · turn order drawn at start</span>
-          ) : (
-            <span className="mono-label sidepick">
-              Sides
-              <button className="swap" onClick={swapSides}>Swap sides</button>
-            </span>
-          )}
+          {/* the order is drawn at kick-off, so the list is identity rather than sequence */}
+          <span className="mono-label">Seats · turn order drawn at start</span>
           <div className="seats">
             {active.map((s, i) => (
-              <div
-                className={`seat ${game === 'kessel' ? 'sided' : ''}`}
-                key={i}
-                style={{ ['--c' as string]: playerColor(i) }}
-              >
+              <div className="seat" key={i} style={{ ['--c' as string]: playerColor(i) }}>
                 <span className="dot" />
-                {game === 'kessel' && <span className="side">{i === 0 ? 'West' : 'East'}</span>}
                 <input
                   value={s.name}
                   onChange={(e) => update(i, { name: e.target.value })}
@@ -132,11 +203,12 @@ export function Setup({ onStart, onReview }: Props) {
             ))}
           </div>
         </div>
+        )}
 
-        {bots > 0 && (
+        {bots > 0 && game === 'risk' && (
           <div className="field">
             {/* one rung for every bot in the game — mixed tables read as a handicap match */}
-            <span className="mono-label">{game === 'risk' ? 'Difficulty' : 'Doctrine'}</span>
+            <span className="mono-label">Difficulty</span>
             <div className="tiers">
               {def.bots.map((b) => (
                 <button
@@ -155,17 +227,22 @@ export function Setup({ onStart, onReview }: Props) {
         <button
           className="go"
           onClick={() =>
-            onStart(
-              active.map((s, i) => ({
-                name: s.name.trim() || 'Player',
-                bot: s.isBot ? difficulty : null,
-                color: i,
-              })),
-              game,
-            )
+            game === 'kessel'
+              ? onCampaign(practise ?? upNext.id, practise !== null)
+              : onStart(
+                active.map((s, i) => ({
+                  name: s.name.trim() || 'Player',
+                  bot: s.isBot ? difficulty : null,
+                  color: i,
+                })),
+              )
           }
         >
-          {humans === 0 ? 'Watch the bots' : game === 'risk' ? 'Begin deployment' : 'Take the field'}
+          {game === 'kessel'
+            ? practise
+              ? `Practise · ${MISSION_BY_ID[practise].name}`
+              : `Read the briefing · ${upNext.name}`
+            : humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>
 
         {past.length > 0 && (
@@ -206,8 +283,9 @@ function PastGame({
 }) {
   const stale = !isReplayable(game)
   const outcome = useMemo(() => {
-    if (game.winner !== null) return `${game.seats[game.winner].name} won`
-    return game.finished ? 'finished' : 'unfinished'
+    const where = game.scenario ? `${MISSION_BY_ID[game.scenario]?.name ?? 'mission'} · ` : ''
+    if (game.winner !== null) return `${where}${game.seats[game.winner].name} won`
+    return where + (game.finished ? 'finished' : 'unfinished')
   }, [game])
 
   return (

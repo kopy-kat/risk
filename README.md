@@ -5,8 +5,9 @@ bots that actually play well. 2–6 seats, any mix of humans and bots, no accoun
 no server — it's a static page that runs entirely in the browser.
 
 Two games share the shell. Setup picks between **Risk** and **Kessel**, an experimental
-operational wargame on a 142-province map of Europe where formations are pushed back
-by combat and destroyed only when they cannot retreat — see [Kessel](#kessel) below.
+operational wargame played as a ladder of short historical missions, where formations
+are pushed back by combat and destroyed only when they cannot retreat. See
+[Kessel](#kessel) below.
 
 ```bash
 npm install
@@ -160,19 +161,52 @@ anyone. Then `npm run bench -- mine general 300`.
 
 ## Kessel
 
-The second game, picked in setup: operational war in Europe over ~140 provinces, two
-sides, 26 formations for the West and 29 for the East. **A formation beaten with a line of retreat is pushed back
-at full strength; beaten without one it surrenders.** Encirclement kills, combat only
+The second game, picked in setup: operational battles as a ladder of historical missions.
+**A formation beaten with a line of retreat is pushed back at full strength; beaten
+without one it surrenders.** Encirclement kills, combat only
 pushes — everything else exists to make that rule bite. Rules, map generation and the
-design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine. In
-setup the first side is the **West**, which moves first, and **Swap sides** puts you in
-the East.
+design targets are in [`KESSEL.md`](KESSEL.md); `src/games/kessel` is the engine.
 
-**Each side is dealt six war aims** off a public menu — the ten most valuable provinces
-on the other side of the line. The enemy sees the menu, not the deal: an aim is revealed
-when you take it, attack it, or mass three formations beside it. The peace is scored on
-aims held, so the map shows yours hatched in your colour and theirs only as they are
-given away.
+### Campaigns
+
+Picking Kessel opens its campaigns. A campaign is a run of historical battles fought by
+one side in order, each a short fight on its own map at a scale where a pocket is
+several provinces across: a fixed order of battle, one set of objectives both sides
+contest, and a turn limit. **The army carries**: whatever comes out of one battle is the
+army for the next — each corps at the strength it ended on, a slot with nobody left to
+fill it empty — plus whatever fresh draft the next battle brings. Lose a battle and you
+fight it again with the army you went in with; win it and you choose to go on or to try
+it again for more.
+
+- **France 1940** — Germany, six battles: Gembloux on the Belgian plain, the Sedan
+  breakthrough, the Arras counterattack, the race for the Channel ports at Dunkirk, the
+  Weygand line in Fall Rot, and the race to the Loire crossings.
+- **East 1941** — the Soviet Union, seven battles from the frontier to Moscow: a fighting
+  withdrawal, the Dubno counterstroke, breakouts at Minsk and Kiev, the Smolensk relief,
+  holding against Typhoon, and the December counteroffensive.
+- **Kiev 1941** — Germany, two panzer pincers meeting behind Kyiv before the mud.
+- **Uranus 1942** — the Soviet Union, ringing Stalingrad and holding the ring.
+- **Kursk 1943** — the Soviet Union, holding the salient against pincers from Oryol and Belgorod.
+- **Falaise 1944** — the Allies, shutting the sack on two German armies at Trun and Chambois.
+- **Bastogne 1944** — the United States, holding the road hubs and the Meuse.
+
+The briefing names the objectives; hold more than half their value when the last turn
+has been fought and you have won. The margin is the stars — ★ narrow, ★★ clear, ★★★
+decisive. In a defence you start with everything, so holding is ★ and the other stars
+are for enemy corps destroyed, or for destroying them all before the last turn. In a
+breakout, a relief or a withdrawal the stars are for the marked corps you bring out with
+a route home. A campaign is scored by its stars across all its battles, and one finished
+with two thirds of them goes up a level, to four: every battle a turn shorter — in a
+defence a turn longer to hold — with one more enemy corps arriving by rail on turn 2.
+Any battle a run has reached can be practised as written, outside the campaign. On the
+attack you face **Defence in Depth**, which walks corps out of a closing ring rather than
+dig in and lose them.
+
+**The enemy learns you.** After every commit the board you leave is read for how much
+of the enemy's line you have left with one way out or none. Averaged over your recent
+missions, that teaches an enemy on the defensive caution: a corps with the ring closing on it is ordered
+first and walks out rather than dig in, unless it is standing on an objective. The
+briefing says when it has noticed. Nothing is hidden and nothing is random.
 
 A turn is orders, then one resolve. Select a formation — click it, or `←` `→` to
 cycle through them, the contact line first — then click a province: enemy-held
@@ -182,8 +216,7 @@ whole. After staging an attack with armour or recon, click further on to set whe
 rides to if the ground falls — the exploitation. `G` selects a headquarters, again for
 the other, and a click sends it. `⌫` clears the staged order or calls the headquarters
 back, `Esc` deselects, `⌘Z` undoes, and `Space` presses the one dark button — `Commit
-turn`, or `Offer terms` once your will is spent. Terms refused, you fight the turn
-out: hold, refit, move, no attacks, and ask again next turn.
+turn`.
 
 **Command.** Each side has two headquarters, drawn as flags. A formation more than
 three provinces of your own ground from both is out of command and drawn faded: an
@@ -197,15 +230,14 @@ and in full supply can instead ride the **railway** six along its own supply net
 starting and ending out of contact — the interior line. Two turns in every ten are
 **mud**: the march halves, the trains still run, and the topbar counts down to it.
 
-Supply enters the map at each side's **rear** — the ten westmost and ten eastmost
-provinces — and flows through friendly ground the enemy does not overlook. Depots are
-railheads on that line: one cut off from home issues nothing, and is drawn struck
-through. A corps under strength that refits on a live railhead regains a step every
-three turns; a fresh infantry corps arrives by rail at each side's largest railhead
-every six turns, for both sides alike.
+Supply enters the map at each side's **rear**, the provinces the mission names, and
+flows through friendly ground the enemy does not overlook. Depots are railheads on that
+line: one cut off from home issues nothing, and is drawn struck through. A corps under
+strength that refits on a live railhead regains a step every three turns. What else
+arrives, and when, is the mission's timetable — by rail, or for a reserve that was there
+all along, where it stood.
 
-**The map zooms.** Fifty-two counters over 142 provinces is crowded where it matters,
-so scroll or pinch to zoom about the pointer, drag to pan, `+` `−` to zoom about the
+**The map zooms.** Scroll or pinch to zoom about the pointer, drag to pan, `+` `−` to zoom about the
 middle and `0` to fit. It goes to 4×, and the counters grow with the ground rather
 than floating over it at a fixed size. Beyond the theatre the plate ends in a drawn
 neatline with the off-map sheet showing past it — the coastline is clipped to a
@@ -217,11 +249,12 @@ The map carries the things you can't play without:
   line is known. What a counter is worth is known only where you can see: beside your
   formations, or within two of your recon. Elsewhere it is drawn from what you last
   saw, with how many turns ago in the corner, or as `?` if never. Bots see everything.
-- **Supply, in four bands.** Supplied · strained · failing · cut off, on a strip down
+- **Supply, in four bands.** Supplied · strained · failing · exhausted, on a strip down
   each counter, with the key above the bar. Anything short of full supply cannot start
   an attack — that is the culminating point, and it is what a strained counter's broken
-  outline means. A cut-off counter is hatched and struck through; it is losing strength
-  every turn while an enemy presses it.
+  outline means. A counter with no route home is hatched and struck through: it keeps
+  its band the turn it is cut off, loses one a turn after, and once exhausted is losing
+  strength every turn while an enemy presses it.
 - **Pockets.** A province whose garrison has nowhere to retreat is ringed in red,
   measured against the board *this turn's staged moves* would produce — so a ring you
   are about to close counts before you press the button.
@@ -230,27 +263,21 @@ The map carries the things you can't play without:
   takes its frontage, the best attack value first, four in all — and whether the
   defender has anywhere to fall back to.
 - **Depots** (capacity as pips, struck when cut from home), **objective values** (a
-  diamond), **war aims** (the diamond filled in that side's colour, the province
-  hatched to match), and **headquarters** (a flag in the side's colour).
+  diamond, the province hatched), and **headquarters** (a flag in the side's colour).
 
-Both sides' **will** sits in the bar against the threshold below which a side can
-only ask for terms. Take the terms and the war ends on the line as it stands, scored
-against what each side said it wanted — so you can win a war you did not conquer. The
-peace also says by how much: **decisive**, **clear** or **narrow**, by how far apart the
-two sides' shares of their own aims ended, which is what refusing terms while already
-ahead can still buy.
-
-Three doctrines rather than difficulty rungs: **Attrition**, **Maneuver** and **Elastic
-Defence** are one policy at different settings — how much it pays to close a ring rather
+Four doctrines rather than difficulty rungs: **Attrition**, **Maneuver**, **Elastic
+Defence** and **Defence in Depth** are one policy at different settings — how much it pays to close a ring rather
 than force a front, how far it will outrun its supply, when it pulls a formation out to
-refit. All three garrison a railhead or a city an enemy is closing on before they spend
+refit, and how much a corps cut off from home is worth, so they ride through an empty rear
+to cut it and counterattack whoever cuts theirs. All four garrison a railhead or a city an
+enemy is closing on before they spend
 the turn's activations at the front, order what is in command before what is not, and
 send their headquarters wherever they command the most of the line.
 
-### Reviewing a war
+### Reviewing a battle
 
-Wars are stored and reviewed like Risk games, and the screen is the same one — but the
-unit of judgement is different. You stage orders for twenty-six formations and press one
+Battles are stored and reviewed like Risk games, and the screen is the same one — but the
+unit of judgement is different. You stage orders for every formation and press one
 button, so **the decision is the whole turn**, and a turn is priced against whole
 alternatives: what each doctrine would have ordered from that board, and your own orders
 with one thing changed. Each candidate is resolved through the engine five times under
@@ -260,8 +287,8 @@ the gap to the best alternative, in *steps*; **luck** is what the one resolution
 happened did against that average. Neither can reach the other.
 
 The one-change alternatives are what makes it advice. Each names a fault and carries what
-fixing only that was measured to be worth — *"The corps in Basel had one way out — Zurich
-— and Freiburg could have stood in it."* Counted across the war they become the habits
+fixing only that was measured to be worth — *"The corps in Dinant had one way out, and
+the corps beside it could have stood in it."* Counted across the battle they become the habits
 panel: *leaving the last way out open, 4× −70*. The faults are
 attacking under the odds an assault has to clear, advancing past your own supply, leaving
 a formation strained and idle, leaving an enemy's last way out open, standing where you
@@ -283,20 +310,20 @@ built on.
 | command | what it does |
 | --- | --- |
 | `npm test` | assertions over the rules (cards, combat, reinforcement, placement) |
-| `npm run test:kessel` | Kessel's rules — supply, encirclement, retreat, the settled peace |
+| `npm run test:kessel` | Kessel's rules — supply, encirclement, retreat, the settled result |
 | `npm run test:kessel-review` | the Kessel reviewer's arithmetic: loss floored and blind to the roll, luck averaging to nothing |
 | `npm run sim` | soak test: bot-vs-bot games, invariants checked after every move |
-| `npm run sim:kessel` | the same soak for Kessel |
+| `npm run sim:kessel` | the same soak for Kessel, over the missions |
 | `npm run bench` | head-to-head bot benchmark — paired seeds, seat rotation, Wilson intervals |
-| `npm run bench:kessel` | the same benchmark for the three doctrines, with the same games split West against East |
+| `npm run bench:missions` | each mission played from your side by every doctrine — wins, stars, objectives held, enemy corps destroyed — then again against the enemy adapted to its tells; `--level N` plays it N levels up |
 | `npm run exploit` | searches for a strategy a tier has no answer to; prints the exploitability number |
-| `npm run exploit:kessel` | the same search over Kessel's doctrine space |
+| `npm run exploit:kessel` | the same search over Kessel's doctrine space, from the player's side of the missions |
 | `npm run fit-eval` | fits the evaluation's weights to outcomes over a mixed population of strategies |
 | `npm run study` | replays exported games, Risk or Kessel, and grades every seat, bots included |
 | `npm run review-check` | checks the reviewer measures skill, not noise |
 | `npm run review-check:kessel` | the same question for Kessel, against a commander who fights hard and badly |
 | `npm run smoke` | browser end-to-end: play, record, replay, review (needs a `build`) |
-| `npm run gen-map` | builds `data/maps/europe.json` — province shapes, adjacency and label anchors — from seed points and the coastline |
+| `npm run gen-map -- --map=<id>` | builds a mission's map — province shapes, adjacency and label anchors — from seed points and the coastline |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | `oxlint` over `src` and `scripts` |
 

@@ -1,12 +1,12 @@
 import type { PlayerId } from '../../engine/types'
 import type { GameBot } from '../types'
 import { attackValue, defendValue, engage } from './combat'
-import { ACTIVATIONS, activationsUsed, broken, commandFrom, hqReach, inCommand } from './game'
+import { ACTIVATIONS, activationsUsed, commandFrom, hqReach, inCommand } from './game'
 import { STACK_LIMIT, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
-import { exploitReach, reachable } from './movement'
-import { retreatOptions, supplyStates } from './supply'
-import type { Formation, KesselState, Move, Order } from './types'
+import { exploitReach, reachable, routeTo } from './movement'
+import { cutIf, depthMap, reconnectedIf, retreatOptions } from './supply'
+import type { Formation, FormationId, KesselState, Move, Order } from './types'
 
 /**
  * What separates one bot from another. Every tier is this same policy at
@@ -34,6 +34,31 @@ export interface Doctrine {
    * plan if you take it back from an enemy who can no longer hold it.
    */
   counterattack: number
+  /**
+   * What a corps cut off from home is worth, a corps at a time — the enemy's, to
+   * cut by riding through its rear, and its own, to reconnect by throwing out
+   * whoever is sitting across the line.
+   */
+  sever: number
+  /**
+   * How much it will give up to pull a corps out of a closing ring. None of the war's
+   * doctrines has any; it is what an enemy learns from a player who keeps pocketing it.
+   */
+  caution?: number
+}
+
+/**
+ * How far each setting may go — the space `npm run exploit:kessel` searches, and the
+ * bounds a doctrine that has learned from its opponent is held to.
+ */
+export const DOCTRINE_RANGE: Record<Exclude<keyof Doctrine, 'key' | 'name' | 'blurb' | 'caution'>, { lo: number; hi: number }> = {
+  attackRatio: { lo: 0.8, hi: 2.5 },
+  encirclement: { lo: 0, hi: 3 },
+  refitBelow: { lo: 0, hi: 80 },
+  objectivePull: { lo: 0, hi: 2 },
+  overreach: { lo: 0, hi: 1 },
+  counterattack: { lo: 0, hi: 3 },
+  sever: { lo: 0, hi: 3 },
 }
 
 export const DOCTRINES: Doctrine[] = [
@@ -47,6 +72,7 @@ export const DOCTRINES: Doctrine[] = [
     objectivePull: 0.6,
     overreach: 0.2,
     counterattack: 0.3,
+    sever: 0.4,
   },
   {
     key: 'maneuver',
@@ -58,6 +84,7 @@ export const DOCTRINES: Doctrine[] = [
     objectivePull: 1,
     overreach: 0.5,
     counterattack: 0.6,
+    sever: 1.2,
   },
   {
     key: 'elastic',
@@ -69,6 +96,20 @@ export const DOCTRINES: Doctrine[] = [
     objectivePull: 0.45,
     overreach: 0,
     counterattack: 1.8,
+    sever: 1,
+  },
+  {
+    key: 'depth',
+    name: 'Defence in Depth',
+    blurb: 'Gives nothing to a ring: walks out of a closing pocket, refits early, and strikes back at whatever comes on.',
+    attackRatio: 0.9,
+    encirclement: 1,
+    refitBelow: 65,
+    objectivePull: 0.85,
+    overreach: 0.6,
+    counterattack: 0.8,
+    sever: 1.2,
+    caution: 1,
   },
 ]
 
@@ -106,6 +147,49 @@ function chokePoints(m: GameMap, s: KesselState, me: PlayerId): Map<ProvinceId, 
     for (const w of ways) out.set(w, (out.get(w) ?? 0) + worth)
   }
   return out
+}
+
+/**
+ * Who a corps standing somewhere would cut off, read once a turn. Nothing on the
+ * board moves while a side writes its orders, so every order it gives is priced
+ * against the same answers, and working them out per order would cost a supply
+ * trace for every province a corps can reach.
+ */
+interface Lines {
+  /** enemy corps that lose their route home if one of ours stands in the province */
+  raid: Map<ProvinceId, FormationId[]>
+  /** ours without a route home that get one back if the enemy in the province is thrown out */
+  relief(p: ProvinceId): number
+}
+
+let cached: { key: string; lines: Lines } | null = null
+
+function linesFor(m: GameMap, s: KesselState, me: PlayerId): Lines {
+  const key = `${s.mapId}|${s.turn}|${me}|${m.ids.map((id) => s.owner[id]).join('')}|` +
+    s.formations.map((f) => `${f.id}@${f.at}`).join(',')
+  if (cached?.key === key) return cached.lines
+
+  const enemy = (1 - me) as PlayerId
+  const theirs = depthMap(m, s, enemy)
+  const ours = depthMap(m, s, me)
+  const enemyAt = new Set(s.formations.filter((f) => f.owner === enemy).map((f) => f.at))
+  const raid = new Map<ProvinceId, FormationId[]>()
+  for (const p of m.ids) {
+    if (enemyAt.has(p)) continue
+    const cut = cutIf(m, s, enemy, p, theirs)
+    if (cut.length > 0) raid.set(p, cut)
+  }
+
+  const relieved = new Map<ProvinceId, number>()
+  const lines: Lines = {
+    raid,
+    relief: (p) => {
+      if (!relieved.has(p)) relieved.set(p, reconnectedIf(m, s, me, p, ours).length)
+      return relieved.get(p) as number
+    },
+  }
+  cached = { key, lines }
+  return lines
 }
 
 /**
@@ -157,10 +241,6 @@ export function decideFor(
   me: PlayerId,
   rand: () => number,
 ): Move {
-  if (s.phase === 'terms') return termsReply(s, me)
-
-  if (broken(s, me) && !s.offered) return { type: 'offerTerms' }
-
   const m = mapOf(s.mapId)
   const mine = s.formations.filter((f) => f.owner === me)
 
@@ -181,9 +261,6 @@ export function decideFor(
   const pending = mine.filter((f) => !s.orders[f.id] && !s.delayed[f.id])
   if (pending.length === 0) return { type: 'commit' }
 
-  // Supply is recomputed at turn start, but orders staged earlier in this same
-  // turn move formations, so it is re-read here rather than trusted from state.
-  const supply = supplyStates(m, s, me)
   const spent = activationsUsed(s, me)
   const command = inCommand(m, s, me)
 
@@ -208,21 +285,23 @@ export function decideFor(
   )
   const guardian = (f: Formation) => threatened.size > 0 && within2(f.at, (q) => threatened.has(q))
   const inContact = (f: Formation) => (m.adjacency[f.at] ?? []).some(enemyAt)
+  // A cautious doctrine gets its cornered corps out before anything else.
+  const cornered = (x: Formation) => (doctrine.caution ?? 0) > 0 && isCornered(m, s, x)
   const f = [...pending].sort(
     (a, b) =>
+      Number(cornered(b)) - Number(cornered(a)) ||
       Number(guardian(b)) - Number(guardian(a)) ||
       Number(command.has(b.id)) - Number(command.has(a.id)) ||
       Number(inContact(b)) - Number(inContact(a)) ||
       b.strength - a.strength,
   )[0]
 
-  const at = { ...f, supply: supply[f.id] ?? f.supply }
   const afford = spent.size < ACTIVATIONS || spent.has(f.at)
 
   return {
     type: 'order',
     formation: f.id,
-    order: orderFor(doctrine, m, s, me, at, rand, afford, command.has(f.id)),
+    order: orderFor(doctrine, m, s, me, f, rand, afford, command.has(f.id)),
   }
 }
 
@@ -240,6 +319,10 @@ function orderFor(
   const enemyAt = (p: ProvinceId) => s.formations.filter((x) => x.at === p && x.owner !== me)
   const friendlyAt = (p: ProvinceId) => s.formations.filter((x) => x.at === p && x.owner === me)
   const chokes = chokePoints(m, s, me)
+  const lines = linesFor(m, s, me)
+  /** Enemy corps a march along `route` would leave with no way home. */
+  const raidWorth = (route: ProvinceId[]) =>
+    new Set(route.flatMap((p) => lines.raid.get(p) ?? [])).size * d.sever
 
   if (f.cohesion < d.refitBelow && !neighbours.some((n) => enemyAt(n).length > 0)) {
     return { type: 'refit' }
@@ -261,27 +344,40 @@ function orderFor(
   // Holding is worth the entrenchment — and the ground, if this is the only
   // formation between a valuable province and an enemy close enough to walk in.
   const alone = friendlyAt(f.at).length === 1
+  // With caution, a corps in contact with one way out or none is worth getting
+  // out: holding costs it, and any ground with two ways back is worth reaching.
+  const caution = d.caution ?? 0
+  const cornered = caution > 0 && isCornered(m, s, f)
+  const openAt = (p: ProvinceId) =>
+    (m.adjacency[p] ?? []).filter((n) => s.owner[n] === me && enemyAt(n).length === 0).length >= 2
   let best: { order: Order; score: number } = {
     order: { type: 'hold' },
-    score: dugInWorth(f) + (alone ? guardWorth(f.at, 0) : 0),
+    score: dugInWorth(f) + (alone ? guardWorth(f.at, 0) : 0) - (cornered ? caution : 0),
   }
   // Out of activations, the only orders left are the free ones.
   if (!afford) return best.order
 
+  // With every aim in hand the pull is back onto them: a side that has what it
+  // came for defends it rather than marching off to take ground it was never after.
   const goals = s.sides[me].aims.filter((p) => s.owner[p] !== me)
-  const pull = distanceTo(m, goals.length > 0 ? goals : m.ids.filter((p) => s.owner[p] !== me))
+  const pull = distanceTo(m, goals.length > 0 ? goals : s.sides[me].aims)
 
-  /** What standing on `n` would be worth, from `from` — the same yardstick for a march and an exploitation. */
-  const groundWorth = (from: ProvinceId, n: ProvinceId) => {
+  /**
+   * What reaching `n` from `from` along `route` would be worth — the same yardstick
+   * for a march and an exploitation. The route counts because a march takes the
+   * ground it crosses, so riding across a line cuts it as surely as stopping on it.
+   */
+  const groundWorth = (from: ProvinceId, n: ProvinceId, route: ProvinceId[]) => {
     const closing = (chokes.get(n) ?? 0) * d.encirclement
     const advance = (pull[from] - pull[n]) * d.objectivePull
     const strain = s.owner[n] === me ? 0 : (1 - d.overreach) * 0.5
-    return closing + advance + provinceValue(m, n) * 0.2 - strain + guardWorth(n, friendlyAt(n).length)
+    return closing + advance + provinceValue(m, n) * 0.2 - strain + guardWorth(n, friendlyAt(n).length) +
+      raidWorth(route)
   }
 
   // An assault ordered out of command goes in a turn late, against whatever is
   // standing there by then — which is not an assault anyone planned.
-  if (commanded && f.supply >= 3 && !broken(s, me)) {
+  if (commanded && f.supply >= 3) {
     for (const n of neighbours) {
       const defenders = enemyAt(n)
       if (defenders.length === 0) continue
@@ -312,15 +408,18 @@ function orderFor(
         ratio +
         provinceValue(m, n) * 0.4 +
         trapped * 4 * d.encirclement +
-        overextended * d.counterattack
+        overextended * d.counterattack +
+        lines.relief(n) * d.sever +
+        raidWorth([n])
       if (score <= best.score) continue
 
       // Where to ride on to if the ground falls: the best of what the assault
       // would leave reachable, if it beats standing on the ground taken.
       let onward: ProvinceId | undefined
       let worth = 0
-      for (const p of Object.keys(exploitReach(m, s, f, n).cost)) {
-        const w = groundWorth(n, p)
+      const ride = exploitReach(m, s, f, n)
+      for (const p of Object.keys(ride.cost)) {
+        const w = groundWorth(n, p, [n, ...routeTo(ride, p)])
         if (w > worth) {
           worth = w
           onward = p
@@ -330,10 +429,12 @@ function orderFor(
     }
   }
 
-  for (const n of Object.keys(reachable(m, s, f).cost)) {
+  const reach = reachable(m, s, f)
+  for (const n of Object.keys(reach.cost)) {
     if (enemyAt(n).length > 0) continue
     if (friendlyAt(n).length >= STACK_LIMIT[m.province[n].terrain]) continue
-    const score = groundWorth(f.at, n) + rand() * 0.1
+    const escape = cornered && openAt(n) ? caution : 0
+    const score = groundWorth(f.at, n, routeTo(reach, n)) + escape + rand() * 0.1
     if (score > best.score) best = { order: { type: 'move', to: n }, score }
   }
 
@@ -343,19 +444,18 @@ function orderFor(
 
 const sameTarget = (o: Order, n: ProvinceId) => o.type === 'attack' && o.to === n
 
+/**
+ * In contact, with one way out or none — the formation a ring is closing on. Not a
+ * garrison on one of its side's aims: held ground counts at the peace whether or not
+ * a ring has closed round it, so walking off it gives away what the ring could not.
+ */
+const isCornered = (m: GameMap, s: KesselState, f: Formation) =>
+  !s.sides[f.owner].aims.includes(f.at) &&
+  (m.adjacency[f.at] ?? []).some((n) => s.formations.some((x) => x.at === n && x.owner !== f.owner)) &&
+  retreatOptions(m, s, f).length <= 1
+
 /** Holding is worth more the longer it has been held — entrenchment is real value. */
 const dugInWorth = (f: Formation) => 0.5 + f.dug * 0.3
-
-/**
- * Terms are offered by whoever is broken, so this is the reply of the side still
- * standing. Take the peace when it already meets your aims; press on only while
- * you are behind and still have the will to spend.
- */
-function termsReply(s: KesselState, me: PlayerId): Move {
-  const them = (1 - me) as PlayerId
-  const ahead = s.sides[me].will >= s.sides[them].will
-  return ahead ? { type: 'acceptTerms' } : { type: 'rejectTerms' }
-}
 
 export const KESSEL_BOTS: GameBot<KesselState, Move>[] = DOCTRINES.map((d) => ({
   key: `kessel-${d.key}`,

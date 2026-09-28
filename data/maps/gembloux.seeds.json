@@ -1,0 +1,683 @@
+{
+  "id": "gembloux",
+  "name": "Gembloux, May 1940",
+  "bounds": {
+    "lonMin": 3.6,
+    "lonMax": 6.6,
+    "latMin": 50.2,
+    "latMax": 51.5
+  },
+  "seeds": [
+    {
+      "id": "antwerp",
+      "name": "Antwerp",
+      "nation": "belgium",
+      "lon": 4.4,
+      "lat": 51.22,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "lier",
+      "name": "Lier",
+      "nation": "belgium",
+      "lon": 4.57,
+      "lat": 51.13,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mechelen",
+      "name": "Mechelen",
+      "nation": "belgium",
+      "lon": 4.48,
+      "lat": 51.03,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "vilvoorde",
+      "name": "Vilvoorde",
+      "nation": "belgium",
+      "lon": 4.43,
+      "lat": 50.93,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "brussels",
+      "name": "Brussels",
+      "nation": "belgium",
+      "lon": 4.35,
+      "lat": 50.85,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "halle",
+      "name": "Halle",
+      "nation": "belgium",
+      "lon": 4.24,
+      "lat": 50.73,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "waterloo",
+      "name": "Waterloo",
+      "nation": "belgium",
+      "lon": 4.4,
+      "lat": 50.72,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "nivelles",
+      "name": "Nivelles",
+      "nation": "belgium",
+      "lon": 4.33,
+      "lat": 50.6,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "wavre",
+      "name": "Wavre",
+      "nation": "belgium",
+      "lon": 4.61,
+      "lat": 50.72,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "leuven",
+      "name": "Leuven",
+      "nation": "belgium",
+      "lon": 4.7,
+      "lat": 50.88,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "aarschot",
+      "name": "Aarschot",
+      "nation": "belgium",
+      "lon": 4.84,
+      "lat": 50.99,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "diest",
+      "name": "Diest",
+      "nation": "belgium",
+      "lon": 5.05,
+      "lat": 50.99,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tienen",
+      "name": "Tienen",
+      "nation": "belgium",
+      "lon": 4.94,
+      "lat": 50.81,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "jodoigne",
+      "name": "Jodoigne",
+      "nation": "belgium",
+      "lon": 4.87,
+      "lat": 50.72,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "perwez",
+      "name": "Perwez",
+      "nation": "belgium",
+      "lon": 4.81,
+      "lat": 50.62,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "gembloux",
+      "name": "Gembloux",
+      "nation": "belgium",
+      "lon": 4.69,
+      "lat": 50.56,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "fleurus",
+      "name": "Fleurus",
+      "nation": "belgium",
+      "lon": 4.55,
+      "lat": 50.48,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "charleroi",
+      "name": "Charleroi",
+      "nation": "belgium",
+      "lon": 4.44,
+      "lat": 50.41,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "namur",
+      "name": "Namur",
+      "nation": "belgium",
+      "lon": 4.87,
+      "lat": 50.47,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "eghezee",
+      "name": "Éghezée",
+      "nation": "belgium",
+      "lon": 4.91,
+      "lat": 50.59,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "hannut",
+      "name": "Hannut",
+      "nation": "belgium",
+      "lon": 5.08,
+      "lat": 50.67,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "waremme",
+      "name": "Waremme",
+      "nation": "belgium",
+      "lon": 5.26,
+      "lat": 50.7,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sinttruiden",
+      "name": "Sint-Truiden",
+      "nation": "belgium",
+      "lon": 5.19,
+      "lat": 50.82,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tongeren",
+      "name": "Tongeren",
+      "nation": "belgium",
+      "lon": 5.46,
+      "lat": 50.78,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "hasselt",
+      "name": "Hasselt",
+      "nation": "belgium",
+      "lon": 5.34,
+      "lat": 50.93,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "genk",
+      "name": "Genk",
+      "nation": "belgium",
+      "lon": 5.5,
+      "lat": 50.97,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "beringen",
+      "name": "Beringen",
+      "nation": "belgium",
+      "lon": 5.22,
+      "lat": 51.05,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "geel",
+      "name": "Geel",
+      "nation": "belgium",
+      "lon": 4.99,
+      "lat": 51.16,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "herentals",
+      "name": "Herentals",
+      "nation": "belgium",
+      "lon": 4.83,
+      "lat": 51.18,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "turnhout",
+      "name": "Turnhout",
+      "nation": "belgium",
+      "lon": 4.95,
+      "lat": 51.32,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mol",
+      "name": "Mol",
+      "nation": "belgium",
+      "lon": 5.12,
+      "lat": 51.19,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lommel",
+      "name": "Lommel",
+      "nation": "belgium",
+      "lon": 5.31,
+      "lat": 51.23,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bree",
+      "name": "Bree",
+      "nation": "belgium",
+      "lon": 5.6,
+      "lat": 51.14,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "maaseik",
+      "name": "Maaseik",
+      "nation": "belgium",
+      "lon": 5.79,
+      "lat": 51.1,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "huy",
+      "name": "Huy",
+      "nation": "belgium",
+      "lon": 5.24,
+      "lat": 50.52,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "andenne",
+      "name": "Andenne",
+      "nation": "belgium",
+      "lon": 5.09,
+      "lat": 50.49,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "liege",
+      "name": "Liège",
+      "nation": "belgium",
+      "lon": 5.57,
+      "lat": 50.63,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "vise",
+      "name": "Visé",
+      "nation": "belgium",
+      "lon": 5.7,
+      "lat": 50.73,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "herve",
+      "name": "Herve",
+      "nation": "belgium",
+      "lon": 5.79,
+      "lat": 50.64,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "verviers",
+      "name": "Verviers",
+      "nation": "belgium",
+      "lon": 5.86,
+      "lat": 50.59,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "spa",
+      "name": "Spa",
+      "nation": "belgium",
+      "lon": 5.86,
+      "lat": 50.49,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "eupen",
+      "name": "Eupen",
+      "nation": "belgium",
+      "lon": 6.03,
+      "lat": 50.63,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stavelot",
+      "name": "Stavelot",
+      "nation": "belgium",
+      "lon": 5.93,
+      "lat": 50.39,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "aywaille",
+      "name": "Aywaille",
+      "nation": "belgium",
+      "lon": 5.68,
+      "lat": 50.47,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ciney",
+      "name": "Ciney",
+      "nation": "belgium",
+      "lon": 5.1,
+      "lat": 50.29,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dinant",
+      "name": "Dinant",
+      "nation": "belgium",
+      "lon": 4.91,
+      "lat": 50.26,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "aalst",
+      "name": "Aalst",
+      "nation": "belgium",
+      "lon": 4.04,
+      "lat": 50.94,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dendermonde",
+      "name": "Dendermonde",
+      "nation": "belgium",
+      "lon": 4.1,
+      "lat": 51.03,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sintniklaas",
+      "name": "Sint-Niklaas",
+      "nation": "belgium",
+      "lon": 4.14,
+      "lat": 51.17,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ghent",
+      "name": "Ghent",
+      "nation": "belgium",
+      "lon": 3.72,
+      "lat": 51.05,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "soignies",
+      "name": "Soignies",
+      "nation": "belgium",
+      "lon": 4.07,
+      "lat": 50.58,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mons",
+      "name": "Mons",
+      "nation": "belgium",
+      "lon": 3.95,
+      "lat": 50.45,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "binche",
+      "name": "Binche",
+      "nation": "belgium",
+      "lon": 4.17,
+      "lat": 50.41,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "maastricht",
+      "name": "Maastricht",
+      "nation": "netherlands",
+      "lon": 5.69,
+      "lat": 50.85,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "sittard",
+      "name": "Sittard",
+      "nation": "netherlands",
+      "lon": 5.87,
+      "lat": 51.0,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "heerlen",
+      "name": "Heerlen",
+      "nation": "netherlands",
+      "lon": 5.98,
+      "lat": 50.89,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "roermond",
+      "name": "Roermond",
+      "nation": "netherlands",
+      "lon": 5.99,
+      "lat": 51.19,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "venlo",
+      "name": "Venlo",
+      "nation": "netherlands",
+      "lon": 6.17,
+      "lat": 51.37,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "weert",
+      "name": "Weert",
+      "nation": "netherlands",
+      "lon": 5.71,
+      "lat": 51.25,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "eindhoven",
+      "name": "Eindhoven",
+      "nation": "netherlands",
+      "lon": 5.47,
+      "lat": 51.44,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "helmond",
+      "name": "Helmond",
+      "nation": "netherlands",
+      "lon": 5.66,
+      "lat": 51.48,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "aachen",
+      "name": "Aachen",
+      "nation": "germany",
+      "lon": 6.08,
+      "lat": 50.78,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "geilenkirchen",
+      "name": "Geilenkirchen",
+      "nation": "germany",
+      "lon": 6.12,
+      "lat": 50.97,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "julich",
+      "name": "Jülich",
+      "nation": "germany",
+      "lon": 6.36,
+      "lat": 50.92,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "duren",
+      "name": "Düren",
+      "nation": "germany",
+      "lon": 6.48,
+      "lat": 50.8,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "monchengladbach",
+      "name": "Mönchengladbach",
+      "nation": "germany",
+      "lon": 6.44,
+      "lat": 51.19,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "monschau",
+      "name": "Monschau",
+      "nation": "germany",
+      "lon": 6.24,
+      "lat": 50.55,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    }
+  ],
+  "seaLinks": []
+}

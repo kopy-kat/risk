@@ -5,12 +5,13 @@
  *
  * The assertions in `test-kessel.ts` pin rules that were written down. This exists
  * for the states nobody thought to write down — a formation standing on ground its
- * owner does not hold, a stack past what the terrain will take, a war that ends
+ * owner does not hold, a stack past what the terrain will take, a battle that ends
  * without a winner or carries on after one.
  */
 import { kessel } from '../src/games/kessel'
 import { HQS_PER_SIDE, REPLACEMENT_TURNS } from '../src/games/kessel/game'
 import { STACK_LIMIT, mapOf } from '../src/games/kessel/map'
+import { MISSIONS } from '../src/games/kessel/missions'
 import type { KesselState, Move } from '../src/games/kessel/types'
 import { rngFrom } from '../src/engine/rng'
 
@@ -49,15 +50,14 @@ function check(s: KesselState, where: string) {
   }
 
   for (const side of s.sides) {
-    if (side.will < 0 || side.will > 100) fail(`will out of range (${side.will})`)
     if (side.hqs.length !== HQS_PER_SIDE) fail(`${side.name} has ${side.hqs.length} headquarters`)
     if (side.hqs.some((p) => s.owner[p] !== side.id)) fail('a headquarters stands on ground its side does not hold')
   }
 
   const over = s.phase === 'gameOver'
-  if (over !== kessel.view(s).over) fail('view disagrees with the phase about whether the war is over')
-  if (!over && s.winner !== null) fail('a winner while the war is still on')
-  if (over !== (s.peace !== null)) fail('a peace recorded for a war still on, or none for one that ended')
+  if (over !== kessel.view(s).over) fail('view disagrees with the phase about whether the battle is over')
+  if (!over && s.winner !== null) fail('a winner while the battle is still on')
+  if (over !== (s.peace !== null)) fail('a result recorded for a battle still on, or none for one that ended')
 
   if (s.phase === 'orders' && Object.keys(s.orders).length > 0) {
     for (const id of Object.keys(s.orders)) {
@@ -74,8 +74,9 @@ function check(s: KesselState, where: string) {
     else if (s.phase === 'orders' && f.owner === s.current && s.orders[f.id]) fail('a formation given an order while one is on its way')
   }
   for (const side of s.sides) {
-    if (side.aims.length === 0) fail(`${side.name} has no war aims`)
+    if (side.aims.length === 0) fail(`${side.name} has no objectives`)
   }
+  if (!over && s.turn > s.turnLimit) fail('a mission fought past its last turn')
 }
 
 const bots = kessel.bots
@@ -90,10 +91,12 @@ for (let g = 0; g < GAMES; g++) {
   const seat = [a, b]
   const rng = rngFrom(g * 7919 + 13)
 
+  const scenario = MISSIONS[g % MISSIONS.length].id
   let s = kessel.create({
     seats: [{ name: a.name, bot: a.key }, { name: b.name, bot: b.key }],
     seed: g + 1,
     record: false,
+    scenario,
   }) as KesselState
   check(s, 'start')
 
@@ -115,7 +118,7 @@ for (let g = 0; g < GAMES; g++) {
       const legal = kessel.legalMoves(s as never, v.current)
       violations.push(
         legal.length === 0
-          ? 'the move generator ran empty while the war was on'
+          ? 'the move generator ran empty while the battle was on'
           : `illegal bot move: ${e instanceof Error ? e.message : String(e)}`,
       )
       break

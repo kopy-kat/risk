@@ -57,10 +57,12 @@ const stale = {
   id: 'stale-smoke',
 }
 
-// A war, for the other review screen. Seat 0 is recorded as human while a
+// A battle, for the other review screen. Seat 0 is recorded as human while a
 // doctrine played it, the same trick — and capped short, because a Kessel review
 // resolves a dozen alternative order sets five times for every turn.
 const { kessel } = await import('../src/games/kessel/index.ts')
+const { rulesFor } = await import('../src/games/index.ts')
+const { CAMPAIGNS } = await import('../src/games/kessel/campaigns/index.ts')
 const { createGame: createWar } = await import('../src/games/kessel/game.ts')
 const { stepBot: stepWarBot } = await import('../src/games/kessel/play.ts')
 
@@ -68,18 +70,19 @@ function war(seed, doctrine, turnCap = 24) {
   const seats = [{ name: 'Crimson', bot: null }, { name: 'Azure', bot: `kessel-${doctrine}` }]
   const rng = rngFrom((seed ^ 0x9e3779b9) >>> 0)
   const bots = Object.fromEntries(kessel.bots.map((b) => [b.key, b]))
-  let s = createWar({ seats: [{ name: 'Crimson', bot: `kessel-${doctrine}` }, seats[1]], seed })
+  const scenario = 'sedan@3'
+  let s = createWar({ seats: [{ name: 'Crimson', bot: `kessel-${doctrine}` }, seats[1]], seed, scenario })
   while (s.phase !== 'gameOver' && s.turn < turnCap) {
     s = stepWarBot(s, bots[s.sides[s.current].bot], () => rng.next())
   }
   return {
-    id: `${seed}-war`, schema: 1, rules: kessel.rulesVersion, seed, botSeed: seed ^ 0x9e3779b9,
-    game: 'kessel', seats, moves: s.moves, assisted: [], winner: s.winner, turns: s.turn,
+    id: `${seed}-war`, schema: 1, rules: rulesFor('kessel', scenario), seed, botSeed: seed ^ 0x9e3779b9,
+    game: 'kessel', scenario, seats, moves: s.moves, assisted: [], winner: s.winner, turns: s.turn,
     finished: s.phase === 'gameOver', savedAt: Date.now() - 30_000,
   }
 }
 
-const kesselGame = war(20260901, 'attrition')
+const kesselGame = war(3, 'attrition')
 
 const seeded = JSON.stringify([solo, hotseat, stale, kesselGame])
 
@@ -297,14 +300,14 @@ async function open(withHistory) {
   await page.waitForTimeout(200)
   ok(
     (await page.locator('.games .game').count()) === 1,
-    'the Kessel heading lists only the war',
+    'the Kessel heading lists only the battle',
   )
 
   await page.locator('.games .game .open').first().click()
   await page.waitForSelector('.rev-bar', { timeout: 120000 })
   await page.waitForTimeout(400)
 
-  ok((await page.locator('.kmap').count()) === 1, 'the war is replayed on the Kessel map')
+  ok((await page.locator('.kmap').count()) === 1, 'the battle is replayed on the Kessel map')
   const ticks = await page.locator('.rev-bar .tick').count()
   ok(ticks > 5, `the tape has one tick per turn of orders, got ${ticks}`)
   const units = await page.locator('.review .stat .u').allInnerTexts()
@@ -332,7 +335,9 @@ async function open(withHistory) {
       advice = await page.locator('.rev-panel .fix .v').first().innerText()
       break
     }
-    await page.getByRole('button', { name: /Next mistake/ }).click()
+    const next = page.getByRole('button', { name: /Next mistake/ })
+    if (await next.isDisabled()) break
+    await next.click()
     await page.waitForTimeout(200)
   }
   ok(advice === '' || advice.length > 30, `a named fix reads as a sentence about the board, got "${advice}"`)
@@ -348,6 +353,42 @@ async function open(withHistory) {
   await page.waitForTimeout(250)
   ok((await page.locator('.panel h1').count()) > 0, 'escape returns to the setup screen')
   await page.close()
+}
+
+// ── F) a campaign opens on its next battle, with the army the last one left ──
+{
+  const page = await open(false)
+  await page.getByRole('button', { name: 'Kessel' }).click()
+  await page.waitForTimeout(200)
+  ok(
+    (await page.locator('.missions').first().locator('.pickcard').count()) === CAMPAIGNS.length,
+    'every campaign is listed',
+  )
+  const first = CAMPAIGNS[0]
+  await page.getByRole('button', { name: new RegExp(`Read the briefing · ${first.missions[0].name}`) }).click()
+  await page.waitForTimeout(200)
+  ok(/battle 1 of/.test(await page.locator('.briefing').innerText()), 'a fresh campaign opens on its first battle')
+  await page.close()
+
+  // A run carried into its battle with one armoured corps left: only that one deploys.
+  const carried = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+  carried.on('pageerror', (e) => errors.push(`[pageerror] ${e}`))
+  await carried.addInitScript((id) => localStorage.setItem('risk.campaigns.v1', JSON.stringify({
+    [id]: { run: { at: 0, army: [{ type: 'armour', strength: 2 }], stars: [] }, best: 0, level: 0, reached: 0 },
+  })), first.id)
+  await carried.goto(URL, { waitUntil: 'networkidle' })
+  await carried.getByRole('button', { name: 'Kessel' }).click()
+  await carried.getByRole('button', { name: /Read the briefing/ }).click()
+  await carried.waitForTimeout(200)
+  ok(/came out of the last battle: 0 infantry, 1 armour/.test(await carried.locator('.briefing').innerText()),
+    'the briefing says what army is going in')
+  await carried.getByRole('button', { name: 'Take the field' }).click()
+  await carried.waitForTimeout(300)
+  const mine = first.missions[0].formations.filter((f) => f.side === first.missions[0].player && f.fresh).length + 1
+  const counters = await carried.locator('.kcounter').count()
+  const theirs = first.missions[0].formations.filter((f) => f.side !== first.missions[0].player).length
+  ok(counters === mine + theirs, `only the corps carried in deploy — ${counters} counters, wanted ${mine + theirs}`)
+  await carried.close()
 }
 
 await browser.close()

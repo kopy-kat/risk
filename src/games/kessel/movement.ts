@@ -100,8 +100,8 @@ export interface ReachOptions {
 /**
  * Everywhere a formation could go this turn, and what it costs to arrive.
  *
- * Enemy-held provinces are never entered — taking ground is what an attack order
- * is for. A province already holding all the terrain will take is not somewhere
+ * A province an enemy formation stands in is never entered — taking it is what an
+ * attack order is for. Empty enemy ground is marched into and taken. A province already holding all the terrain will take is not somewhere
  * you can stop, so it is not somewhere you can go.
  */
 export function reachable(m: GameMap, s: KesselState, f: Mover, opts: ReachOptions = {}): Reach {

@@ -1,0 +1,673 @@
+{
+  "id": "moscow",
+  "name": "Moscow, autumn 1941",
+  "bounds": {
+    "lonMin": 33.9,
+    "lonMax": 40.1,
+    "latMin": 52.85,
+    "latMax": 57.25
+  },
+  "seeds": [
+    {
+      "id": "rzhev",
+      "name": "Rzhev",
+      "nation": "russia",
+      "lon": 34.33,
+      "lat": 56.26,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "staritsa",
+      "name": "Staritsa",
+      "nation": "russia",
+      "lon": 34.93,
+      "lat": 56.51,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "torzhok",
+      "name": "Torzhok",
+      "nation": "russia",
+      "lon": 34.96,
+      "lat": 57.04,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "kalinin",
+      "name": "Kalinin",
+      "nation": "russia",
+      "lon": 35.92,
+      "lat": 56.86,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "zubtsov",
+      "name": "Zubtsov",
+      "nation": "russia",
+      "lon": 34.58,
+      "lat": 56.18,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sychevka",
+      "name": "Sychevka",
+      "nation": "russia",
+      "lon": 34.28,
+      "lat": 55.83,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "vyazma",
+      "name": "Vyazma",
+      "nation": "russia",
+      "lon": 34.3,
+      "lat": 55.21,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "gzhatsk",
+      "name": "Gzhatsk",
+      "nation": "russia",
+      "lon": 35.0,
+      "lat": 55.55,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "shakhovskaya",
+      "name": "Shakhovskaya",
+      "nation": "russia",
+      "lon": 35.5,
+      "lat": 56.03,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lotoshino",
+      "name": "Lotoshino",
+      "nation": "russia",
+      "lon": 35.64,
+      "lat": 56.23,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "konakovo",
+      "name": "Konakovo",
+      "nation": "russia",
+      "lon": 36.76,
+      "lat": 56.7,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zavidovo",
+      "name": "Zavidovo",
+      "nation": "russia",
+      "lon": 36.53,
+      "lat": 56.52,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "volokolamsk",
+      "name": "Volokolamsk",
+      "nation": "russia",
+      "lon": 35.96,
+      "lat": 56.03,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "klin",
+      "name": "Klin",
+      "nation": "russia",
+      "lon": 36.73,
+      "lat": 56.33,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "dmitrov",
+      "name": "Dmitrov",
+      "nation": "russia",
+      "lon": 37.52,
+      "lat": 56.34,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "yakhroma",
+      "name": "Yakhroma",
+      "nation": "russia",
+      "lon": 37.48,
+      "lat": 56.29,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "taldom",
+      "name": "Taldom",
+      "nation": "russia",
+      "lon": 37.53,
+      "lat": 56.73,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zagorsk",
+      "name": "Zagorsk",
+      "nation": "russia",
+      "lon": 38.13,
+      "lat": 56.3,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "solnechnogorsk",
+      "name": "Solnechnogorsk",
+      "nation": "russia",
+      "lon": 36.98,
+      "lat": 56.18,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "istra",
+      "name": "Istra",
+      "nation": "russia",
+      "lon": 36.86,
+      "lat": 55.91,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "krasnayapolyana",
+      "name": "Krasnaya Polyana",
+      "nation": "russia",
+      "lon": 37.4,
+      "lat": 56.0,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "moscow",
+      "name": "Moscow",
+      "nation": "russia",
+      "lon": 37.62,
+      "lat": 55.75,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 2
+    },
+    {
+      "id": "noginsk",
+      "name": "Noginsk",
+      "nation": "russia",
+      "lon": 38.44,
+      "lat": 55.85,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "ruza",
+      "name": "Ruza",
+      "nation": "russia",
+      "lon": 36.19,
+      "lat": 55.7,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zvenigorod",
+      "name": "Zvenigorod",
+      "nation": "russia",
+      "lon": 36.85,
+      "lat": 55.73,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kubinka",
+      "name": "Kubinka",
+      "nation": "russia",
+      "lon": 36.7,
+      "lat": 55.52,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mozhaisk",
+      "name": "Mozhaisk",
+      "nation": "russia",
+      "lon": 36.03,
+      "lat": 55.5,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "vereya",
+      "name": "Vereya",
+      "nation": "russia",
+      "lon": 36.19,
+      "lat": 55.34,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "borovsk",
+      "name": "Borovsk",
+      "nation": "russia",
+      "lon": 36.49,
+      "lat": 55.21,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "narofominsk",
+      "name": "Naro-Fominsk",
+      "nation": "russia",
+      "lon": 36.73,
+      "lat": 55.39,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "podolsk",
+      "name": "Podolsk",
+      "nation": "russia",
+      "lon": 37.55,
+      "lat": 55.43,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "bronnitsy",
+      "name": "Bronnitsy",
+      "nation": "russia",
+      "lon": 38.26,
+      "lat": 55.42,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kolomna",
+      "name": "Kolomna",
+      "nation": "russia",
+      "lon": 38.78,
+      "lat": 55.1,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "yegoryevsk",
+      "name": "Yegoryevsk",
+      "nation": "russia",
+      "lon": 39.03,
+      "lat": 55.38,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "serpukhov",
+      "name": "Serpukhov",
+      "nation": "russia",
+      "lon": 37.41,
+      "lat": 54.92,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "tarusa",
+      "name": "Tarusa",
+      "nation": "russia",
+      "lon": 37.18,
+      "lat": 54.72,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "maloyaroslavets",
+      "name": "Maloyaroslavets",
+      "nation": "russia",
+      "lon": 36.47,
+      "lat": 55.01,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "medyn",
+      "name": "Medyn",
+      "nation": "russia",
+      "lon": 35.86,
+      "lat": 54.97,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "yukhnov",
+      "name": "Yukhnov",
+      "nation": "russia",
+      "lon": 35.23,
+      "lat": 54.74,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "kondrovo",
+      "name": "Kondrovo",
+      "nation": "russia",
+      "lon": 35.93,
+      "lat": 54.8,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kaluga",
+      "name": "Kaluga",
+      "nation": "russia",
+      "lon": 36.26,
+      "lat": 54.51,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "aleksin",
+      "name": "Aleksin",
+      "nation": "russia",
+      "lon": 37.07,
+      "lat": 54.51,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tula",
+      "name": "Tula",
+      "nation": "russia",
+      "lon": 37.62,
+      "lat": 54.19,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "kashira",
+      "name": "Kashira",
+      "nation": "russia",
+      "lon": 38.15,
+      "lat": 54.83,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "zaraysk",
+      "name": "Zaraysk",
+      "nation": "russia",
+      "lon": 38.88,
+      "lat": 54.76,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ryazan",
+      "name": "Ryazan",
+      "nation": "russia",
+      "lon": 39.74,
+      "lat": 54.63,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "venyov",
+      "name": "Venyov",
+      "nation": "russia",
+      "lon": 38.27,
+      "lat": 54.35,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "mikhaylov",
+      "name": "Mikhaylov",
+      "nation": "russia",
+      "lon": 39.0,
+      "lat": 54.23,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stalinogorsk",
+      "name": "Stalinogorsk",
+      "nation": "russia",
+      "lon": 38.29,
+      "lat": 54.01,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "skopin",
+      "name": "Skopin",
+      "nation": "russia",
+      "lon": 39.6,
+      "lat": 53.82,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "yefremov",
+      "name": "Yefremov",
+      "nation": "russia",
+      "lon": 38.12,
+      "lat": 53.14,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "bogoroditsk",
+      "name": "Bogoroditsk",
+      "nation": "russia",
+      "lon": 38.13,
+      "lat": 53.77,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "shchekino",
+      "name": "Shchekino",
+      "nation": "russia",
+      "lon": 37.52,
+      "lat": 53.99,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "plavsk",
+      "name": "Plavsk",
+      "nation": "russia",
+      "lon": 37.28,
+      "lat": 53.71,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "chern",
+      "name": "Chern",
+      "nation": "russia",
+      "lon": 36.9,
+      "lat": 53.45,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mtsensk",
+      "name": "Mtsensk",
+      "nation": "russia",
+      "lon": 36.58,
+      "lat": 53.28,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "belev",
+      "name": "Belev",
+      "nation": "russia",
+      "lon": 36.14,
+      "lat": 53.81,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "odoyev",
+      "name": "Odoyev",
+      "nation": "russia",
+      "lon": 36.69,
+      "lat": 53.94,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kozelsk",
+      "name": "Kozelsk",
+      "nation": "russia",
+      "lon": 35.78,
+      "lat": 54.03,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sukhinichi",
+      "name": "Sukhinichi",
+      "nation": "russia",
+      "lon": 35.34,
+      "lat": 54.1,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "mosalsk",
+      "name": "Mosalsk",
+      "nation": "russia",
+      "lon": 34.99,
+      "lat": 54.49,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kirov",
+      "name": "Kirov",
+      "nation": "russia",
+      "lon": 34.31,
+      "lat": 54.08,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "likhvin",
+      "name": "Likhvin",
+      "nation": "russia",
+      "lon": 36.36,
+      "lat": 54.13,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bolkhov",
+      "name": "Bolkhov",
+      "nation": "russia",
+      "lon": 36.01,
+      "lat": 53.44,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "orel",
+      "name": "Orel",
+      "nation": "russia",
+      "lon": 36.07,
+      "lat": 52.97,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "kimry",
+      "name": "Kimry",
+      "nation": "russia",
+      "lon": 37.36,
+      "lat": 56.87,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    }
+  ],
+  "seaLinks": []
+}

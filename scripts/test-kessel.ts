@@ -6,13 +6,17 @@
  * arrangement of provinces isn't a rule.
  */
 import {
-  ACTIVATIONS, HQS_PER_SIDE, REINFORCE_EVERY, REPLACEMENT_TURNS, WILL_FLOOR,
+  ACTIVATIONS, HQS_PER_SIDE, REPLACEMENT_TURNS,
   activationsUsed, applyMove, createGame, inCommand, legalMoves, view,
 } from '../src/games/kessel/game'
 import { engage } from '../src/games/kessel/combat'
 import { observed } from '../src/games/kessel/intel'
 import { MUD_CYCLE, RAIL_ALLOWANCE, exploitReach, isMud, reachable } from '../src/games/kessel/movement'
-import { STACK_LIMIT, registerMap } from '../src/games/kessel/map'
+import { DOCTRINES, decideFor } from '../src/games/kessel/bot'
+import type { Doctrine } from '../src/games/kessel/bot'
+import { STACK_LIMIT, mapOf, registerMap } from '../src/games/kessel/map'
+import { MISSIONS, starsFor } from '../src/games/kessel/missions'
+import { adapt } from '../src/games/kessel/adapt'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
 import { depthMap, liveDepots, retreatOptions, retreatTargets, supplyStates } from '../src/games/kessel/supply'
 import type { Formation, KesselState, UnitType } from '../src/games/kessel/types'
@@ -84,6 +88,7 @@ function corps(owner: PlayerId, at: string, patch: Partial<Formation> = {}): For
     wear: 0,
     dug: 0,
     supply: 3,
+    cut: 0,
     rest: 0,
     ...patch,
   }
@@ -107,9 +112,7 @@ function stateOn(
       color: i,
       bot: null,
       alive: true,
-      will: 100,
       aims: [],
-      revealed: [],
       home: homeOf(i as PlayerId),
       seen: {},
       hqs: [],
@@ -128,8 +131,9 @@ function stateOn(
     rngState: 12345,
     winner: null,
     nextFormationId: formationSerial,
-    offered: false,
     peace: null,
+    turnLimit: 99,
+    arrivals: [],
     ...patch,
   }
 }
@@ -194,6 +198,39 @@ function split(): Record<string, PlayerId> {
 
   eq(states[near.id], 3, 'a formation near the railhead is fully supplied')
   eq(states[far.id], 2, 'one past the first band is strained, not starving')
+}
+
+// ── a corps cut off lives on its stocks: a turn at its band, then one less a turn ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const owner = split()
+  owner[id(5, 1)] = 0
+  const island = corps(0, id(5, 1))
+  const enemy = corps(1, id(6, 1))
+  let g = stateOn(m.id, owner, [island, enemy])
+  const round = () => {
+    g = applyMove(g, { type: 'commit' })
+    g = applyMove(g, { type: 'commit' })
+    return g.formations.find((f) => f.id === island.id) as Formation
+  }
+
+  let f = round()
+  eq(f.cut, 1, 'a corps with no route home is cut off')
+  eq(f.supply, 3, 'and keeps its band the turn it is cut')
+  ok(
+    legalMoves(g, 0).some((mv) => mv.type === 'order' && mv.formation === island.id && mv.order.type === 'attack'),
+    'so it can still attack out of the ring',
+  )
+  eq(round().supply, 2, 'then it loses a band a turn')
+  eq(round().supply, 1, 'and another')
+  f = round()
+  eq(f.supply, 0, 'until its stocks are gone')
+  eq(f.cut, 4, 'four turns cut off')
+
+  for (let x = 0; x <= 5; x++) g.owner[id(x, 1)] = 0
+  f = round()
+  eq(f.cut, 0, 'reconnected, it is no longer cut off')
+  ok(f.supply > 0, 'and draws from its line again')
 }
 
 // ── a depot serves a finite number of formations ────────────────────
@@ -468,40 +505,6 @@ function split(): Record<string, PlayerId> {
   eq(pass[0].id, fresh.id, 'and it is the one with the most to bring, not the one listed first')
 }
 
-// ── terms: refused, the broken side fights the turn out and can ask again ──
-{
-  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
-  const owner = split()
-  const mine = corps(0, id(3, 1))
-  const theirs = corps(1, id(4, 1))
-  let g = stateOn(m.id, owner, [mine, theirs])
-  g.sides[0].will = WILL_FLOOR
-
-  const first = legalMoves(g, 0)
-  ok(first.some((mv) => mv.type === 'offerTerms'), 'a side at the floor may ask for terms')
-  ok(first.some((mv) => mv.type === 'commit'), 'and may still play the turn')
-  ok(
-    !first.some((mv) => mv.type === 'order' && mv.order.type === 'attack'),
-    'but it can no longer be ordered forward',
-  )
-  ok(
-    first.some((mv) => mv.type === 'order' && mv.order.type === 'move'),
-    'holding, refitting and moving are still its to give',
-  )
-
-  g = applyMove(g, { type: 'offerTerms' })
-  eq(g.phase, 'terms', 'the offer goes to the other side')
-  g = applyMove(g, { type: 'rejectTerms' })
-  eq(g.phase, 'orders', 'refused, the war goes on')
-  eq(g.current, 0, 'and the broken side has its turn')
-  eq(g.sides[1].will, 100 - 8, 'refusing cost the refuser will')
-  ok(!legalMoves(g, 0).some((mv) => mv.type === 'offerTerms'), 'it cannot ask twice in one turn')
-  g = applyMove(g, { type: 'commit' })
-  eq(g.current, 1, 'it commits, and the turn passes')
-  g = applyMove(g, { type: 'commit' })
-  ok(legalMoves(g, 0).some((mv) => mv.type === 'offerTerms'), 'next turn it may ask again')
-}
-
 // ── no order is an order to dig in, and a refit stands until it is done ──
 {
   const m = fixture({ [id(0, 1)]: { depot: 3 } })
@@ -591,42 +594,6 @@ function split(): Record<string, PlayerId> {
   eq(g.formations.find((f) => f.id === field.id)?.strength, 1, 'refitting in the field does not')
 }
 
-// ── reinforcements: a corps by rail, on the calendar, to the rearmost railhead ──
-{
-  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
-  let g = stateOn(m.id, split(), [corps(0, id(2, 1)), corps(1, id(4, 1))])
-  const before = g.formations.length
-  for (let t = 1; t < REINFORCE_EVERY; t++) {
-    g = applyMove(g, { type: 'commit' })
-    g = applyMove(g, { type: 'commit' })
-  }
-  eq(g.formations.length, before + 2, 'each side receives a corps when the draft falls due')
-  ok(g.formations.some((f) => f.owner === 0 && f.at === id(0, 1)), 'it detrains at the railhead nearest home')
-}
-
-// ── war aims: dealt off a public menu, hidden until given away ──
-{
-  const m = fixture({
-    [id(0, 1)]: { depot: 3, vp: 2 },
-    [id(6, 1)]: { depot: 3, vp: 2 },
-    [id(5, 0)]: { vp: 1 },
-  })
-  const owner = split()
-  const far = corps(0, id(2, 0))
-  const a = corps(0, id(4, 0))
-  const b = corps(0, id(6, 0))
-  const c = corps(0, id(5, 1))
-  owner[id(4, 0)] = 0
-  owner[id(6, 0)] = 0
-  owner[id(5, 1)] = 0
-  let g = stateOn(m.id, owner, [far, a, b, c, corps(1, id(6, 2))])
-  g.sides[0].aims = [id(5, 0), id(6, 1)]
-
-  g = applyMove(g, { type: 'commit' })
-  ok(g.sides[0].revealed.includes(id(5, 0)), 'three formations beside an aim give it away')
-  ok(!g.sides[0].revealed.includes(id(6, 1)), 'the one nobody has approached stays hidden')
-}
-
 // ── fog: what an enemy counter is worth is known on contact, or under recon ──
 {
   const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
@@ -714,59 +681,31 @@ function split(): Record<string, PlayerId> {
 }
 
 // ── each side opens with its headquarters on its own ground ──
-{
-  const m = fixture({ [id(0, 1)]: { depot: 3, vp: 2 }, [id(6, 1)]: { depot: 3, vp: 2 } })
-  const g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 3, mapId: m.id })
+for (const mission of MISSIONS) {
+  const g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], scenario: mission.id })
   ok(
     g.sides.every((side) => side.hqs.length === HQS_PER_SIDE && side.hqs.every((p) => g.owner[p] === side.id)),
-    'each side opens with its headquarters on its own ground',
+    `${mission.id}: each side opens with its headquarters on its own ground`,
   )
 }
 
-// ── the peace says by how much ──
+// ── the result says by how much ──
 {
   const m = fixture({ [id(0, 1)]: { depot: 3, vp: 2 }, [id(6, 1)]: { depot: 3, vp: 2 } })
   const owner = split()
   owner[id(6, 1)] = 0
-  let g = stateOn(m.id, owner, [corps(0, id(1, 1)), corps(1, id(5, 1))])
-  g.sides[0].aims = [id(6, 1)]
-  g.sides[1].aims = [id(0, 1)]
-  g.sides[0].will = WILL_FLOOR
-  g.sides[1].will = WILL_FLOOR
-  g = applyMove(g, { type: 'offerTerms' })
-  eq(g.phase, 'gameOver', 'two broken sides end the war')
-  eq(g.winner, 0, 'the side holding its aims wins it')
-  eq(g.peace?.verdict, 'decisive', 'and all of them held against none is a decisive peace')
+  let g = stateOn(m.id, owner, [corps(0, id(1, 1)), corps(1, id(5, 1))], { turnLimit: 1 })
+  for (const side of g.sides) side.aims = [id(6, 1), id(0, 1)]
+  g = applyMove(g, { type: 'commit' })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.phase, 'gameOver', 'the battle ends at its limit')
+  eq(g.winner, 0, 'the side holding the objectives wins it')
+  eq(g.peace?.verdict, 'decisive', 'and all of them held against none is decisive')
 }
 
-// ── a whole game runs to a settled peace ────────────────────────────
+// ── a whole battle runs to a settled result ────────────────────────
 {
-  const m = fixture({
-    [id(0, 1)]: { depot: 3, vp: 2 },
-    [id(6, 1)]: { depot: 3, vp: 2 },
-    [id(2, 0)]: { vp: 1 },
-    [id(4, 2)]: { vp: 1 },
-  })
-  let g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 7, mapId: m.id })
-
-  ok(g.formations.filter((f) => f.owner === 0).length > 0, 'each side deploys an army')
-  ok(
-    g.sides.every((side) => side.aims.length > 0 && side.aims.every((p) => m.province[p].vp > 0 && g.owner[p] !== side.id)),
-    'and is dealt war aims, all of them ground worth something on the far side',
-  )
-  ok(
-    g.sides.every((side) => side.revealed.length === 0),
-    'which the enemy knows nothing of yet',
-  )
-  const overstacked = m.ids.filter(
-    (p) => g.formations.filter((f) => f.at === p).length > STACK_LIMIT[m.province[p].terrain],
-  )
-  eq(overstacked.length, 0, 'and no province is deployed into beyond what it will hold')
-  ok(
-    m.ids.some((p) => g.owner[p] === 0 && (m.adjacency[p] ?? []).some((n) => g.owner[n] === 1)
-      && g.formations.some((f) => f.at === p && f.owner === 0)),
-    'the line is manned at the point of contact, not left in the rear',
-  )
+  let g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], seed: 7, scenario: MISSIONS[0].id })
   let steps = 0
   let everStuck = false
   let sinceCommit = 0
@@ -784,12 +723,175 @@ function split(): Record<string, PlayerId> {
     g = applyMove(g, pick)
     steps++
   }
-  ok(!everStuck, 'the move generator is never empty while the war is on')
+  ok(!everStuck, 'the move generator is never empty while the battle is on')
 
   const v = view(g)
   ok(v.standing.every((n) => n >= 0 && n <= 1), 'standing is a share of the win condition')
   ok(Math.abs(v.standing.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'and the shares sum to one')
-  ok(steps < 60000, 'a war reaches a settled peace rather than running forever')
+  ok(steps < 60000, 'a battle reaches a settled result rather than running forever')
+}
+
+// ── a mission settles when its last turn has been fought ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3, vp: 2 } })
+  let g = stateOn(m.id, split(), [corps(0, id(1, 1)), corps(1, id(5, 1))], { turnLimit: 2 })
+  for (const side of g.sides) side.aims = [id(6, 1)]
+  for (let i = 0; i < 3 && g.phase !== 'gameOver'; i++) {
+    g = applyMove(g, { type: 'commit' })
+    g = applyMove(g, { type: 'commit' })
+  }
+  eq(g.phase, 'gameOver', 'the battle ends once the limit has been fought out')
+  eq(g.turn, 3, 'and not a turn before')
+  eq(g.winner, 1, 'won by whoever holds the shared objective')
+}
+
+// ── what arrives is the mission's timetable, and nothing else ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  let g = stateOn(m.id, split(), [corps(0, id(1, 1)), corps(1, id(5, 1))], {
+    arrivals: [{ turn: 2, side: 1, type: 'armour' }],
+  })
+  g = applyMove(g, { type: 'commit' })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.formations.filter((f) => f.owner === 1 && f.type === 'armour').length, 1, 'what is due arrives on its turn')
+  eq(g.formations.filter((f) => f.owner === 0).length, 1, 'and nothing else does')
+}
+
+// ── a reserve can appear where it stood all along, if its side still holds the ground ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3 } })
+  const owner = split()
+  let g = stateOn(m.id, owner, [corps(0, id(1, 1)), corps(1, id(5, 1))], {
+    arrivals: [
+      { turn: 2, side: 1, type: 'armour', at: id(4, 0) },
+      { turn: 2, side: 1, type: 'armour', at: id(2, 0) },
+    ],
+  })
+  g = applyMove(g, { type: 'commit' })
+  g = applyMove(g, { type: 'commit' })
+  const armour = g.formations.filter((f) => f.owner === 1 && f.type === 'armour')
+  ok(armour.some((f) => f.at === id(4, 0)), 'a reserve appears where it was held')
+  ok(armour.some((f) => f.at === id(6, 1)), 'and one due on ground the enemy holds comes by rail instead')
+}
+
+// ── a battle to get corps out is won by getting them out ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { depot: 3, vp: 2 } })
+  const owner = split()
+  owner[id(5, 0)] = 0
+  const home = corps(0, id(1, 1))
+  const out = corps(0, id(2, 1))
+  const trapped = corps(0, id(5, 0))
+  const g0 = stateOn(m.id, owner, [home, out, trapped, corps(1, id(5, 1)), corps(1, id(6, 0))], {
+    turnLimit: 1,
+    save: { side: 0, pocket: [out.id, trapped.id], stars: [1, 2, 2] },
+  })
+  for (const side of g0.sides) side.aims = [id(6, 1)]
+  let g = applyMove(g0, { type: 'commit' })
+  g = applyMove(g, { type: 'commit' })
+  eq(g.peace?.saved, 1, 'only the corps it had to save count, and only those with a route home')
+  eq(g.winner, 0, 'and saving enough wins it, though the enemy holds the objective')
+  eq(starsFor(g, 0, { ...MISSIONS[0], save: { pocket: [], stars: [1, 2, 2] } }), 1, 'starred by how many got out')
+}
+
+// ── a campaign carries its army: survivors fill the slots, and the dead leave them empty ──
+{
+  const mission = MISSIONS[0]
+  const seats = [{ name: 'A', bot: null }, { name: 'B', bot: null }]
+  const written = createGame({ seats, scenario: mission.id })
+  const g = createGame({ seats, scenario: mission.id, army: [{ type: 'armour', strength: 2 }, { type: 'recon', strength: 1 }] })
+  const mine = g.formations.filter((f) => f.owner === mission.player)
+  eq(mine.length, 2 + mission.formations.filter((f) => f.side === mission.player && f.fresh).length,
+    'only the survivors, and the fresh draft, are deployed')
+  eq(mine.find((f) => f.type === 'armour')?.strength, 2, 'with the strength they came out with')
+  const firstArmour = mission.formations.findIndex((f) => f.side === mission.player && f.type === 'armour')
+  ok(mine.some((f) => f.id === firstArmour), 'in the first slot of their type, keeping its id')
+  eq(
+    g.formations.filter((f) => f.owner !== mission.player).map((f) => `${f.id}@${f.at}`).join(),
+    written.formations.filter((f) => f.owner !== mission.player).map((f) => `${f.id}@${f.at}`).join(),
+    'and the enemy is deployed as written',
+  )
+}
+
+// ── a side holding everything it came for stays on it ──
+{
+  // No depot near the aim, so nothing but the aim itself can hold the corps back.
+  const m = fixture({ [id(0, 1)]: { depot: 3 }, [id(6, 1)]: { vp: 1 } })
+  const g = stateOn(m.id, split(), [corps(0, id(0, 0)), corps(1, id(5, 1))], { current: 1 })
+  for (const side of g.sides) side.aims = [id(6, 1)]
+  const attrition = DOCTRINES.find((d) => d.key === 'attrition') as Doctrine
+  const move = decideFor(attrition, g, 1, () => 0.5)
+  const to = move.type === 'order' && move.order.type === 'move' ? move.order.to : null
+  eq(to, id(6, 1), 'it stands on what it came for rather than marching into ground it never wanted')
+}
+
+// ── a cautious doctrine walks out of a closing ring; the war's doctrines stand ──
+{
+  const m = fixture({ [id(0, 1)]: { depot: 3 } })
+  const owner = split()
+  owner[id(4, 0)] = 0
+  owner[id(4, 2)] = 0
+  const g = stateOn(
+    m.id,
+    owner,
+    [corps(0, id(3, 1)), corps(0, id(4, 0)), corps(0, id(4, 2)), corps(1, id(4, 1), { dug: 3 })],
+    { current: 1 },
+  )
+  for (const side of g.sides) side.aims = [id(5, 1)]
+  const attrition = DOCTRINES.find((d) => d.key === 'attrition') as Doctrine
+  const order = (d: Doctrine) => {
+    const mv = decideFor(d, g, 1, () => 0.5)
+    return mv.type === 'order' ? mv.order : null
+  }
+  eq(order(attrition)?.type, 'hold', 'dug in with one way out, the war’s doctrine holds')
+  const out = order({ ...attrition, caution: 3 })
+  eq(out?.type === 'move' ? out.to : null, id(5, 1), 'a cautious one takes the way out')
+  const t = adapt(attrition, { rings: 0.4 })
+  ok((t.doctrine.caution ?? 0) > 0 && t.lesson !== null, 'and caution is what a player who keeps pocketing it teaches')
+}
+
+// ── every mission deploys legally ──
+for (const mission of MISSIONS) {
+  const g = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], scenario: mission.id })
+  const mm = mapOf(g.mapId)
+  ok(g.formations.every((f) => g.owner[f.at] === f.owner), `${mission.id}: every formation starts on its own ground`)
+  ok(
+    mm.ids.every((p) => g.formations.filter((f) => f.at === p).length <= STACK_LIMIT[mm.province[p].terrain]),
+    `${mission.id}: and within what the terrain will hold`,
+  )
+  ok(
+    mission.aims.every((p) => mm.province[p]?.vp > 0),
+    `${mission.id}: its objectives are worth something and known to both sides`,
+  )
+  ok(
+    mission.home.every((h, side) => h.length > 0 && h.every((p) => g.owner[p] === side)),
+    `${mission.id}: each side's supply enters on its own ground`,
+  )
+  // A corps that opens short of supply cannot attack on turn one, which reads as a
+  // rule the player broke rather than a map that was drawn wrong.
+  // Read off the line rather than the counters: only side 0 has drawn supply before its first turn.
+  // The corps a breakout is about are cut off by design.
+  const line = supplyStates(mm, g, mission.player)
+  const pocket = new Set(mission.save?.pocket ?? [])
+  const short = g.formations
+    .filter((f) => f.owner === mission.player && !pocket.has(f.id) && line[f.id] < 3)
+    .map((f) => f.at)
+  eq(short.join(','), '', `${mission.id}: the player's army opens in full supply`)
+  ok(
+    mm.ids.every((p) => (mm.adjacency[p] ?? []).every((n) => (mm.adjacency[n] ?? []).includes(p))),
+    `${mission.id}: its map's borders run both ways`,
+  )
+  const hard = createGame({ seats: [{ name: 'A', bot: null }, { name: 'B', bot: null }], scenario: mission.id, level: 2 })
+  eq(
+    hard.turnLimit,
+    mission.turns + (mission.destroy ? 2 : -2),
+    `${mission.id}: two levels up it is two turns shorter, or in a defence two turns longer`,
+  )
+  eq(
+    hard.arrivals?.filter((a) => a.turn === 2 && a.side !== mission.player).length,
+    (mission.arrivals ?? []).filter((a) => a.turn === 2 && a.side !== mission.player).length + 2,
+    `${mission.id}: and the enemy has two more corps coming`,
+  )
 }
 
 console.log(`\n${passed} assertions passed`)

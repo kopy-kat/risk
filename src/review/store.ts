@@ -9,7 +9,9 @@
 import type { SeatConfig } from '../engine/game'
 import { rulesFor } from '../games'
 import type { Move as RiskMove, PlayerId } from '../engine/types'
-import type { Move as KesselMove } from '../games/kessel/types'
+import type { Tells } from '../games/kessel/adapt'
+import { MAX_LEVEL } from '../games/kessel/missions'
+import type { Carried, Move as KesselMove } from '../games/kessel/types'
 
 /** A move of whichever game the record names — never a mixture. */
 export type RecordedMove = RiskMove | KesselMove
@@ -35,6 +37,14 @@ export interface GameRecord {
   seats: SeatConfig[]
   /** Which game was played. Absent means `'risk'`. */
   game?: string
+  /** the scenario it was set up from, when not the game's default */
+  scenario?: string
+  /** the level the scenario was set at, when above the first */
+  level?: number
+  /** Kessel: the army carried in from the campaign's last battle, which the setup depends on */
+  army?: { type: string; strength: number }[]
+  /** Kessel: the human side's tells over the game, which is what the next enemy learns from */
+  tells?: Tells | null
   moves: RecordedMove[]
   /**
    * Indices of moves the app played on a human's behalf, i.e. "auto-place rest".
@@ -55,7 +65,7 @@ export interface GameRecord {
  * that looks plausible and is wrong.
  */
 export const isReplayable = (r: GameRecord): boolean =>
-  r.schema === SCHEMA && r.rules === rulesFor(r.game)
+  r.schema === SCHEMA && r.rules === rulesFor(r.game, r.scenario)
 
 function read(): GameRecord[] {
   try {
@@ -84,6 +94,66 @@ function write(games: GameRecord[]): void {
   }
 }
 
+/**
+ * Campaign progress, kept apart from the games: records are evicted past
+ * `MAX_GAMES`, and a campaign half fought should not fall away with them.
+ */
+const CAMPAIGN_KEY = 'risk.campaigns.v1'
+
+export interface CampaignProgress {
+  /** the run under way: which battle is next, the army going into it, and the stars won so far */
+  run: { at: number; army: Carried[] | null; stars: number[] }
+  /** the most stars a finished run has won */
+  best: number
+  level: number
+  /** the furthest battle any run has reached, which is how far practice is open */
+  reached: number
+}
+
+const FRESH: CampaignProgress = { run: { at: 0, army: null, stars: [] }, best: 0, level: 0, reached: 0 }
+
+function allCampaigns(): Record<string, CampaignProgress> {
+  try {
+    return JSON.parse(localStorage.getItem(CAMPAIGN_KEY) ?? '{}') as Record<string, CampaignProgress>
+  } catch {
+    return {}
+  }
+}
+
+export const campaignProgress = (id: string): CampaignProgress => allCampaigns()[id] ?? FRESH
+
+function saveCampaign(id: string, progress: CampaignProgress): CampaignProgress {
+  try {
+    localStorage.setItem(CAMPAIGN_KEY, JSON.stringify({ ...allCampaigns(), [id]: progress }))
+  } catch {
+    /* storage is unusable; the campaign simply doesn't advance */
+  }
+  return progress
+}
+
+/**
+ * A battle won and moved on from: its stars and its survivors go into the run. The
+ * last battle closes the run — scored against the best, and raising the campaign a
+ * level once it has won two thirds of the stars it could have — and the next run
+ * starts from the top.
+ */
+export function advanceCampaign(id: string, battles: number, stars: number, army: Carried[]): CampaignProgress {
+  const p = campaignProgress(id)
+  const run = { at: p.run.at + 1, army, stars: [...p.run.stars, stars] }
+  const reached = Math.max(p.reached, run.at)
+  if (run.at < battles) return saveCampaign(id, { ...p, run, reached })
+  const total = run.stars.reduce((a, b) => a + b, 0)
+  const mastered = total >= Math.ceil(battles * 3 * (2 / 3))
+  return saveCampaign(id, {
+    run: FRESH.run,
+    best: Math.max(p.best, total),
+    level: mastered ? Math.min(MAX_LEVEL, p.level + 1) : p.level,
+    reached,
+  })
+}
+
+export const restartCampaign = (id: string) => saveCampaign(id, { ...campaignProgress(id), run: FRESH.run })
+
 /** Newest first. */
 export function listGames(): GameRecord[] {
   return read().sort((a, b) => b.savedAt - a.savedAt)
@@ -102,7 +172,7 @@ export function saveGame(record: Omit<GameRecord, 'schema' | 'rules' | 'savedAt'
   const full: GameRecord = {
     ...record,
     schema: SCHEMA,
-    rules: rulesFor(record.game),
+    rules: rulesFor(record.game, record.scenario),
     savedAt: Date.now(),
   }
   const rest = read().filter((g) => g.id !== full.id)

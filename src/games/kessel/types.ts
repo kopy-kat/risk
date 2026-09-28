@@ -1,5 +1,6 @@
 import type { PlayerId } from '../../engine/types'
 import type { ProvinceId } from './map'
+import type { Arrival, Save } from './missions'
 
 export type FormationId = number
 
@@ -28,8 +29,10 @@ export interface Formation {
   wear: number
   /** turns spent holding, capped — feeds the defence multiplier */
   dug: number
-  /** last resolved supply state, 0–3. Recomputed at the start of every turn. */
+  /** supply state 0–3, set at the start of each of its side's turns — see `supplyNext` */
   supply: number
+  /** turns in a row it has started with no route home, living on what it carries */
+  cut: number
   /**
    * Consecutive turns spent refitting on a live railhead while under strength.
    * Replacements arrive by rail, so a corps only rebuilds where the trains stop.
@@ -49,7 +52,13 @@ export type Order =
   /** trade the turn for cohesion — the deliberate choice to stop attacking. Stands until cohesion is full. */
   | { type: 'refit' }
 
-export type Phase = 'orders' | 'resolve' | 'terms' | 'gameOver'
+export type Phase = 'orders' | 'resolve' | 'gameOver'
+
+/** A corps carried out of one battle of a campaign into the next. */
+export interface Carried {
+  type: UnitType
+  strength: number
+}
 
 /** What one side last knew of an enemy formation it could not currently see. */
 export interface Sighting {
@@ -67,19 +76,8 @@ export interface Side {
   color: number
   bot: string | null
   alive: boolean
-  /**
-   * 0–100. Falls with formations and objectives lost, rises with objectives
-   * taken, and decays every turn regardless. Below `willFloor` the side must
-   * offer terms, which is what stops the last third of a game being a grind.
-   */
-  will: number
-  /**
-   * Provinces this side is fighting for; scored at the peace, not at conquest.
-   * Dealt from a public menu and hidden from the enemy until `revealed`.
-   */
+  /** the battle's objectives, the same for both sides, scored when it ends */
   aims: ProvinceId[]
-  /** the aims the enemy has found out about: attacked, taken, or massed against */
-  revealed: ProvinceId[]
   /**
    * Where this side's supply enters the map. Depots are railheads, not wells —
    * one that cannot trace a line home through friendly ground issues nothing.
@@ -99,11 +97,13 @@ export interface Side {
 export type Verdict = 'decisive' | 'clear' | 'narrow' | 'stalemate'
 
 export interface Peace {
-  /** each side's share of its own war aims held, by objective value */
+  /** each side's share of the objectives held, by value */
   aims: number[]
-  /** objective value each side holds anywhere, which decides a tie on aims */
+  /** value each side holds anywhere, which decides a tie on objectives */
   ground: number[]
   verdict: Verdict
+  /** in a mission with something to save: how many of it ended with a route home */
+  saved?: number
 }
 
 export interface KesselState {
@@ -134,10 +134,14 @@ export interface KesselState {
   rngState: number
   winner: PlayerId | null
   nextFormationId: FormationId
-  /** terms were offered this turn and refused, so the side must fight the turn out */
-  offered: boolean
-  /** how the war ended, once it has */
+  /** how the battle ended, once it has */
   peace: Peace | null
+  /** the battle settles when this turn has been fought out */
+  turnLimit: number
+  /** what arrives by rail, and when */
+  arrivals: Arrival[]
+  /** the player's corps that have to get out, when that is what the battle is for — see `Mission.save` */
+  save?: Save & { side: PlayerId }
 }
 
 export interface LogEntry {
@@ -154,6 +158,3 @@ export type Move =
   | { type: 'moveHq'; hq: number; to: ProvinceId | null }
   /** resolve every staged order at once — the one button that ends a turn */
   | { type: 'commit' }
-  | { type: 'offerTerms' }
-  | { type: 'acceptTerms' }
-  | { type: 'rejectTerms' }

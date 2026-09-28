@@ -121,8 +121,8 @@ function studyKessel(record: GameRecord) {
 
   /**
    * One row per sampled turn, read at the start of the West's orders: formations,
-   * steps and provinces, then war aims held, will, and formations cut off. Ground
-   * alone says little in a war decided by pockets — a side can hold its whole line
+   * steps and provinces, then objectives held and formations cut off. Ground
+   * alone says little in a battle decided by pockets — a side can hold its whole line
    * with a third of its army starving behind it.
    */
   const col = (s: string) => s.padEnd(32)
@@ -133,11 +133,11 @@ function studyKessel(record: GameRecord) {
     return col(
       `${mine.length}/${mine.reduce((n, f) => n + f.strength, 0)}/${m.ids.filter((id) => s.owner[id] === p).length}` +
         ` ${side.aims.filter((id) => s.owner[id] === p).length}/${side.aims.length}` +
-        ` ${Math.round(side.will)} ${mine.filter((f) => supply[f.id] === 0).length}`,
+        ` ${mine.filter((f) => supply[f.id] === 0).length}`,
     )
   }
   console.log(`\n   turn   ${record.seats.map((s) => col(s.name.slice(0, 12))).join('')}`)
-  console.log(`          ${record.seats.map(() => col('corps/steps/prov aims will cut')).join('')}`)
+  console.log(`          ${record.seats.map(() => col('corps/steps/prov aims cut')).join('')}`)
   const seen = new Set<number>()
   const rows: Array<[number, string]> = []
   for (const s of r.states) {
@@ -149,7 +149,7 @@ function studyKessel(record: GameRecord) {
   for (const [turn, row] of rows.filter(([t], i) => t % EVERY === 0 || i === rows.length - 1))
     console.log(`   ${String(turn).padStart(4)}   ${row}`)
   console.log(`   final  ${record.seats.map((_, p) => cell(last, p)).join('')}`)
-  for (const e of last.log.filter((x) => /terms|war aims|stalemate/.test(x.text)))
+  for (const e of last.log.filter((x) => /wins the battle|stalemate/.test(x.text)))
     console.log(`   T${e.turn}  ${e.player === null ? '' : `${record.seats[e.player].name} `}${e.text}`)
 
   if (!wantReview) return
