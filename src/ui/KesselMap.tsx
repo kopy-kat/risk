@@ -98,7 +98,7 @@ export const TERRAIN_NAME: Record<Terrain, string> = {
  * a culminating point rather than a death sentence — which is why "cannot
  * attack" is attached to strained and not repeated below it.
  */
-export const SUPPLY_NAME = ['Cut off', 'Failing', 'Strained', 'Supplied'] as const
+export const SUPPLY_NAME = ['Exhausted', 'Failing', 'Strained', 'Supplied'] as const
 export const SUPPLY_COST_NAME = ['dying', 'combat halved', 'cannot attack', ''] as const
 
 const TYPE_NAME: Record<Formation['type'], string> = {
@@ -304,15 +304,11 @@ export function KesselMap({
     [m],
   )
 
-  /** Who is fighting for what — as far as the viewer knows. The enemy's aims appear as they are given away. */
   const claim = useMemo(() => {
     const out: Record<ProvinceId, PlayerId> = {}
-    for (const side of state.sides) {
-      const known = viewer === null || side.id === viewer ? side.aims : side.revealed
-      for (const p of known) out[p] = side.id
-    }
+    for (const side of state.sides) for (const p of side.aims) out[p] = side.id
     return out
-  }, [state.sides, viewer])
+  }, [state.sides])
 
   const terrain = useMemo(
     () =>
@@ -630,6 +626,7 @@ export function KesselMap({
                     order={viewer === null || f.owner === viewer ? state.orders[f.id] : undefined}
                     sighting={hidden ? (viewer === null ? null : state.sides[viewer].seen[f.id] ?? null) : undefined}
                     turn={state.turn}
+                    saving={!!state.save?.pocket.includes(f.id)}
                   />
                 )
               }),
@@ -701,6 +698,7 @@ export function KesselMap({
                   {f.strength} str · {Math.round(f.cohesion)} coh
                   {f.rest > 0 ? ` · rebuilding ${f.rest}/${REPLACEMENT_TURNS}` : ''}
                   {adrift.has(f.id) ? ' · out of command' : ''}
+                  {f.cut > 0 ? ` · cut off ${f.cut}` : ''}
                 </span>
                 <span className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</span>
               </div>
@@ -751,7 +749,7 @@ export function KesselMap({
 }
 
 function Counter({
-  f, x, y, color, selected, adrift, order, sighting, turn,
+  f, x, y, color, selected, adrift, order, sighting, turn, saving,
 }: {
   f: Formation
   x: number
@@ -767,6 +765,8 @@ function Counter({
    */
   sighting: Sighting | null | undefined
   turn: number
+  /** one of the corps the battle is about getting out */
+  saving: boolean
 }) {
   const x0 = x - CW / 2
   const y0 = y - CH / 2
@@ -796,10 +796,11 @@ function Counter({
     )
   }
 
-  const cut = f.supply === 0
+  const cut = f.cut > 0
   return (
     <g className={`kcounter s${f.supply} ${selected ? 'sel' : ''} ${adrift ? 'adrift' : ''}`} style={{ ['--c' as string]: color }}>
       {selected && <rect className="halo" x={x0 - 3} y={y0 - 3} width={CW + 6} height={CH + 6} rx={3} />}
+      {saving && <rect className="saving" x={x0 - 1.8} y={y0 - 1.8} width={CW + 3.6} height={CH + 3.6} rx={2.4} />}
       <rect className="body" x={x0} y={y0} width={CW} height={CH} rx={1.5} />
       {cut && <rect className="cut" x={x0} y={y0} width={CW} height={CH} rx={1.5} fill="url(#k-cut)" />}
 

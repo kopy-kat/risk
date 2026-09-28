@@ -26,7 +26,7 @@
       "lat": 50.7,
       "terrain": "hill",
       "depot": 0,
-      "vp": 0
+      "vp": 1
     },
     {
       "id": "dunkirk",
@@ -36,7 +36,7 @@
       "lat": 51.03,
       "terrain": "urban",
       "depot": 1,
-      "vp": 0
+      "vp": 1
     },
     {
       "id": "abbeville",
@@ -86,7 +86,7 @@
       "lat": 50.29,
       "terrain": "plain",
       "depot": 0,
-      "vp": 0
+      "vp": 1
     },
     {
       "id": "peronne",
@@ -396,7 +396,7 @@
       "lat": 50.88,
       "terrain": "plain",
       "depot": 0,
-      "vp": 0
+      "vp": 1
     },
     {
       "id": "charleroi",
@@ -416,7 +416,7 @@
       "lat": 50.47,
       "terrain": "urban",
       "depot": 1,
-      "vp": 0
+      "vp": 1
     },
     {
       "id": "dinant",
@@ -456,7 +456,7 @@
       "lat": 50.63,
       "terrain": "urban",
       "depot": 1,
-      "vp": 0
+      "vp": 1
     },
     {
       "id": "marche",

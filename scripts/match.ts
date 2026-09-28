@@ -17,7 +17,7 @@ import { meanTells, tellsOn } from '../src/games/kessel/adapt'
 import type { Tells } from '../src/games/kessel/adapt'
 import { createGame as createKessel } from '../src/games/kessel/game'
 import { mapOf } from '../src/games/kessel/map'
-import { missionOf, starsFor } from '../src/games/kessel/missions'
+import { corpsLost, missionOf, starsFor } from '../src/games/kessel/missions'
 import { stepBot as stepKessel } from '../src/games/kessel/play'
 import '../src/games/kessel'
 
@@ -37,7 +37,7 @@ export interface Job {
    */
   policies?: Record<string, Policy>
   /**
-   * Kessel's equivalent: doctrines built for this game alone. Six numbers, so
+   * Kessel's equivalent: doctrines built for this game alone. Seven numbers, so
    * they structured-clone to a worker for free.
    */
   doctrines?: Record<string, Doctrine>
@@ -57,6 +57,8 @@ export interface Outcome {
   aims?: number[]
   /** Kessel: each seat's tells, read off the board it left after every commit */
   tells?: (Tells | null)[]
+  /** Kessel: corps each seat lost outright */
+  lost?: number[]
 }
 
 /** Everything derives from `seed`, so the same job always produces the same game. */
@@ -94,7 +96,14 @@ function playKessel({ order, seed, turnCap, doctrines, scenario, level }: Job): 
   }
   const mission = scenario ? missionOf(scenario) : null
   const stars = mission ? starsFor(s, mission.player, mission) : undefined
-  return { winner: s.winner, turns: s.turn, stars, aims: s.peace?.aims, tells: seen.map(meanTells) }
+  return {
+    winner: s.winner,
+    turns: s.turn,
+    stars,
+    aims: s.peace?.aims,
+    tells: seen.map(meanTells),
+    lost: order.map((_, p) => corpsLost(s, p)),
+  }
 }
 
 function playRisk({ order, seed, turnCap, policies }: Job): Outcome {

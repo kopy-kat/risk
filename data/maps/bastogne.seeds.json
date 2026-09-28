@@ -44,7 +44,7 @@
     { "id": "gerolstein", "name": "Gerolstein", "nation": "germany", "lon": 6.66, "lat": 50.22, "terrain": "hill", "depot": 2, "vp": 0 },
     { "id": "dasburg", "name": "Dasburg", "nation": "germany", "lon": 6.13, "lat": 50.05, "terrain": "forest", "depot": 0, "vp": 0 },
     { "id": "clervaux", "name": "Clervaux", "nation": "luxembourg", "lon": 6.03, "lat": 50.05, "terrain": "forest", "depot": 0, "vp": 0 },
-    { "id": "wiltz", "name": "Wiltz", "nation": "luxembourg", "lon": 5.93, "lat": 49.97, "terrain": "forest", "depot": 0, "vp": 0 },
+    { "id": "wiltz", "name": "Wiltz", "nation": "luxembourg", "lon": 5.93, "lat": 49.97, "terrain": "forest", "depot": 1, "vp": 0 },
     { "id": "vianden", "name": "Vianden", "nation": "luxembourg", "lon": 6.21, "lat": 49.93, "terrain": "hill", "depot": 0, "vp": 0 },
     { "id": "ettelbruck", "name": "Ettelbruck", "nation": "luxembourg", "lon": 6.1, "lat": 49.85, "terrain": "plain", "depot": 0, "vp": 0 },
     { "id": "echternach", "name": "Echternach", "nation": "luxembourg", "lon": 6.42, "lat": 49.81, "terrain": "hill", "depot": 0, "vp": 0 },

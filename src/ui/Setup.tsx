@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react'
 import type { SeatConfig } from '../engine/game'
 import { DEFAULT_GAME, GAMES, GAME_BY_KEY } from '../games'
-import { MISSIONS, MISSION_BY_ID, missionKey, starLine } from '../games/kessel/missions'
-import { deleteGame, isReplayable, listGames, missionLevels, missionStars } from '../review/store'
+import { CAMPAIGNS } from '../games/kessel/campaigns'
+import { MISSION_BY_ID, levelled } from '../games/kessel/missions'
+import { campaignProgress, deleteGame, isReplayable, listGames, restartCampaign } from '../review/store'
 
 import type { GameRecord } from '../review/store'
 import { PALETTE_NAMES, playerColor } from './colors'
 
 interface Props {
-  onStart(seats: SeatConfig[], game: string, scenario?: string): void
+  onStart(seats: SeatConfig[]): void
+  /** a Kessel battle: the campaign's next, or one already reached, fought as practice */
+  onCampaign(scenario: string, practice: boolean): void
   onReview(id: string): void
 }
 
@@ -34,7 +37,7 @@ const defaultBot = (game: string) => {
   return bots[Math.min(1, bots.length - 1)].key
 }
 
-export function Setup({ onStart, onReview }: Props) {
+export function Setup({ onStart, onCampaign, onReview }: Props) {
   const [game, setGame] = useState(DEFAULT_GAME)
   const [count, setCount] = useState(4)
   const [saved, setPast] = useState<GameRecord[]>(() => listGames())
@@ -42,14 +45,14 @@ export function Setup({ onStart, onReview }: Props) {
   const [seats, setSeats] = useState<Seat[]>(
     PALETTE_NAMES.map((name, i) => ({ name, isBot: i > 0 })),
   )
-  const [stars] = useState(missionStars)
-  const [levels] = useState(missionLevels)
-  // A mission is open once the one before it has been won. Start on the first
-  // one not yet won, which is where the ladder left off.
-  const open = MISSIONS.map((_, i) => i === 0 || (stars[missionKey(MISSIONS[i - 1].id)] ?? 0) > 0)
-  const [mission, setMission] = useState(
-    () => (MISSIONS.find((x, i) => open[i] && !stars[missionKey(x.id)]) ?? MISSIONS[0]).id,
-  )
+  const [campaign, setCampaign] = useState(CAMPAIGNS[0].id)
+  /** a battle already reached, picked to practise; null is the campaign's next */
+  const [practise, setPractise] = useState<string | null>(null)
+  const readProgress = () => Object.fromEntries(CAMPAIGNS.map((c) => [c.id, campaignProgress(c.id)]))
+  const [progress, setProgress] = useState(readProgress)
+  const chosen = CAMPAIGNS.find((c) => c.id === campaign) ?? CAMPAIGNS[0]
+  const run = progress[chosen.id].run
+  const upNext = chosen.missions[run.at]
 
   // Only games of the kind you're picking — a Risk record under the Kessel
   // heading is a game you cannot open from there anyway.
@@ -95,24 +98,75 @@ export function Setup({ onStart, onReview }: Props) {
 
         {game === 'kessel' && (
           <div className="field gamepick missions">
-            <span className="mono-label">Missions</span>
-            {MISSIONS.map((x, i) => (
-              <button
-                key={x.id}
-                className={`pickcard ${x.id === mission ? 'on' : ''}`}
-                disabled={!open[i]}
-                onClick={() => setMission(x.id)}
-              >
-                <span className="pickname">
-                  <span className="nm">{x.name}</span>
-                  <span className="status">{open[i] ? starLine(stars[missionKey(x.id)] ?? 0) : 'locked'}</span>
-                </span>
-                <span className="bl">
-                  {x.date} · {x.sides[x.player]} · {x.turns - (levels[missionKey(x.id)] ?? 0)} turns
-                  {(levels[missionKey(x.id)] ?? 0) > 0 && ` · level ${(levels[missionKey(x.id)] ?? 0) + 1}`}
-                </span>
-              </button>
-            ))}
+            <span className="mono-label">Campaigns</span>
+            {CAMPAIGNS.map((c) => {
+              const p = progress[c.id]
+              return (
+                <button
+                  key={c.id}
+                  className={`pickcard ${c.id === campaign ? 'on' : ''}`}
+                  onClick={() => {
+                    setCampaign(c.id)
+                    setPractise(null)
+                  }}
+                >
+                  <span className="pickname">
+                    <span className="nm">{c.name}</span>
+                    <span className="status">
+                      {p.best > 0 ? `best ${p.best}/${c.missions.length * 3}★` : 'not yet won'}
+                      {p.level > 0 && ` · level ${p.level + 1}`}
+                    </span>
+                  </span>
+                  <span className="bl">
+                    {c.side} · {c.missions.length} battle{c.missions.length > 1 ? 's' : ''}
+                    {p.run.at > 0 && ` · on battle ${p.run.at + 1}`} · {c.blurb}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {game === 'kessel' && (
+          <div className="field gamepick missions">
+            <span className="mono-label">
+              {chosen.name} · battles
+              {run.at > 0 && (
+                <button
+                  className="export"
+                  onClick={() => {
+                    restartCampaign(chosen.id)
+                    setProgress(readProgress())
+                    setPractise(null)
+                  }}
+                >
+                  Restart
+                </button>
+              )}
+            </span>
+            {chosen.missions.map((x, i) => {
+              const next = i === run.at
+              const open = next || i < progress[chosen.id].reached
+              const on = practise === null ? next : practise === x.id
+              return (
+                <button
+                  key={x.id}
+                  className={`pickcard ${on ? 'on' : ''}`}
+                  disabled={!open}
+                  onClick={() => setPractise(next ? null : x.id)}
+                >
+                  <span className="pickname">
+                    <span className="nm">{x.name}</span>
+                    <span className="status">
+                      {i < run.at ? '★'.repeat(run.stars[i]) + '☆'.repeat(3 - run.stars[i]) : next ? 'next' : open ? 'practice' : 'locked'}
+                    </span>
+                  </span>
+                  <span className="bl">
+                    {x.date} · {levelled(x, next ? progress[chosen.id].level : 0).turns} turns
+                  </span>
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -173,18 +227,22 @@ export function Setup({ onStart, onReview }: Props) {
         <button
           className="go"
           onClick={() =>
-            onStart(
-              active.map((s, i) => ({
-                name: s.name.trim() || 'Player',
-                bot: s.isBot ? difficulty : null,
-                color: i,
-              })),
-              game,
-              game === 'kessel' ? mission : undefined,
-            )
+            game === 'kessel'
+              ? onCampaign(practise ?? upNext.id, practise !== null)
+              : onStart(
+                active.map((s, i) => ({
+                  name: s.name.trim() || 'Player',
+                  bot: s.isBot ? difficulty : null,
+                  color: i,
+                })),
+              )
           }
         >
-          {game === 'kessel' ? 'Read the briefing' : humans === 0 ? 'Watch the bots' : 'Begin deployment'}
+          {game === 'kessel'
+            ? practise
+              ? `Practise · ${MISSION_BY_ID[practise].name}`
+              : `Read the briefing · ${upNext.name}`
+            : humans === 0 ? 'Watch the bots' : 'Begin deployment'}
         </button>
 
         {past.length > 0 && (

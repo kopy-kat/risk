@@ -14,7 +14,7 @@
  */
 import { rngFrom } from '../src/engine/rng'
 import type { PlayerId } from '../src/engine/types'
-import { kessel } from '../src/games/kessel'
+import { rulesFor } from '../src/games'
 import { DOCTRINES, KESSEL_BOTS } from '../src/games/kessel/bot'
 import { WIN_SCORE, assess, evaluate } from '../src/games/kessel/evaluate'
 import { applyMove, createGame, inCommand } from '../src/games/kessel/game'
@@ -79,7 +79,7 @@ const fixture = (over: Partial<Record<string, Partial<Province>>> = {}) =>
 let formationSerial = 1000
 const corps = (owner: PlayerId, at: string, patch: Partial<Formation> = {}): Formation => ({
   id: formationSerial++, owner, type: 'infantry' as UnitType, at,
-  strength: 3, cohesion: 100, wear: 0, dug: 0, supply: 3, rest: 0, ...patch,
+  strength: 3, cohesion: 100, wear: 0, dug: 0, supply: 3, cut: 0, rest: 0, ...patch,
 })
 
 const homeOf = (side: PlayerId): string[] =>
@@ -94,12 +94,12 @@ function stateOn(
   return {
     mapId,
     sides: [0, 1].map((i) => ({
-      id: i, name: `S${i}`, color: i, bot: null, alive: true, will: 100, aims: [],
-      revealed: [], home: homeOf(i as PlayerId), seen: {}, hqs: [],
+      id: i, name: `S${i}`, color: i, bot: null, alive: true, aims: [],
+      home: homeOf(i as PlayerId), seen: {}, hqs: [],
     })),
     owner, formations, orders: {}, delayed: {}, hqOrders: {}, phase: 'orders', current: 0, turn: 1,
     log: [], moves: [], record: false, rngState: 12345, winner: null,
-    nextFormationId: formationSerial + 1000, offered: false, peace: null,
+    nextFormationId: formationSerial + 1000, peace: null, turnLimit: 99, arrivals: [],
     ...patch,
   }
 }
@@ -283,15 +283,15 @@ const faultsOf = (m: ReturnType<typeof fixture>, s: KesselState, orders: OrderSe
 
 const BOTS = Object.fromEntries(KESSEL_BOTS.map((b) => [b.key, b]))
 
-function playRecord(order: string[], seed: number, cap = 300): GameRecord {
+function playRecord(order: string[], scenario: string, seed: number, cap = 100): GameRecord {
   const rng = rngFrom((seed ^ 0x9e3779b9) >>> 0)
-  let s = createGame({ seats: order.map((k, i) => ({ name: `P${i}`, bot: `kessel-${k}` })), seed })
+  let s = createGame({ seats: order.map((k, i) => ({ name: `P${i}`, bot: `kessel-${k}` })), seed, scenario })
   while (s.phase !== 'gameOver' && s.turn < cap) {
     s = stepBot(s, BOTS[s.sides[s.current].bot as string], () => rng.next())
   }
   return {
-    id: `${order.join('-')}-${seed}`, schema: 1, rules: kessel.rulesVersion, seed,
-    botSeed: seed ^ 0x9e3779b9, game: 'kessel',
+    id: `${order.join('-')}-${seed}`, schema: 1, rules: rulesFor('kessel', scenario), seed,
+    botSeed: seed ^ 0x9e3779b9, game: 'kessel', scenario,
     seats: order.map((_, i) => ({ name: `P${i}`, bot: null })),
     moves: s.moves, assisted: [], winner: s.winner, turns: s.turn,
     finished: s.phase === 'gameOver', savedAt: 0,
@@ -299,14 +299,14 @@ function playRecord(order: string[], seed: number, cap = 300): GameRecord {
 }
 
 const games = [
-  playRecord(['maneuver', 'elastic'], 3607),
-  playRecord(['attrition', 'maneuver'], 90211),
-  playRecord(['elastic', 'attrition'], 41),
+  playRecord(['maneuver', 'elastic'], 'sedan@3', 3607),
+  playRecord(['attrition', 'maneuver'], 'kiev@2', 90211),
+  playRecord(['elastic', 'attrition'], 'uranus@1', 41),
 ]
 const reviews = games.map((g) => reviewKesselGame(g, { players: [0, 1] }))
 const all = reviews.flatMap((r) => r.judgements)
 
-ok(all.length > 100, `there is a war's worth of decisions to check, got ${all.length}`)
+ok(all.length > 50, `there are three battles' worth of decisions to check, got ${all.length}`)
 ok(reviews.every((r) => r.error === null), 'the records replay against the rules as they stand')
 
 // ── loss is never negative ──
@@ -358,7 +358,7 @@ eq(
   const win = { assault: 0, rout: 0 }
   const gap = { assault: 0, rout: 0 }
 
-  // All three wars rather than one: over two dozen boards a proportion moves by a
+  // All three battles rather than one: over two dozen boards a proportion moves by a
   // board either way with whichever game happened to be played.
   for (const [r, j] of reviews.flatMap((r) => r.judgements.slice(0, 20).map((j) => [r, j] as const))) {
     const s = r.replay.states[j.index]
@@ -402,19 +402,23 @@ eq(
   }
 
   ok(boards >= 10, `there are boards with something to throw away on, got ${boards}`)
+  // Both floors sit under what these rules produce — nine in ten for the rout,
+  // about two thirds for the charge — rather than at it: this is a guard against
+  // the evaluation drifting, not a record of today's number. The wide margin
+  // below is the claim being made.
   ok(
-    win.rout >= boards * 0.9,
+    win.rout >= boards * 0.85,
     `giving up the front prices worse than a doctrine's turn on ${win.rout}/${boards} boards`,
   )
-  // About two thirds is what these rules produce, and the floor sits under that
-  // rather than at it: this is a guard against the evaluation drifting, not a
-  // record of today's number. The wide margin below is the claim being made.
   ok(
     win.assault >= boards * 0.6,
     `charging every stack in reach prices worse on ${win.assault}/${boards} boards`,
   )
+  // Over two steps a turn is most of a corps. The charge's margin is the thinner
+  // one because a corps it leaves cut off still fights on its stocks for a turn,
+  // and one ply does not see them run out.
   ok(
-    gap.rout / boards > 5 && gap.assault / boards > 5,
+    gap.rout / boards > 2.5 && gap.assault / boards > 2.5,
     `and both by a wide margin — rout ${(gap.rout / boards).toFixed(1)}, assault ${(
       gap.assault / boards
     ).toFixed(1)} steps a turn`,

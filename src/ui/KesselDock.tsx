@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { PlayerId } from '../engine/types'
 import { attackValue, defendValue, engage } from '../games/kessel/combat'
 import {
-  ACTIVATIONS, COMMAND_RADIUS, HQ_MOVE, REPLACEMENT_TURNS, WILL_FLOOR, activationsUsed, broken,
+  ACTIVATIONS, COMMAND_RADIUS, HQ_MOVE, REPLACEMENT_TURNS, activationsUsed,
 } from '../games/kessel/game'
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
@@ -39,9 +39,6 @@ export interface KesselDockProps {
   primary: PrimaryAction | null
   onClearOrder(): void
   onClearHq(): void
-  onRejectTerms(): void
-  /** play the turn out instead of asking for terms — a broken side's other choice */
-  onCommit(): void
   onShowSettings(): void
   settingsOpen: boolean
   onCloseSettings(): void
@@ -119,7 +116,7 @@ export function oddsFor(
  * every turn cannot move because a formation happened to be selected.
  */
 export function KesselDock(props: KesselDockProps) {
-  const { state, me, primary, onShowSettings, settingsOpen, onCloseSettings, seed } = props
+  const { state, primary, onShowSettings, settingsOpen, onCloseSettings, seed } = props
   const side = state.sides[state.current]
   const slots = side.bot ? botSlots(props) : phaseSlots(props)
 
@@ -142,15 +139,11 @@ export function KesselDock(props: KesselDockProps) {
         <div className="cell ctrl">
           {slots.controls}
           <OddsBlock {...props} />
-          <Will state={state} me={me} />
         </div>
       </div>
 
       <div className="tail">
         <span className="slot act">
-          {primary && !side.bot && state.phase === 'orders' && broken(state, me) && !state.offered && (
-            <button className="btn ghost" onClick={props.onCommit}>Fight the turn out</button>
-          )}
           {primary && (
             <button className="btn primary wide" onClick={primary.run}>
               {primary.label} <kbd>Space</kbd>
@@ -172,33 +165,6 @@ export function KesselDock(props: KesselDockProps) {
           />
         )}
       </div>
-    </div>
-  )
-}
-
-/**
- * Both sides' will, against the line below which a side can only ask for terms.
- * The threshold is drawn rather than stated: how close you are to it is the
- * question, and a number needs a second number to answer that.
- */
-function Will({ state }: { state: KesselState; me: PlayerId }) {
-  return (
-    <div className="kwill">
-      {state.sides.map((s) => (
-        <div
-          key={s.id}
-          className={`row ${s.will <= WILL_FLOOR ? 'broken' : ''} ${s.id === state.current ? 'on' : ''}`}
-          style={{ ['--c' as string]: playerColor(s.color) }}
-        >
-          <span className="nm">{s.name}</span>
-          <span className="track">
-            <i style={{ width: `${s.will}%` }} />
-            <b style={{ left: `${WILL_FLOOR}%` }} />
-          </span>
-          <span className="n">{Math.round(s.will)}</span>
-        </div>
-      ))}
-      <span className="cap mono-label">Will · terms below {WILL_FLOOR}</span>
     </div>
   )
 }
@@ -247,27 +213,13 @@ function OddsBlock({ state, projected, me, attack }: KesselDockProps) {
 function botSlots({ state }: KesselDockProps): Slots {
   return {
     hint: 'Thinking',
-    say: state.phase === 'terms'
-      ? `${state.sides[state.current].name} is weighing the terms`
-      : `${state.sides[state.current].name} is writing this turn's orders`,
+    say: `${state.sides[state.current].name} is writing this turn's orders`,
   }
 }
 
 function phaseSlots(props: KesselDockProps): Slots {
   const { state, me, selected, selectedHq, command, projected } = props
   const m = mapOf(state.mapId)
-
-  if (state.phase === 'terms') {
-    return {
-      hint: `${state.sides[(1 - me) as PlayerId].name} offers terms`,
-      say: <>Accept and the war ends on this line, scored against both sides' aims</>,
-      controls: (
-        <button className="btn ghost" onClick={props.onRejectTerms}>
-          Fight on · −8 will
-        </button>
-      ),
-    }
-  }
 
   const mine = state.formations.filter((f) => f.owner === me)
   const f = selected === null ? null : mine.find((x) => x.id === selected)
@@ -293,16 +245,6 @@ function phaseSlots(props: KesselDockProps): Slots {
       controls: to !== undefined
         ? <button className="btn ghost" onClick={props.onClearHq}>Call off <kbd>⌫</kbd></button>
         : undefined,
-    }
-  }
-
-  if (broken(state, me) && !f) {
-    return {
-      counter,
-      hint: 'Will spent',
-      say: state.offered
-        ? <>Terms refused · fight the turn out: hold, refit, move — <b>no attacks</b></>
-        : <>Your army will not be ordered forward again · <b>ask for terms</b>, or hold the line</>,
     }
   }
 
@@ -337,6 +279,7 @@ function phaseSlots(props: KesselDockProps): Slots {
       {' · moves '}{allowance(f.type, state.turn)}
       {rail.size > 0 ? ` · rail ${RAIL_ALLOWANCE}` : ''}
       {' · '}<b className={`sup s${f.supply}`}>{SUPPLY_NAME[f.supply]}</b>
+      {f.cut > 0 && ` · cut off, on its own stocks${f.supply > 0 ? ` for ${f.supply} more` : ''}`}
       {f.rest > 0 && ` · rebuilding ${f.rest}/${REPLACEMENT_TURNS}`}
       {trapped && ' · encircled'}
       {!commanded && ' · out of command'}
@@ -391,11 +334,9 @@ function phaseSlots(props: KesselDockProps): Slots {
     hint,
     say: !commanded
       ? <>Out of command · a move or an attack now is <b>carried out next turn</b> · <kbd>R</kbd> refit</>
-      : f.supply >= 3 && !broken(state, me)
+      : f.supply >= 3
         ? <>Click a province · enemy-held <b>attacks</b>, anything else moves · <kbd>R</kbd> refit</>
-        : broken(state, me)
-          ? <>Will spent, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>
-          : <>Short of full supply, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>,
+        : <>Short of full supply, so it <b>cannot attack</b> · move or <kbd>R</kbd> refit</>,
     controls,
   }
 }

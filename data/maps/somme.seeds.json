@@ -1,0 +1,713 @@
+{
+  "id": "somme",
+  "name": "The Somme to the Loire, June 1940",
+  "bounds": {
+    "lonMin": -0.4,
+    "lonMax": 4.6,
+    "latMin": 46.7,
+    "latMax": 50.3
+  },
+  "seeds": [
+    {
+      "id": "abbeville",
+      "name": "Abbeville",
+      "nation": "france",
+      "lon": 1.83,
+      "lat": 50.11,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "doullens",
+      "name": "Doullens",
+      "nation": "france",
+      "lon": 2.34,
+      "lat": 50.16,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "amiens",
+      "name": "Amiens",
+      "nation": "france",
+      "lon": 2.3,
+      "lat": 49.89,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "bapaume",
+      "name": "Bapaume",
+      "nation": "france",
+      "lon": 2.85,
+      "lat": 50.1,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "peronne",
+      "name": "Péronne",
+      "nation": "france",
+      "lon": 2.93,
+      "lat": 49.93,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stquentin",
+      "name": "St-Quentin",
+      "nation": "france",
+      "lon": 3.29,
+      "lat": 49.85,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "laon",
+      "name": "Laon",
+      "nation": "france",
+      "lon": 3.62,
+      "lat": 49.56,
+      "terrain": "hill",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "rethel",
+      "name": "Rethel",
+      "nation": "france",
+      "lon": 4.37,
+      "lat": 49.51,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "aumale",
+      "name": "Aumale",
+      "nation": "france",
+      "lon": 1.75,
+      "lat": 49.77,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "poix",
+      "name": "Poix",
+      "nation": "france",
+      "lon": 1.98,
+      "lat": 49.78,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "moreuil",
+      "name": "Moreuil",
+      "nation": "france",
+      "lon": 2.48,
+      "lat": 49.77,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "roye",
+      "name": "Roye",
+      "nation": "france",
+      "lon": 2.79,
+      "lat": 49.7,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "noyon",
+      "name": "Noyon",
+      "nation": "france",
+      "lon": 3.0,
+      "lat": 49.58,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "soissons",
+      "name": "Soissons",
+      "nation": "france",
+      "lon": 3.32,
+      "lat": 49.38,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "berryaubac",
+      "name": "Berry-au-Bac",
+      "nation": "france",
+      "lon": 3.9,
+      "lat": 49.4,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dieppe",
+      "name": "Dieppe",
+      "nation": "france",
+      "lon": 1.08,
+      "lat": 49.92,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "neufchatel",
+      "name": "Neufchâtel",
+      "nation": "france",
+      "lon": 1.44,
+      "lat": 49.73,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "montdidier",
+      "name": "Montdidier",
+      "nation": "france",
+      "lon": 2.57,
+      "lat": 49.65,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "compiegne",
+      "name": "Compiègne",
+      "nation": "france",
+      "lon": 2.83,
+      "lat": 49.42,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "fismes",
+      "name": "Fismes",
+      "nation": "france",
+      "lon": 3.68,
+      "lat": 49.31,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "reims",
+      "name": "Reims",
+      "nation": "france",
+      "lon": 4.03,
+      "lat": 49.26,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "stvalery",
+      "name": "St-Valery",
+      "nation": "france",
+      "lon": 0.73,
+      "lat": 49.87,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lehavre",
+      "name": "Le Havre",
+      "nation": "france",
+      "lon": 0.11,
+      "lat": 49.49,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "rouen",
+      "name": "Rouen",
+      "nation": "france",
+      "lon": 1.1,
+      "lat": 49.44,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "forges",
+      "name": "Forges",
+      "nation": "france",
+      "lon": 1.54,
+      "lat": 49.61,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "gournay",
+      "name": "Gournay",
+      "nation": "france",
+      "lon": 1.72,
+      "lat": 49.48,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "beauvais",
+      "name": "Beauvais",
+      "nation": "france",
+      "lon": 2.08,
+      "lat": 49.43,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "clermont",
+      "name": "Clermont",
+      "nation": "france",
+      "lon": 2.41,
+      "lat": 49.38,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "senlis",
+      "name": "Senlis",
+      "nation": "france",
+      "lon": 2.59,
+      "lat": 49.21,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "chateauthierry",
+      "name": "Château-Thierry",
+      "nation": "france",
+      "lon": 3.4,
+      "lat": 48.95,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "epernay",
+      "name": "Épernay",
+      "nation": "france",
+      "lon": 3.96,
+      "lat": 48.9,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "chalons",
+      "name": "Châlons",
+      "nation": "france",
+      "lon": 4.36,
+      "lat": 48.96,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "elbeuf",
+      "name": "Elbeuf",
+      "nation": "france",
+      "lon": 1.01,
+      "lat": 49.29,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "andelys",
+      "name": "Les Andelys",
+      "nation": "france",
+      "lon": 1.41,
+      "lat": 49.25,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "gisors",
+      "name": "Gisors",
+      "nation": "france",
+      "lon": 1.78,
+      "lat": 49.28,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "pontoise",
+      "name": "Pontoise",
+      "nation": "france",
+      "lon": 2.1,
+      "lat": 49.05,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "evreux",
+      "name": "Évreux",
+      "nation": "france",
+      "lon": 1.15,
+      "lat": 49.02,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "mantes",
+      "name": "Mantes",
+      "nation": "france",
+      "lon": 1.72,
+      "lat": 48.99,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "paris",
+      "name": "Paris",
+      "nation": "france",
+      "lon": 2.35,
+      "lat": 48.86,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 2
+    },
+    {
+      "id": "meaux",
+      "name": "Meaux",
+      "nation": "france",
+      "lon": 2.88,
+      "lat": 48.96,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "provins",
+      "name": "Provins",
+      "nation": "france",
+      "lon": 3.3,
+      "lat": 48.56,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dreux",
+      "name": "Dreux",
+      "nation": "france",
+      "lon": 1.37,
+      "lat": 48.74,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rambouillet",
+      "name": "Rambouillet",
+      "nation": "france",
+      "lon": 1.83,
+      "lat": 48.64,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "chartres",
+      "name": "Chartres",
+      "nation": "france",
+      "lon": 1.49,
+      "lat": 48.45,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "etampes",
+      "name": "Étampes",
+      "nation": "france",
+      "lon": 2.16,
+      "lat": 48.43,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "fontainebleau",
+      "name": "Fontainebleau",
+      "nation": "france",
+      "lon": 2.7,
+      "lat": 48.4,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "nogent",
+      "name": "Nogent",
+      "nation": "france",
+      "lon": 3.5,
+      "lat": 48.49,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "troyes",
+      "name": "Troyes",
+      "nation": "france",
+      "lon": 4.07,
+      "lat": 48.3,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "sens",
+      "name": "Sens",
+      "nation": "france",
+      "lon": 3.28,
+      "lat": 48.2,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "montargis",
+      "name": "Montargis",
+      "nation": "france",
+      "lon": 2.73,
+      "lat": 48.0,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "chateaudun",
+      "name": "Châteaudun",
+      "nation": "france",
+      "lon": 1.33,
+      "lat": 48.07,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lemans",
+      "name": "Le Mans",
+      "nation": "france",
+      "lon": 0.2,
+      "lat": 48.0,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "vendome",
+      "name": "Vendôme",
+      "nation": "france",
+      "lon": 1.07,
+      "lat": 47.79,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "orleans",
+      "name": "Orléans",
+      "nation": "france",
+      "lon": 1.91,
+      "lat": 47.9,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 2
+    },
+    {
+      "id": "blois",
+      "name": "Blois",
+      "nation": "france",
+      "lon": 1.33,
+      "lat": 47.59,
+      "terrain": "urban",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "amboise",
+      "name": "Amboise",
+      "nation": "france",
+      "lon": 0.98,
+      "lat": 47.41,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "tours",
+      "name": "Tours",
+      "nation": "france",
+      "lon": 0.69,
+      "lat": 47.39,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "saumur",
+      "name": "Saumur",
+      "nation": "france",
+      "lon": -0.08,
+      "lat": 47.26,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "gien",
+      "name": "Gien",
+      "nation": "france",
+      "lon": 2.63,
+      "lat": 47.69,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "lamotte",
+      "name": "Lamotte-Beuvron",
+      "nation": "france",
+      "lon": 2.03,
+      "lat": 47.6,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "romorantin",
+      "name": "Romorantin",
+      "nation": "france",
+      "lon": 1.74,
+      "lat": 47.36,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "vierzon",
+      "name": "Vierzon",
+      "nation": "france",
+      "lon": 2.07,
+      "lat": 47.22,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bourges",
+      "name": "Bourges",
+      "nation": "france",
+      "lon": 2.4,
+      "lat": 47.08,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "chatellerault",
+      "name": "Châtellerault",
+      "nation": "france",
+      "lon": 0.55,
+      "lat": 46.82,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "chateauroux",
+      "name": "Châteauroux",
+      "nation": "france",
+      "lon": 1.69,
+      "lat": 46.81,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "lisieux",
+      "name": "Lisieux",
+      "nation": "france",
+      "lon": 0.23,
+      "lat": 49.15,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "alencon",
+      "name": "Alençon",
+      "nation": "france",
+      "lon": 0.09,
+      "lat": 48.43,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "auxerre",
+      "name": "Auxerre",
+      "nation": "france",
+      "lon": 3.57,
+      "lat": 47.8,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "arras",
+      "name": "Arras",
+      "nation": "france",
+      "lon": 2.78,
+      "lat": 50.25,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "cambrai",
+      "name": "Cambrai",
+      "nation": "france",
+      "lon": 3.23,
+      "lat": 50.18,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    }
+  ],
+  "seaLinks": []
+}

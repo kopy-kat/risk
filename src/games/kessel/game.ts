@@ -6,12 +6,12 @@ import { updateSightings } from './intel'
 import { STACK_LIMIT, mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
 import { ASSAULT_COST, allowance, exploitReach, reachable, routeTo } from './movement'
-import { depthMap, liveDepots, network, retreatTargets, supplyStates } from './supply'
-import { levelled, missionOf } from './missions'
+import { depthMap, liveDepots, network, retreatTargets, supplyNext } from './supply'
+import { MISSIONS, levelled, missionOf } from './missions'
 import type { Mission } from './missions'
-import type { Formation, FormationId, KesselState, Move, Order, Side, UnitType, Verdict } from './types'
+import type { Carried, Formation, FormationId, KesselState, Move, Order, Side, UnitType, Verdict } from './types'
 
-export const RULES_VERSION = ['kessel2', 'rear', 'rail6', 'exploit', 'mud10', 'aimsdealt6of10', 'will25', 'hq2r3', 'armies26v29', 'aims24'].join('|')
+export const RULES_VERSION = ['kessel3', 'rear', 'rail6', 'exploit', 'mud10', 'hq2r3', 'battles'].join('|')
 
 /**
  * Provinces you can set in motion in one turn.
@@ -29,31 +29,13 @@ export const ACTIVATIONS = 7
  * them is out of command, and an order to move or attack reaches it a turn late.
  *
  * Two, because a main front and a sideshow is the choice this exists to force: the
- * line can be commanded, and Norway or the south of Italy then waits a turn for
- * its orders unless a headquarters goes there and the line goes without.
+ * line can be commanded, and a flank then waits a turn for its orders unless a
+ * headquarters goes there and the line goes without.
  */
 export const HQS_PER_SIDE = 2
 export const COMMAND_RADIUS = 3
 /** How far a headquarters relocates in a turn, through its own side's ground. */
 export const HQ_MOVE = 4
-
-/** At or below this a side can no longer be ordered forward, and may ask for terms. */
-export const WILL_FLOOR = 25
-
-/** Cost of refusing an offered peace: pressing a war past its aims exhausts you too. */
-const REJECT_COST = 8
-
-const WILL = {
-  perFormationLost: 4,
-  perObjectiveLost: 3,
-  perObjectiveTaken: 3,
-  /**
-   * Every turn, regardless — long wars exhaust. Deliberately small: this is the
-   * backstop that stops a stalemate running forever, and if it is large enough to
-   * decide games then every war ends on the same turn no matter what happened.
-   */
-  weariness: 0.15,
-}
 
 const REFIT_GAIN = 30
 const RECOVER_GAIN = 12
@@ -63,44 +45,13 @@ const STARVE_WEAR = 25
 
 /** Establishment: the steps a corps of each type is raised with, and rebuilt back up to. */
 export const STRENGTH: Record<UnitType, number> = { infantry: 3, armour: 3, recon: 1 }
-const ORDER_OF_BATTLE: UnitType[] = ['infantry', 'infantry', 'infantry', 'armour', 'recon']
-/**
- * Enough to man the contact line and hold something back. Too few and the armies
- * never touch: they wander toward objectives across open country, no front forms,
- * and with no front there is nothing to flank and no ring to close.
- *
- * By side, West then East, and unequal on purpose. The East holds the deep, open
- * half of the map with its peninsulas at the far end of its railways, and with
- * equal armies the West wins most wars between identical doctrines. The difference
- * is whatever brings `npm run bench:kessel -- maneuver maneuver` back to an even split.
- */
-const FORMATIONS_PER_SIDE = [26, 29]
-export const AIMS_PER_SIDE = 6
-/**
- * What each side's aims are dealt from: the most valuable ground on the enemy's
- * side of the line. The menu is public and the deal is not — which is the shape
- * real war aims have. Everyone knew the Reich wanted oil, steel or the capital;
- * nobody knew which.
- */
-export const AIM_MENU = 10
-/** A side's enemy learns an aim once this many of that side's formations stand beside it. */
-const MASSED = 3
 
-/**
- * Share of the map, from each side's own end, that is its rear: where supply enters
- * and reinforcements arrive. Depots are railheads on the line back to here, so
- * a depot the enemy has cut off from it issues nothing.
- */
-const HOME_SHARE = 1 / 14
 /** Consecutive turns refitting on a live railhead, under strength, to regain a step. */
 export const REPLACEMENT_TURNS = 3
-/** A fresh infantry corps arrives at each side's rearmost railhead every this many turns. */
-export const REINFORCE_EVERY = 6
 
 /**
- * How far apart the two sides' shares of their own aims have to end for a peace to
- * be more than narrow. The winner is decided by who holds more; this is what makes
- * refusing terms worth a side's will when it is already ahead.
+ * How far apart the two sides' shares of the objectives have to end for a result
+ * to be more than narrow. The winner is whoever holds more; this is by how much.
  */
 export const VERDICT_MARGIN: Record<'decisive' | 'clear', number> = { decisive: 0.5, clear: 0.25 }
 
@@ -108,37 +59,27 @@ export interface KesselOptions {
   seats: SeatConfig[]
   seed?: number
   record?: boolean
-  mapId?: string
-  /** a mission id; its map, order of battle, objectives and turn limit replace the generated war */
+  /** the mission to fight, which is the whole setup: map, order of battle, objectives, turn limit */
   scenario?: string
   /** how many times the mission has been mastered — see `levelled` */
   level?: number
+  /** the player's corps that came through the campaign's last battle, to fill this one's slots */
+  army?: Carried[]
 }
 
-interface Deployment {
-  owner: Record<ProvinceId, PlayerId>
-  home: [ProvinceId[], ProvinceId[]]
-  formations: Formation[]
-}
-
-export function createGame({
-  seats, seed = 1, record = true, mapId = 'europe', scenario, level = 0,
-}: KesselOptions): KesselState {
+export function createGame({ seats, seed = 1, record = true, scenario, level = 0, army }: KesselOptions): KesselState {
   if (seats.length !== 2) throw new Error('Kessel is a two-sided game')
-  const mission = scenario === undefined ? null : levelled(missionOf(scenario), level)
-  const m = mapOf(mission ? mission.mapId : mapId)
-  const { owner, home, formations } = mission ? fromMission(m, mission) : generate(m)
+  const mission = levelled(missionOf(scenario ?? MISSIONS[0].id), level)
+  const m = mapOf(mission.mapId)
+  const { owner, home, formations } = fromMission(m, mission, army)
 
   const sides: Side[] = seats.map((seat, id) => ({
     id,
-    name: mission ? mission.sides[id] : seat.name,
+    name: mission.sides[id],
     color: seat.color ?? id,
     bot: seat.bot,
     alive: true,
-    will: 100,
-    // A battle's objectives are no secret: both sides can see what the ground is for.
-    aims: mission ? [...mission.aims] : [],
-    revealed: mission ? [...mission.aims] : [],
+    aims: [...mission.aims],
     home: home[id],
     seen: {},
     hqs: [],
@@ -161,80 +102,48 @@ export function createGame({
     record,
     rngState: seed | 0,
     winner: null,
-    nextFormationId: formations.length,
-    offered: false,
+    nextFormationId: mission.formations.length,
     peace: null,
-    ...(mission && { turnLimit: mission.turns, arrivals: mission.arrivals ?? [] }),
+    turnLimit: mission.turns,
+    arrivals: mission.arrivals ?? [],
+    ...(mission.save && { save: { ...mission.save, side: mission.player } }),
   }
 
-  // The deal: six off each side's menu, from the game's own generator, so the
-  // same seed is the same war and neither side chose anything the other can read.
-  if (!mission) {
-    const rng = rngFrom(s.rngState)
-    for (const side of s.sides) {
-      const menu = aimMenu(m, s, side.id)
-      while (side.aims.length < AIMS_PER_SIDE && menu.length > 0) {
-        side.aims.push(menu.splice(Math.floor(rng.next() * menu.length), 1)[0])
-      }
-    }
-    s.rngState = rng.state
-  }
-
-  const states = supplyStates(m, s, 0)
-  for (const f of s.formations) if (f.owner === 0) f.supply = states[f.id] ?? 0
+  const states = supplyNext(m, s, 0)
+  for (const f of s.formations) if (f.owner === 0) Object.assign(f, states[f.id])
   for (const side of s.sides) side.seen = updateSightings(m, s, side.id)
   return s
 }
 
-/** The war: the map split down the middle by longitude, each side's army dealt onto its half. */
-function generate(m: GameMap): Deployment {
-  const byLon = [...m.ids].sort((a, b) => m.province[a].cx - m.province[b].cx)
-  const half = Math.floor(byLon.length / 2)
-  const rear = Math.max(1, Math.round(byLon.length * HOME_SHARE))
-
-  const owner: Record<ProvinceId, PlayerId> = {}
-  byLon.forEach((id, i) => {
-    owner[id] = i < half ? 0 : 1
-  })
-
-  const formations: Formation[] = []
-  for (const side of [0, 1] as PlayerId[]) {
-    const mine = byLon.filter((id) => owner[id] === side)
-    const onContact = (id: ProvinceId) => (m.adjacency[id] ?? []).some((n) => owner[n] !== side)
-    // The line first, then depth behind it — an army that starts on its own
-    // railheads has to march to the war before it can fight one.
-    const posts = [
-      ...mine.filter(onContact).sort((a, b) => value(m, b) - value(m, a)),
-      ...mine.filter((id) => !onContact(id)).sort((a, b) => value(m, b) - value(m, a)),
-    ]
-
-    const stacked: Record<ProvinceId, number> = {}
-    let placed = 0
-    const quota = FORMATIONS_PER_SIDE[side]
-    for (let pass = 0; placed < quota && pass < 3; pass++) {
-      for (const at of posts) {
-        if (placed >= quota) break
-        if ((stacked[at] ?? 0) >= STACK_LIMIT[m.province[at].terrain]) continue
-        stacked[at] = (stacked[at] ?? 0) + 1
-        const type = ORDER_OF_BATTLE[placed % ORDER_OF_BATTLE.length]
-        formations.push(raise(formations.length, side, type, at))
-        placed++
-      }
-    }
-  }
-  return { owner, home: [byLon.slice(0, rear), byLon.slice(byLon.length - rear)], formations }
-}
-
-function fromMission(m: GameMap, mission: Mission): Deployment {
+/**
+ * A mission's deployment. With an army carried in from the last battle, the player's
+ * formations are slots: each takes the strongest survivor of its type, and a slot
+ * nobody is left to fill stays empty — so what a campaign costs you is what you are
+ * short of later. A formation marked `fresh` is the draft and always arrives. Ids are
+ * the index in the mission's list whether or not the slot was filled, so `save` can
+ * name them.
+ */
+function fromMission(m: GameMap, mission: Mission, army?: Carried[]) {
   const held = new Set(mission.held)
   const owner: Record<ProvinceId, PlayerId> = {}
   for (const id of m.ids) owner[id] = held.has(id) ? 0 : 1
-  const formations = mission.formations.map((f, i) => ({
-    ...raise(i, f.side, f.type, f.at),
-    ...(f.strength !== undefined && { strength: f.strength }),
-  }))
-  return { owner, home: [[...mission.home[0]], [...mission.home[1]]], formations }
+  const pool = army ? [...army].sort((a, b) => b.strength - a.strength) : null
+  const formations: Formation[] = []
+  mission.formations.forEach((f, i) => {
+    let strength = f.strength
+    if (pool && f.side === mission.player && !f.fresh) {
+      const k = pool.findIndex((c) => c.type === f.type)
+      if (k === -1) return
+      strength = pool.splice(k, 1)[0].strength
+    }
+    formations.push({ ...raise(i, f.side, f.type, f.at), ...(strength !== undefined && { strength }) })
+  })
+  return { owner, home: [[...mission.home[0]], [...mission.home[1]]] as [ProvinceId[], ProvinceId[]], formations }
 }
+
+/** What `p` carries out of a battle into the next one of its campaign. */
+export const survivors = (s: KesselState, p: PlayerId): Carried[] =>
+  s.formations.filter((f) => f.owner === p).map((f) => ({ type: f.type, strength: f.strength }))
 
 const raise = (id: number, owner: PlayerId, type: UnitType, at: ProvinceId): Formation => ({
   id,
@@ -246,10 +155,9 @@ const raise = (id: number, owner: PlayerId, type: UnitType, at: ProvinceId): For
   wear: 0,
   dug: 0,
   supply: 3,
+  cut: 0,
   rest: 0,
 })
-
-const value = (m: GameMap, p: ProvinceId) => m.province[p].depot * 2 + m.province[p].vp
 
 /**
  * Where a side's headquarters start: one at a time, wherever commands the most of
@@ -335,26 +243,9 @@ export function hqReach(m: GameMap, s: KesselState, p: PlayerId, hq: number): Se
   return at === undefined ? new Set() : groundWithin(m, s.owner, p, [at], HQ_MOVE)
 }
 
-/**
- * The war aims a side is dealt from: the most valuable ground the enemy holds,
- * as the war opens. Ties go to the better-served province, then to the name, so
- * the menu is the same every time the same map is dealt.
- */
-export function aimMenu(m: GameMap, s: KesselState, p: PlayerId): ProvinceId[] {
-  return m.ids
-    .filter((id) => s.owner[id] !== p && m.province[id].vp > 0)
-    .sort(
-      (a, b) =>
-        m.province[b].vp - m.province[a].vp ||
-        m.province[b].depot - m.province[a].depot ||
-        (a < b ? -1 : 1),
-    )
-    .slice(0, AIM_MENU)
-}
-
 const clone = (s: KesselState): KesselState => ({
   ...s,
-  sides: s.sides.map((x) => ({ ...x, aims: [...x.aims], revealed: [...x.revealed], hqs: [...x.hqs] })),
+  sides: s.sides.map((x) => ({ ...x, aims: [...x.aims], hqs: [...x.hqs] })),
   owner: { ...s.owner },
   formations: s.formations.map((f) => ({ ...f })),
   orders: { ...s.orders },
@@ -373,9 +264,6 @@ const need = (cond: boolean, why: string) => {
 }
 
 const at = (s: KesselState, where: ProvinceId) => s.formations.filter((f) => f.at === where)
-
-/** A side at or below the floor: it can hold, move and refit, and it can ask for terms. It cannot attack. */
-export const broken = (s: KesselState, p: PlayerId) => s.sides[p].will <= WILL_FLOOR
 
 export function applyMove(s0: KesselState, move: Move): KesselState {
   const s = clone(s0)
@@ -417,34 +305,6 @@ export function applyMove(s0: KesselState, move: Move): KesselState {
       need(s.phase === 'orders', 'not the order phase')
       return endTurn(m, resolveTurn(m, s))
     }
-    case 'offerTerms': {
-      need(s.phase === 'orders', 'not the order phase')
-      need(broken(s, me), 'will is not broken')
-      need(!s.offered, 'terms were already refused this turn')
-      if (exhausted(s)) return settle(m, s)
-      s.phase = 'terms'
-      s.current = (1 - me) as PlayerId
-      log(s, me, 'offers terms')
-      break
-    }
-    case 'acceptTerms': {
-      need(s.phase === 'terms', 'no terms on the table')
-      return settle(m, s)
-    }
-    case 'rejectTerms': {
-      need(s.phase === 'terms', 'no terms on the table')
-      s.sides[me].will = clampWill(s.sides[me].will - REJECT_COST)
-      // The broken side fights the turn out: it can hold, move and refit, and
-      // it can ask again next turn. Refusing costs will, so a side that keeps
-      // refusing eventually breaks too, and two broken sides is where a war ends
-      // whatever either of them wanted.
-      s.offered = true
-      s.phase = 'orders'
-      s.current = (1 - me) as PlayerId
-      log(s, me, 'refuses terms')
-      if (exhausted(s)) return settle(m, s)
-      break
-    }
   }
   return s
 }
@@ -477,10 +337,9 @@ function legalOrder(m: GameMap, s: KesselState, f: Formation, order: Order): boo
     case 'attack':
       // The culminating point, and the reason an offensive has a reach: anything
       // short of full supply can still hold the ground it stands on and can no
-      // longer start anything. A side whose will is gone is in the same position.
+      // longer start anything.
       return (
         f.supply >= 3 &&
-        !broken(s, f.owner) &&
         (m.adjacency[f.at] ?? []).includes(order.to) &&
         at(s, order.to).some((x) => x.owner !== f.owner) &&
         (order.onward === undefined || exploitReach(m, s, f, order.to).cost[order.onward] !== undefined)
@@ -492,14 +351,9 @@ export function legalMoves(s: KesselState, p: PlayerId): Move[] {
   if (p !== s.current) return []
   const m = mapOf(s.mapId)
 
-  if (s.phase === 'terms') return [{ type: 'acceptTerms' }, { type: 'rejectTerms' }]
   if (s.phase !== 'orders') return []
 
   const out: Move[] = [{ type: 'commit' }]
-  // A side whose will is gone may ask for terms once a turn. Refused, it fights
-  // the turn out without attacking — the war still has a way to end short of
-  // annihilation, and "fight on" still means something to the side that said it.
-  if (broken(s, p) && !s.offered) out.push({ type: 'offerTerms' })
 
   for (let hq = 0; hq < s.sides[p].hqs.length; hq++) {
     for (const to of hqReach(m, s, p, hq)) out.push({ type: 'moveHq', hq, to })
@@ -525,9 +379,6 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
   const me = s.current
   const rng = rngFrom(s.rngState)
   const rand = () => rng.next()
-  const mineBefore = objectivesHeld(m, s, me)
-  const theirsBefore = objectivesHeld(m, s, (1 - me) as PlayerId)
-  const standingBefore = s.sides.map((side) => s.formations.filter((f) => f.owner === side.id).length)
 
   const mine = s.formations.filter((f) => f.owner === me)
 
@@ -592,15 +443,9 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
     attacks.set(order.to, [...(attacks.get(order.to) ?? []), f])
   }
 
-  const aims = s.sides[me]
-  const reveal = (p: ProvinceId) => {
-    if (aims.aims.includes(p) && !aims.revealed.includes(p)) aims.revealed.push(p)
-  }
-
   for (const [target, all] of attacks) {
     const defenders = at(s, target).filter((f) => f.owner !== me)
     if (defenders.length === 0) continue
-    reveal(target)
 
     // Frontage caps how much reaches the fighting. Mass still wins, but it has to
     // fit through the borders it is attacking across — which is why converging on
@@ -666,12 +511,6 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
     }
   }
 
-  // An aim gives itself away when it is taken, or when the army masses beside it.
-  for (const p of aims.aims) {
-    if (s.owner[p] === me) reveal(p)
-    else if (mine.filter((f) => f.strength > 0 && (m.adjacency[p] ?? []).includes(f.at)).length >= MASSED) reveal(p)
-  }
-
   // Moves and attacks are spent; a refit stands until there is nothing left to regain.
   const standing: Record<number, Order> = {}
   for (const f of s.formations) {
@@ -692,7 +531,7 @@ function resolveTurn(m: GameMap, s: KesselState): KesselState {
   Object.assign(s.delayed, sent)
 
   s.rngState = rng.state
-  return updateWill(m, s, me, mineBefore, theirsBefore, standingBefore)
+  return s
 }
 
 /**
@@ -747,6 +586,7 @@ function cadre(s: KesselState, f: Formation, at: ProvinceId) {
     strength: 1,
     cohesion: CADRE_COHESION,
     supply: f.supply,
+    cut: f.cut,
   })
 }
 
@@ -757,35 +597,6 @@ function remove(m: GameMap, s: KesselState, f: Formation, why: string) {
 
 const objectivesHeld = (m: GameMap, s: KesselState, p: PlayerId): number =>
   s.sides[p].aims.reduce((n, id) => n + (s.owner[id] === p ? m.province[id].vp : 0), 0)
-
-function updateWill(
-  m: GameMap,
-  s: KesselState,
-  me: PlayerId,
-  mineBefore: number,
-  theirsBefore: number,
-  standingBefore: number[],
-): KesselState {
-  const them = (1 - me) as PlayerId
-  const gained = objectivesHeld(m, s, me) - mineBefore
-  const lost = theirsBefore - objectivesHeld(m, s, them)
-  const casualties = s.sides.map(
-    (side, i) => standingBefore[i] - s.formations.filter((f) => f.owner === side.id).length,
-  )
-
-  s.sides[me].will = clampWill(
-    s.sides[me].will + gained * WILL.perObjectiveTaken - casualties[me] * WILL.perFormationLost - WILL.weariness,
-  )
-  s.sides[them].will = clampWill(
-    s.sides[them].will - lost * WILL.perObjectiveLost - casualties[them] * WILL.perFormationLost - WILL.weariness,
-  )
-  return s
-}
-
-const clampWill = (n: number) => Math.max(0, Math.min(100, Math.round(n * 10) / 10))
-
-/** Neither side can carry on. Mutual exhaustion ends more wars than victory does. */
-const exhausted = (s: KesselState) => s.sides.every((side) => broken(s, side.id))
 
 /**
  * Where a reinforcement detrains: the largest live railhead with room for one
@@ -822,10 +633,10 @@ export function rearmostRailhead(m: GameMap, s: KesselState, p: PlayerId): Provi
 function endTurn(m: GameMap, s: KesselState): KesselState {
   const next = (1 - s.current) as PlayerId
 
-  const states = supplyStates(m, s, next)
+  const states = supplyNext(m, s, next)
   for (const f of s.formations) {
     if (f.owner !== next) continue
-    f.supply = states[f.id] ?? 0
+    Object.assign(f, states[f.id])
     // A pocket only starves while somebody is pressing it. Without this gate,
     // severing one rear province once quietly kills an army the enemy has walked
     // away from, and cordoning beats fighting.
@@ -840,30 +651,19 @@ function endTurn(m: GameMap, s: KesselState): KesselState {
     }
   }
 
-  const starved = s.formations.filter((f) => f.owner === next && f.strength <= 0)
-  for (const f of starved) remove(m, s, f, 'starves in the pocket')
-  if (starved.length > 0) {
-    s.sides[next].will = clampWill(s.sides[next].will - starved.length * WILL.perFormationLost)
+  for (const f of s.formations.filter((x) => x.owner === next && x.strength <= 0)) {
+    remove(m, s, f, 'starves in the pocket')
   }
 
   s.current = next
   if (next === 0) s.turn += 1
   s.phase = 'orders'
-  s.offered = false
 
-  // Reinforcements are on the calendar, the same for both sides: a corps by
-  // rail to the rearmost railhead still standing. It gives the clock a second
-  // hand — a side that is losing can hold for the next draft, and one that is
-  // winning had better finish before it arrives.
-  // A battle has its own timetable instead: what arrives, and when.
   if (next === 0) {
-    const due = s.arrivals
-      ? s.arrivals.filter((a) => a.turn === s.turn)
-      : s.turn % REINFORCE_EVERY === 0
-        ? s.sides.map((side) => ({ side: side.id, type: 'infantry' as UnitType }))
-        : []
-    for (const a of due) {
-      const where = rearmostRailhead(m, s, a.side)
+    for (const a of s.arrivals.filter((x) => x.turn === s.turn)) {
+      const there = a.at !== undefined && s.owner[a.at] === a.side &&
+        at(s, a.at).length < STACK_LIMIT[m.province[a.at].terrain]
+      const where = there ? (a.at as ProvinceId) : rearmostRailhead(m, s, a.side)
       if (where === null) continue
       s.formations.push(raise(s.nextFormationId++, a.side, a.type, where))
       log(s, a.side, `${m.province[where].name}: ${CORPS[a.type]} arrives by rail`)
@@ -892,7 +692,7 @@ function endTurn(m: GameMap, s: KesselState): KesselState {
   }
 
   if (!s.formations.some((f) => f.owner === next)) return settle(m, s)
-  if (s.turnLimit !== undefined && s.turn > s.turnLimit) return settle(m, s)
+  if (s.turn > s.turnLimit) return settle(m, s)
   return s
 }
 
@@ -905,22 +705,26 @@ const groundHeld = (m: GameMap, s: KesselState, p: PlayerId): number =>
   m.ids.reduce((n, id) => n + (s.owner[id] === p ? m.province[id].vp : 0), 0)
 
 /**
- * End the war on the line as it stands, scored against each side's stated aims.
- * You can win a war you did not conquer, and lose one in which you took ground.
- *
- * Aims decide it; everything of value held decides ties. Without the tiebreak two
- * sides that both failed score 0–0 and the war is called a draw however lopsided
- * the map has become.
+ * End the battle on the line as it stands, scored on the objectives. Everything of
+ * value held decides ties: without the tiebreak two sides that both failed score
+ * 0–0 and the battle is called a draw however lopsided the map has become.
  */
 function settle(m: GameMap, s: KesselState): KesselState {
   const aims = s.sides.map((side) => aimScore(m, s, side.id))
   const ground = s.sides.map((side) => groundHeld(m, s, side.id))
   const score = aims[0] === aims[1] ? ground : aims
   s.winner = score[0] === score[1] ? null : score[0] > score[1] ? 0 : 1
+  let saved: number | undefined
+  if (s.save) {
+    const home = depthMap(m, s, s.save.side)
+    const pocket = new Set(s.save.pocket)
+    saved = s.formations.filter((f) => pocket.has(f.id) && home[f.at] !== Infinity).length
+    s.winner = saved >= s.save.stars[0] ? s.save.side : ((1 - s.save.side) as PlayerId)
+  }
   const verdict = verdictOf(aims, s.winner)
-  s.peace = { aims, ground, verdict }
+  s.peace = { aims, ground, verdict, ...(saved !== undefined && { saved }) }
   s.phase = 'gameOver'
-  log(s, s.winner, s.winner === null ? 'the war ends in stalemate' : `achieves its war aims — a ${verdict} peace`)
+  log(s, s.winner, s.winner === null ? 'the battle ends in stalemate' : `wins the battle — a ${verdict} result`)
   return s
 }
 

@@ -2,10 +2,11 @@
  * Turns a hand-authored list of province seed points plus a real coastline into
  * a finished province map — geometry, adjacency, border lengths, label anchors.
  *
- *   node scripts/gen-map.mjs                              # data/maps/europe.json
- *   node scripts/gen-map.mjs --fetch                      # re-clip the coastline first
- *   node scripts/gen-map.mjs --fetch=./ne_land.geojson    # ...from a local copy
- *   node scripts/gen-map.mjs --seeds=a.json --out=b.json  # try a seed set out of tree
+ *   node scripts/gen-map.mjs --map=sedan                  # data/maps/sedan.json
+ *   node scripts/gen-map.mjs --map=sedan --fetch          # re-clip the coastline first
+ *   node scripts/gen-map.mjs --map=sedan --fetch=data/maps/europe.coast.json
+ *                                                         # ...from a local copy
+ *   node scripts/gen-map.mjs --map=sedan --seeds=a.json --out=b.json
  *
  * Provinces grow by a shortest-path search that may only travel over land pixels,
  * so a seed's territory stops dead at the coast. Nearest-seed by straight line
@@ -52,7 +53,11 @@ const flag = (name) => {
   return hit.includes('=') ? hit.slice(hit.indexOf('=') + 1) : ''
 }
 
-const mapId = flag('map') || 'europe'
+const mapId = flag('map')
+if (!mapId) {
+  console.error('usage: node scripts/gen-map.mjs --map=<id> [--fetch[=<geojson>]]')
+  process.exit(1)
+}
 const seedsPath = flag('seeds') || join(root, `data/maps/${mapId}.seeds.json`)
 const coastPath = flag('coast') || join(root, `data/maps/${mapId}.coast.json`)
 const outPath = flag('out') || join(root, `data/maps/${mapId}.json`)
@@ -120,9 +125,14 @@ function clipLand(geojson, b) {
 }
 
 async function writeCoast(bounds, source) {
-  const geojson = source
+  const read = source
     ? JSON.parse(readFileSync(source, 'utf8'))
     : await (await fetch(NE_LAND_URL)).json()
+  // Another map's clipped coastline is a source too, so a map inside Europe's box
+  // needs no download.
+  const geojson = read.polygons
+    ? { features: [{ geometry: { type: 'MultiPolygon', coordinates: read.polygons } }] }
+    : read
   const polygons = clipLand(geojson, bounds)
   mkdirSync(dirname(coastPath), { recursive: true })
   writeFileSync(

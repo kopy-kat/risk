@@ -20,7 +20,7 @@ import type { PlayerId } from '../../engine/types'
 import { REPLACEMENT_TURNS, STRENGTH } from './game'
 import { mapOf } from './map'
 import type { GameMap, ProvinceId } from './map'
-import { retreatOptions, supplyStates } from './supply'
+import { retreatOptions, supplyNext } from './supply'
 import type { KesselState } from './types'
 
 /**
@@ -61,12 +61,11 @@ const COHESION_VALUE = 0.5
 const READY_VALUE = 0.5
 
 /**
- * One point of objective value inside your own war aims.
+ * One point of objective value held.
  *
- * This is the win condition, so it dominates: a side's six aims run to about
- * fifteen points, which at this weight is worth more than twice its whole army.
- * That is the intended shape — you can win a war you did not conquer, and an
- * evaluation that priced corps above aims would advise the opposite.
+ * This is the win condition, so it dominates, at a weight worth more than a
+ * whole army's steps: you can win a battle you did not annihilate, and an
+ * evaluation that priced corps above objectives would advise the opposite.
  */
 const AIM_VALUE = 14
 
@@ -104,7 +103,7 @@ const AIM_HORIZON = 10
  * A province held, objective value or none.
  *
  * Most of the map scores nothing at the peace, so an evaluation that counted only
- * objective value would price four fifths of Europe at zero and rate giving it
+ * objective value would price most of the map at zero and rate giving it
  * away as free. Ground is the supply network: a chain traces through provinces
  * you hold and stops at ones you do not, which is why a front that has been
  * pushed back is a front drawing on a longer road.
@@ -122,18 +121,14 @@ const PROVINCE_VALUE = 0.4
 const DUG_VALUE = 0.3
 
 /**
- * One point of will.
+ * A corps still standing, over and above its steps.
  *
- * Will is the clock on the whole war: at the floor a side can only ask for terms.
- * Half a step a point puts the seventy-five point band at about the worth of an
- * army, which is the right order — losing your army and losing the country's
- * appetite for the war should cost about the same.
- *
- * It double-counts casualties on purpose. A formation lost costs its steps *and*
- * four points of will, because it costs the army a corps and the country a
- * reason to go on.
+ * A formation lost costs its steps and a corps: one fewer counter to hold a
+ * province with, and one fewer carried into the campaign's next battle. Without
+ * it the evaluation prices a charge that loses whole corps at the steps alone,
+ * and rates headlong assaults better than they are.
  */
-const WILL_VALUE = 0.5
+const CORPS_VALUE = 2
 
 /**
  * A step on its way back: what a turn already spent rebuilding on a railhead is
@@ -185,7 +180,7 @@ const trapCost = (strength: number, cohesion: number, ways: number) =>
   (TRAP_WHEN_FRESH + (1 - TRAP_WHEN_FRESH) * (1 - Math.max(0, Math.min(100, cohesion)) / 100))
 
 export interface Assessment {
-  /** objective value of the war aims this side holds */
+  /** objective value this side holds */
   aims: number
   /** how close this side's ground has come to the aims it does not hold */
   reach: number
@@ -200,7 +195,8 @@ export interface Assessment {
   ready: number
   /** turns spent preparing the ground the line is standing on */
   dug: number
-  will: number
+  /** formations standing */
+  corps: number
   /** debit: this side's own formations at or near a pocket */
   trapped: number
   score: number
@@ -247,8 +243,10 @@ export function assess(
   let ready = 0
   let dug = 0
   let trapped = 0
+  let corps = 0
   for (const f of s.formations) {
     if (f.owner !== p) continue
+    corps++
     const sup = supply[f.id] ?? f.supply
     force += f.strength * SUPPLY_WORTH[sup]
     if (f.strength < STRENGTH[f.type]) force += (f.rest / REPLACEMENT_TURNS) * REST_VALUE
@@ -269,7 +267,7 @@ export function assess(
     cohesion,
     ready,
     dug,
-    will: side.will,
+    corps,
     trapped,
     score:
       aims * AIM_VALUE +
@@ -280,7 +278,7 @@ export function assess(
       cohesion +
       ready +
       dug +
-      side.will * WILL_VALUE -
+      corps * CORPS_VALUE -
       trapped,
   }
 }
@@ -315,12 +313,17 @@ function distanceFromHeld(m: GameMap, s: KesselState, p: PlayerId): Record<Provi
  */
 export function evaluate(s: KesselState, me: PlayerId): number {
   if (s.winner !== null) return s.winner === me ? WIN_SCORE : -WIN_SCORE
-  // A war that ended with nobody ahead is worth nothing to either side, whatever
-  // the line looks like: the peace has already been scored and it was a draw.
+  // A battle that ended with nobody ahead is worth nothing to either side, whatever
+  // the line looks like: it has already been scored and it was a draw.
   if (s.phase === 'gameOver') return 0
 
   const m = mapOf(s.mapId)
   const them = (1 - me) as PlayerId
-  return assess(m, s, me, supplyStates(m, s, me)).score -
-    assess(m, s, them, supplyStates(m, s, them)).score
+  // The side to move drew its supply at the start of this turn; the other side's
+  // was drawn before it moved, so it is read as what it will start its next with.
+  const supplyOf = (p: PlayerId): Record<number, number> =>
+    p === s.current
+      ? {}
+      : Object.fromEntries(Object.entries(supplyNext(m, s, p)).map(([id, x]) => [id, x.supply]))
+  return assess(m, s, me, supplyOf(me)).score - assess(m, s, them, supplyOf(them)).score
 }

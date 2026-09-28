@@ -1,7 +1,7 @@
 import type { PlayerId } from '../../engine/types'
 import { STACK_LIMIT, SUPPLY_COST } from './map'
 import type { GameMap, ProvinceId } from './map'
-import type { Formation, KesselState } from './types'
+import type { Formation, FormationId, KesselState } from './types'
 
 /** What a formation draws per turn. Armour draws double, so spearheads culminate first. */
 export const DRAW = { infantry: 1, armour: 2, recon: 1 } as const
@@ -134,8 +134,8 @@ export function supplyStates(
   m: GameMap,
   s: KesselState,
   me: PlayerId,
+  dist = depthMap(m, s, me),
 ): Record<number, number> {
-  const dist = depthMap(m, s, me)
   const capacity: Record<ProvinceId, number> = {}
   for (const p of liveDepots(m, s, me)) capacity[p] = m.province[p].depot * CAPACITY_PER_DEPOT
 
@@ -155,6 +155,75 @@ export function supplyStates(
     }
     capacity[source] -= DRAW[f.type]
     out[f.id] = bandFor(depth)
+  }
+  return out
+}
+
+/**
+ * `victim`'s formations that would lose every route home if the other side stood a
+ * corps in `p`: the ground under it changes hands and its zone of control closes
+ * round it. Only formations with a route now are counted, and none standing on `p`,
+ * which an enemy could only be standing in if they had gone.
+ */
+export function cutIf(
+  m: GameMap,
+  s: KesselState,
+  victim: PlayerId,
+  p: ProvinceId,
+  before = depthMap(m, s, victim),
+): FormationId[] {
+  const enemy = (1 - victim) as PlayerId
+  const ghost: Formation = {
+    id: -1, owner: enemy, type: 'infantry', at: p, strength: 1, cohesion: 100, wear: 0, dug: 0, supply: 3, cut: 0, rest: 0,
+  }
+  const after = depthMap(m, {
+    ...s,
+    owner: { ...s.owner, [p]: enemy },
+    formations: [...s.formations.filter((f) => !(f.at === p && f.owner === victim)), ghost],
+  }, victim)
+  return s.formations
+    .filter((f) => f.owner === victim && f.at !== p && before[f.at] !== UNREACHABLE && after[f.at] === UNREACHABLE)
+    .map((f) => f.id)
+}
+
+/** `side`'s formations with no route home now that would have one if it took `p` back. */
+export function reconnectedIf(
+  m: GameMap,
+  s: KesselState,
+  side: PlayerId,
+  p: ProvinceId,
+  before = depthMap(m, s, side),
+): FormationId[] {
+  const after = depthMap(m, {
+    ...s,
+    owner: { ...s.owner, [p]: side },
+    formations: s.formations.filter((f) => !(f.at === p && f.owner !== side)),
+  }, side)
+  return s.formations
+    .filter((f) => f.owner === side && before[f.at] === UNREACHABLE && after[f.at] !== UNREACHABLE)
+    .map((f) => f.id)
+}
+
+/**
+ * What each of `me`'s formations has at the start of its next turn: the band its
+ * line gives it, or, with no route home at all, what it carries. A corps keeps its
+ * band the turn it is cut off and loses one every turn after. Without the stocks a
+ * single ride through an empty rear leaves a whole army unable to attack out of the
+ * ring it is in, so a pocket never breaks out and nobody ever has a turn to relieve it.
+ */
+export function supplyNext(
+  m: GameMap,
+  s: KesselState,
+  me: PlayerId,
+): Record<FormationId, { supply: number; cut: number }> {
+  const dist = depthMap(m, s, me)
+  const line = supplyStates(m, s, me, dist)
+  const out: Record<FormationId, { supply: number; cut: number }> = {}
+  for (const f of s.formations) {
+    if (f.owner !== me) continue
+    out[f.id] = dist[f.at] === UNREACHABLE
+      ? { supply: f.cut === 0 ? f.supply : Math.max(0, f.supply - 1), cut: f.cut + 1 }
+      : { supply: line[f.id], cut: 0 }
   }
   return out
 }

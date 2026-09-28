@@ -1,0 +1,653 @@
+{
+  "id": "minsk",
+  "name": "Białystok and Minsk, June 1941",
+  "bounds": {
+    "lonMin": 22.7,
+    "lonMax": 29.5,
+    "latMin": 51.95,
+    "latMax": 54.95
+  },
+  "seeds": [
+    {
+      "id": "suwalki",
+      "name": "Suwałki",
+      "nation": "poland",
+      "lon": 22.93,
+      "lat": 54.1,
+      "terrain": "forest",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "augustow",
+      "name": "Augustów",
+      "nation": "poland",
+      "lon": 22.98,
+      "lat": 53.84,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "bialystok",
+      "name": "Białystok",
+      "nation": "poland",
+      "lon": 23.16,
+      "lat": 53.13,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 1
+    },
+    {
+      "id": "bielsk",
+      "name": "Bielsk Podlaski",
+      "nation": "poland",
+      "lon": 23.19,
+      "lat": 52.77,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "hajnowka",
+      "name": "Hajnówka",
+      "nation": "poland",
+      "lon": 23.58,
+      "lat": 52.74,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sokolka",
+      "name": "Sokółka",
+      "nation": "poland",
+      "lon": 23.5,
+      "lat": 53.4,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "grodno",
+      "name": "Grodno",
+      "nation": "belarus",
+      "lon": 23.83,
+      "lat": 53.68,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "druskininkai",
+      "name": "Druskininkai",
+      "nation": "lithuania",
+      "lon": 23.97,
+      "lat": 54.02,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "brest",
+      "name": "Brest",
+      "nation": "belarus",
+      "lon": 23.69,
+      "lat": 52.09,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "kobryn",
+      "name": "Kobryn",
+      "nation": "belarus",
+      "lon": 24.36,
+      "lat": 52.21,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "pruzhany",
+      "name": "Pruzhany",
+      "nation": "belarus",
+      "lon": 24.46,
+      "lat": 52.56,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bialowieza",
+      "name": "Białowieża",
+      "nation": "belarus",
+      "lon": 23.85,
+      "lat": 52.7,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "svislach",
+      "name": "Svislach",
+      "nation": "belarus",
+      "lon": 24.1,
+      "lat": 53.03,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "vawkavysk",
+      "name": "Vawkavysk",
+      "nation": "belarus",
+      "lon": 24.46,
+      "lat": 53.16,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "masty",
+      "name": "Masty",
+      "nation": "belarus",
+      "lon": 24.54,
+      "lat": 53.41,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "shchuchyn",
+      "name": "Shchuchyn",
+      "nation": "belarus",
+      "lon": 24.74,
+      "lat": 53.6,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zelva",
+      "name": "Zelva",
+      "nation": "belarus",
+      "lon": 24.82,
+      "lat": 53.15,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "slonim",
+      "name": "Slonim",
+      "nation": "belarus",
+      "lon": 25.32,
+      "lat": 53.09,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "byaroza",
+      "name": "Byaroza",
+      "nation": "belarus",
+      "lon": 24.98,
+      "lat": 52.54,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ivatsevichy",
+      "name": "Ivatsevichy",
+      "nation": "belarus",
+      "lon": 25.34,
+      "lat": 52.71,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "drahichyn",
+      "name": "Drahichyn",
+      "nation": "belarus",
+      "lon": 25.15,
+      "lat": 52.19,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "pinsk",
+      "name": "Pinsk",
+      "nation": "belarus",
+      "lon": 26.1,
+      "lat": 52.11,
+      "terrain": "marsh",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "luninets",
+      "name": "Luninets",
+      "nation": "belarus",
+      "lon": 26.8,
+      "lat": 52.25,
+      "terrain": "marsh",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "hantsavichy",
+      "name": "Hantsavichy",
+      "nation": "belarus",
+      "lon": 26.43,
+      "lat": 52.76,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lida",
+      "name": "Lida",
+      "nation": "belarus",
+      "lon": 25.3,
+      "lat": 53.89,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "radun",
+      "name": "Radun",
+      "nation": "belarus",
+      "lon": 24.99,
+      "lat": 54.05,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "varena",
+      "name": "Varėna",
+      "nation": "lithuania",
+      "lon": 24.57,
+      "lat": 54.22,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "vilnius",
+      "name": "Vilnius",
+      "nation": "lithuania",
+      "lon": 25.28,
+      "lat": 54.69,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "eisiskes",
+      "name": "Eišiškės",
+      "nation": "lithuania",
+      "lon": 24.99,
+      "lat": 54.35,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ashmyany",
+      "name": "Ashmyany",
+      "nation": "belarus",
+      "lon": 25.94,
+      "lat": 54.43,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ivye",
+      "name": "Ivye",
+      "nation": "belarus",
+      "lon": 25.77,
+      "lat": 53.93,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "navahrudak",
+      "name": "Navahrudak",
+      "nation": "belarus",
+      "lon": 25.82,
+      "lat": 53.6,
+      "terrain": "hill",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "dzyatlava",
+      "name": "Dzyatlava",
+      "nation": "belarus",
+      "lon": 25.4,
+      "lat": 53.46,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "baranovichi",
+      "name": "Baranovichi",
+      "nation": "belarus",
+      "lon": 26.01,
+      "lat": 53.13,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "lyakhavichy",
+      "name": "Lyakhavichy",
+      "nation": "belarus",
+      "lon": 26.26,
+      "lat": 52.94,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kletsk",
+      "name": "Kletsk",
+      "nation": "belarus",
+      "lon": 26.64,
+      "lat": 53.06,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "nesvizh",
+      "name": "Nesvizh",
+      "nation": "belarus",
+      "lon": 26.67,
+      "lat": 53.22,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mir",
+      "name": "Mir",
+      "nation": "belarus",
+      "lon": 26.47,
+      "lat": 53.45,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stowbtsy",
+      "name": "Stowbtsy",
+      "nation": "belarus",
+      "lon": 26.73,
+      "lat": 53.48,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "valozhyn",
+      "name": "Valozhyn",
+      "nation": "belarus",
+      "lon": 26.53,
+      "lat": 54.09,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "smarhon",
+      "name": "Smarhon",
+      "nation": "belarus",
+      "lon": 26.4,
+      "lat": 54.48,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "maladzyechna",
+      "name": "Maladzyechna",
+      "nation": "belarus",
+      "lon": 26.85,
+      "lat": 54.31,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "vileyka",
+      "name": "Vileyka",
+      "nation": "belarus",
+      "lon": 26.92,
+      "lat": 54.6,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rakaw",
+      "name": "Rakaw",
+      "nation": "belarus",
+      "lon": 27.05,
+      "lat": 53.97,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dzyarzhynsk",
+      "name": "Dzyarzhynsk",
+      "nation": "belarus",
+      "lon": 27.19,
+      "lat": 53.68,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "radashkovichy",
+      "name": "Radashkovichy",
+      "nation": "belarus",
+      "lon": 27.24,
+      "lat": 54.15,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "minsk",
+      "name": "Minsk",
+      "nation": "belarus",
+      "lon": 27.56,
+      "lat": 53.9,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 2
+    },
+    {
+      "id": "lahoysk",
+      "name": "Lahoysk",
+      "nation": "belarus",
+      "lon": 27.85,
+      "lat": 54.2,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "uzda",
+      "name": "Uzda",
+      "nation": "belarus",
+      "lon": 27.22,
+      "lat": 53.46,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "kapyl",
+      "name": "Kapyl",
+      "nation": "belarus",
+      "lon": 27.09,
+      "lat": 53.15,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "slutsk",
+      "name": "Slutsk",
+      "nation": "belarus",
+      "lon": 27.56,
+      "lat": 53.03,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "smilavichy",
+      "name": "Smilavichy",
+      "nation": "belarus",
+      "lon": 28.02,
+      "lat": 53.75,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "rudzensk",
+      "name": "Rudzensk",
+      "nation": "belarus",
+      "lon": 27.87,
+      "lat": 53.6,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "marinahorka",
+      "name": "Maryina Horka",
+      "nation": "belarus",
+      "lon": 28.15,
+      "lat": 53.51,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "chervyen",
+      "name": "Chervyen",
+      "nation": "belarus",
+      "lon": 28.43,
+      "lat": 53.71,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "barysaw",
+      "name": "Barysaw",
+      "nation": "belarus",
+      "lon": 28.5,
+      "lat": 54.23,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "starydarohi",
+      "name": "Staryya Darohi",
+      "nation": "belarus",
+      "lon": 28.27,
+      "lat": 53.04,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "asipovichy",
+      "name": "Asipovichy",
+      "nation": "belarus",
+      "lon": 28.63,
+      "lat": 53.3,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "babruysk",
+      "name": "Babruysk",
+      "nation": "belarus",
+      "lon": 29.22,
+      "lat": 53.14,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "berazino",
+      "name": "Berazino",
+      "nation": "belarus",
+      "lon": 28.99,
+      "lat": 53.84,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zembin",
+      "name": "Zembin",
+      "nation": "belarus",
+      "lon": 28.22,
+      "lat": 54.36,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lepel",
+      "name": "Lepel",
+      "nation": "belarus",
+      "lon": 28.69,
+      "lat": 54.88,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "krupki",
+      "name": "Krupki",
+      "nation": "belarus",
+      "lon": 29.14,
+      "lat": 54.32,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "glusk",
+      "name": "Hlusk",
+      "nation": "belarus",
+      "lon": 28.68,
+      "lat": 52.9,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    }
+  ],
+  "seaLinks": []
+}

@@ -1,0 +1,683 @@
+{
+  "id": "volhynia",
+  "name": "Volhynia and Galicia, June 1941",
+  "bounds": {
+    "lonMin": 22.3,
+    "lonMax": 28.9,
+    "latMin": 48.8,
+    "latMax": 51.8
+  },
+  "seeds": [
+    {
+      "id": "lublin",
+      "name": "Lublin",
+      "nation": "poland",
+      "lon": 22.57,
+      "lat": 51.25,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "chelm",
+      "name": "Chełm",
+      "nation": "poland",
+      "lon": 23.47,
+      "lat": 51.13,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "wlodawa",
+      "name": "Włodawa",
+      "nation": "poland",
+      "lon": 23.55,
+      "lat": 51.55,
+      "terrain": "marsh",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "zamosc",
+      "name": "Zamość",
+      "nation": "poland",
+      "lon": 23.25,
+      "lat": 50.72,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "hrubieszow",
+      "name": "Hrubieszów",
+      "nation": "poland",
+      "lon": 23.89,
+      "lat": 50.81,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "tomaszow",
+      "name": "Tomaszów",
+      "nation": "poland",
+      "lon": 23.42,
+      "lat": 50.45,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "jaroslaw",
+      "name": "Jarosław",
+      "nation": "poland",
+      "lon": 22.68,
+      "lat": 50.02,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "lubaczow",
+      "name": "Lubaczów",
+      "nation": "poland",
+      "lon": 23.12,
+      "lat": 50.16,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "bilgoraj",
+      "name": "Biłgoraj",
+      "nation": "poland",
+      "lon": 22.72,
+      "lat": 50.54,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "przemysl",
+      "name": "Przemyśl",
+      "nation": "ukraine",
+      "lon": 22.77,
+      "lat": 49.78,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "mostyska",
+      "name": "Mostyska",
+      "nation": "ukraine",
+      "lon": 23.15,
+      "lat": 49.8,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sambir",
+      "name": "Sambir",
+      "nation": "ukraine",
+      "lon": 23.2,
+      "lat": 49.52,
+      "terrain": "hill",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "drohobych",
+      "name": "Drohobych",
+      "nation": "ukraine",
+      "lon": 23.5,
+      "lat": 49.35,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stryi",
+      "name": "Stryi",
+      "nation": "ukraine",
+      "lon": 23.85,
+      "lat": 49.26,
+      "terrain": "hill",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "horodok",
+      "name": "Horodok",
+      "nation": "ukraine",
+      "lon": 23.65,
+      "lat": 49.78,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "yavoriv",
+      "name": "Yavoriv",
+      "nation": "ukraine",
+      "lon": 23.38,
+      "lat": 49.94,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ravaruska",
+      "name": "Rava-Ruska",
+      "nation": "ukraine",
+      "lon": 23.62,
+      "lat": 50.23,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zhovkva",
+      "name": "Zhovkva",
+      "nation": "ukraine",
+      "lon": 23.97,
+      "lat": 50.05,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lviv",
+      "name": "Lviv",
+      "nation": "ukraine",
+      "lon": 24.03,
+      "lat": 49.84,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 2
+    },
+    {
+      "id": "sokal",
+      "name": "Sokal",
+      "nation": "ukraine",
+      "lon": 24.28,
+      "lat": 50.48,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "volodymyr",
+      "name": "Volodymyr-Volynskyi",
+      "nation": "ukraine",
+      "lon": 24.32,
+      "lat": 50.85,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "lyuboml",
+      "name": "Lyuboml",
+      "nation": "ukraine",
+      "lon": 24.04,
+      "lat": 51.23,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kovel",
+      "name": "Kovel",
+      "nation": "ukraine",
+      "lon": 24.71,
+      "lat": 51.21,
+      "terrain": "marsh",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "ratne",
+      "name": "Ratne",
+      "nation": "ukraine",
+      "lon": 24.52,
+      "lat": 51.67,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kamin",
+      "name": "Kamin-Kashyrskyi",
+      "nation": "ukraine",
+      "lon": 24.96,
+      "lat": 51.62,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "lokachi",
+      "name": "Lokachi",
+      "nation": "ukraine",
+      "lon": 24.65,
+      "lat": 50.74,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "horokhiv",
+      "name": "Horokhiv",
+      "nation": "ukraine",
+      "lon": 24.76,
+      "lat": 50.5,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "radekhiv",
+      "name": "Radekhiv",
+      "nation": "ukraine",
+      "lon": 24.64,
+      "lat": 50.28,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "kamianka",
+      "name": "Kamianka-Buzka",
+      "nation": "ukraine",
+      "lon": 24.35,
+      "lat": 50.1,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zolochiv",
+      "name": "Zolochiv",
+      "nation": "ukraine",
+      "lon": 24.9,
+      "lat": 49.81,
+      "terrain": "hill",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "peremyshliany",
+      "name": "Peremyshliany",
+      "nation": "ukraine",
+      "lon": 24.56,
+      "lat": 49.67,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "khodoriv",
+      "name": "Khodoriv",
+      "nation": "ukraine",
+      "lon": 24.3,
+      "lat": 49.41,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rohatyn",
+      "name": "Rohatyn",
+      "nation": "ukraine",
+      "lon": 24.6,
+      "lat": 49.41,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "stanislav",
+      "name": "Stanislav",
+      "nation": "ukraine",
+      "lon": 24.71,
+      "lat": 48.92,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "berezhany",
+      "name": "Berezhany",
+      "nation": "ukraine",
+      "lon": 24.94,
+      "lat": 49.45,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zboriv",
+      "name": "Zboriv",
+      "nation": "ukraine",
+      "lon": 25.14,
+      "lat": 49.66,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "brody",
+      "name": "Brody",
+      "nation": "ukraine",
+      "lon": 25.15,
+      "lat": 50.08,
+      "terrain": "forest",
+      "depot": 1,
+      "vp": 1
+    },
+    {
+      "id": "berestechko",
+      "name": "Berestechko",
+      "nation": "ukraine",
+      "lon": 25.12,
+      "lat": 50.36,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "lutsk",
+      "name": "Lutsk",
+      "nation": "ukraine",
+      "lon": 25.32,
+      "lat": 50.75,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "kivertsi",
+      "name": "Kivertsi",
+      "nation": "ukraine",
+      "lon": 25.49,
+      "lat": 50.93,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "manevychi",
+      "name": "Manevychi",
+      "nation": "ukraine",
+      "lon": 25.53,
+      "lat": 51.29,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "tsuman",
+      "name": "Tsuman",
+      "nation": "ukraine",
+      "lon": 25.9,
+      "lat": 50.83,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "klevan",
+      "name": "Klevan",
+      "nation": "ukraine",
+      "lon": 26.0,
+      "lat": 50.7,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "mlyniv",
+      "name": "Mlyniv",
+      "nation": "ukraine",
+      "lon": 25.45,
+      "lat": 50.51,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "dubno",
+      "name": "Dubno",
+      "nation": "ukraine",
+      "lon": 25.73,
+      "lat": 50.42,
+      "terrain": "urban",
+      "depot": 1,
+      "vp": 2
+    },
+    {
+      "id": "kremenets",
+      "name": "Kremenets",
+      "nation": "ukraine",
+      "lon": 25.72,
+      "lat": 50.1,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "ternopil",
+      "name": "Ternopil",
+      "nation": "ukraine",
+      "lon": 25.59,
+      "lat": 49.55,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "chortkiv",
+      "name": "Chortkiv",
+      "nation": "ukraine",
+      "lon": 25.8,
+      "lat": 49.02,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "zbarazh",
+      "name": "Zbarazh",
+      "nation": "ukraine",
+      "lon": 25.78,
+      "lat": 49.7,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "shumsk",
+      "name": "Shumsk",
+      "nation": "ukraine",
+      "lon": 25.95,
+      "lat": 50.12,
+      "terrain": "hill",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "rivne",
+      "name": "Rivne",
+      "nation": "ukraine",
+      "lon": 26.25,
+      "lat": 50.62,
+      "terrain": "urban",
+      "depot": 2,
+      "vp": 1
+    },
+    {
+      "id": "ostroh",
+      "name": "Ostroh",
+      "nation": "ukraine",
+      "lon": 26.52,
+      "lat": 50.33,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 1
+    },
+    {
+      "id": "kostopil",
+      "name": "Kostopil",
+      "nation": "ukraine",
+      "lon": 26.44,
+      "lat": 50.88,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "sarny",
+      "name": "Sarny",
+      "nation": "ukraine",
+      "lon": 26.6,
+      "lat": 51.34,
+      "terrain": "marsh",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "hoshcha",
+      "name": "Hoshcha",
+      "nation": "ukraine",
+      "lon": 26.8,
+      "lat": 50.6,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "korets",
+      "name": "Korets",
+      "nation": "ukraine",
+      "lon": 27.2,
+      "lat": 50.62,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "izyaslav",
+      "name": "Izyaslav",
+      "nation": "ukraine",
+      "lon": 26.8,
+      "lat": 50.12,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "volochysk",
+      "name": "Volochysk",
+      "nation": "ukraine",
+      "lon": 26.17,
+      "lat": 49.53,
+      "terrain": "plain",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "proskuriv",
+      "name": "Proskuriv",
+      "nation": "ukraine",
+      "lon": 26.98,
+      "lat": 49.42,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "starokostiantyniv",
+      "name": "Starokostiantyniv",
+      "nation": "ukraine",
+      "lon": 27.21,
+      "lat": 49.76,
+      "terrain": "plain",
+      "depot": 1,
+      "vp": 0
+    },
+    {
+      "id": "shepetivka",
+      "name": "Shepetivka",
+      "nation": "ukraine",
+      "lon": 27.06,
+      "lat": 50.18,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "polonne",
+      "name": "Polonne",
+      "nation": "ukraine",
+      "lon": 27.5,
+      "lat": 50.12,
+      "terrain": "forest",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "novohrad",
+      "name": "Novohrad-Volynskyi",
+      "nation": "ukraine",
+      "lon": 27.62,
+      "lat": 50.59,
+      "terrain": "forest",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "olevsk",
+      "name": "Olevsk",
+      "nation": "ukraine",
+      "lon": 27.66,
+      "lat": 51.22,
+      "terrain": "marsh",
+      "depot": 0,
+      "vp": 0
+    },
+    {
+      "id": "korosten",
+      "name": "Korosten",
+      "nation": "ukraine",
+      "lon": 28.63,
+      "lat": 50.95,
+      "terrain": "forest",
+      "depot": 2,
+      "vp": 0
+    },
+    {
+      "id": "zhytomyr",
+      "name": "Zhytomyr",
+      "nation": "ukraine",
+      "lon": 28.66,
+      "lat": 50.25,
+      "terrain": "urban",
+      "depot": 3,
+      "vp": 0
+    },
+    {
+      "id": "berdychiv",
+      "name": "Berdychiv",
+      "nation": "ukraine",
+      "lon": 28.6,
+      "lat": 49.9,
+      "terrain": "plain",
+      "depot": 2,
+      "vp": 0
+    }
+  ],
+  "seaLinks": []
+}

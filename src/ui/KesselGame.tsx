@@ -6,14 +6,14 @@ import { adapt, meanTells, tellsOn } from '../games/kessel/adapt'
 import type { Tells } from '../games/kessel/adapt'
 import { DOCTRINES, decideFor } from '../games/kessel/bot'
 import type { Doctrine } from '../games/kessel/bot'
-import { applyMove, broken, createGame, hqReach, inCommand, legalMoves } from '../games/kessel/game'
+import { applyMove, createGame, hqReach, inCommand, legalMoves, survivors } from '../games/kessel/game'
 import { mapOf } from '../games/kessel/map'
 import type { GameMap, ProvinceId } from '../games/kessel/map'
-import { MAX_LEVEL, MISSIONS, corpsLost, levelled, missionKey, missionOf, starLine, starsFor } from '../games/kessel/missions'
+import { campaignOf, corpsLost, levelled, missionOf, starLine, starsFor } from '../games/kessel/missions'
 import { MUD_CYCLE, MUD_TURNS, exploitReach, isMud, reachable } from '../games/kessel/movement'
 import { retreatOptions } from '../games/kessel/supply'
-import { listGames, missionLevels, missionStars, newGameId, recordLevel, recordStars, saveGame } from '../review/store'
-import type { FormationId, KesselState, LogEntry, Move, Order } from '../games/kessel/types'
+import { advanceCampaign, campaignProgress, listGames, newGameId, saveGame } from '../review/store'
+import type { Carried, FormationId, KesselState, LogEntry, Move, Order } from '../games/kessel/types'
 import { playerColor } from './colors'
 import type { PrimaryAction } from './Dock'
 import { KesselDock } from './KesselDock'
@@ -27,9 +27,9 @@ const BOT_DELAY = 420
 const BOT_MOVE_CAP = 20_000
 
 interface Props {
-  seats: SeatConfig[]
-  /** a mission to fight instead of the war */
-  scenario?: string
+  scenario: string
+  /** fought as written, outside the campaign: no army carried in, and nothing carried out */
+  practice?: boolean
   /** start a mission from the end screen — the same one again, or the next */
   onPlay(scenario: string): void
   onExit(): void
@@ -44,10 +44,15 @@ const botFor = (key: string | null): Decide | undefined =>
 
 /**
  * A mission seats you on its side and the enemy on the other, fighting its
- * doctrine as adapted to the tells your recent missions left on the board.
+ * doctrine as adapted to the tells your recent missions left on the board. In a
+ * campaign it is set at the campaign's level, with the army the last battle left.
  */
-function missionSetup(scenario: string) {
-  const level = missionLevels()[missionKey(scenario)] ?? 0
+function missionSetup(scenario: string, practice: boolean) {
+  const campaign = campaignOf(scenario)
+  const progress = campaignProgress(campaign.id)
+  const inRun = !practice && campaign.missions[progress.run.at]?.id === scenario
+  const level = inRun ? progress.level : 0
+  const army: Carried[] | undefined = inRun ? progress.run.army ?? undefined : undefined
   const mission = levelled(missionOf(scenario), level)
   const base = DOCTRINES.find((d) => d.key === mission.enemy) as Doctrine
   const seats: SeatConfig[] = mission.sides.map((name, i) => ({
@@ -57,7 +62,10 @@ function missionSetup(scenario: string) {
   }))
   const learned = listGames().flatMap((r) => (r.scenario && r.tells ? [r.tells] : []))
   // Caution is a defender's lesson; an enemy on the attack that learned it would only attack less.
-  return { mission, level, seats, ...adapt(base, mission.destroy ? null : meanTells(learned)) }
+  return {
+    mission, level, seats, campaign, inRun, army,
+    ...adapt(base, mission.enemy === 'depth' ? meanTells(learned) : null),
+  }
 }
 
 /**
@@ -122,14 +130,14 @@ const aimReport = (m: GameMap, s: KesselState, p: PlayerId) => {
   return { aims, total, got, share: total === 0 ? 0 : got / total }
 }
 
-export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props) {
+export function KesselGame({ scenario, practice = false, onPlay, onExit, onReview }: Props) {
   const [seed] = useState(() => Math.floor(Math.random() * 1e9))
   const recordId = useRef(newGameId(Math.floor(Math.random() * 1e9)))
-  const [setup] = useState(() => (scenario ? missionSetup(scenario) : null))
+  const [setup] = useState(() => missionSetup(scenario, practice))
   const [state, setState] = useState<KesselState>(() =>
-    createGame({ seats: setup ? setup.seats : seats, seed, scenario, level: setup?.level }),
+    createGame({ seats: setup.seats, seed, scenario, level: setup.level, army: setup.army }),
   )
-  const [briefed, setBriefed] = useState(!setup)
+  const [briefed, setBriefed] = useState(false)
   /** your tells, read off the board you leave the enemy after every commit */
   const tells = useRef<Tells[]>([])
   const [selected, setSelected] = useState<FormationId | null>(null)
@@ -157,18 +165,13 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
     const over = state.phase === 'gameOver'
     if (!over && state.turn === savedTurn.current) return
     savedTurn.current = state.turn
-    if (over && setup) {
-      const key = missionKey(setup.mission.id)
-      const stars = starsFor(state, setup.mission.player, setup.mission)
-      recordStars(key, stars)
-      if (stars === 3) recordLevel(key, Math.min(MAX_LEVEL, setup.level + 1))
-    }
     saveGame({
       id: recordId.current,
       game: 'kessel',
       scenario,
-      level: setup?.level || undefined,
-      tells: setup ? meanTells(tells.current) : undefined,
+      level: setup.level || undefined,
+      army: setup.army,
+      tells: meanTells(tells.current),
       seed,
       botSeed: seed ^ 0x9e3779b9,
       seats: state.sides.map((x) => ({ name: x.name, bot: x.bot, color: x.color })),
@@ -416,14 +419,8 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
 
   const primary = useMemo<PrimaryAction | null>(() => {
     if (!isHuman) return null
-    if (state.phase === 'terms') {
-      return { label: 'Accept terms', run: () => play({ type: 'acceptTerms' }) }
-    }
-    if (broken(state, me) && !state.offered) {
-      return { label: 'Offer terms', run: () => play({ type: 'offerTerms' }) }
-    }
     return { label: 'Commit turn', run: () => play({ type: 'commit' }) }
-  }, [isHuman, state, me, play])
+  }, [isHuman, play])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -537,11 +534,6 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
             </div>
           ))}
         </div>
-
-        <div className="phases">
-          <span className={`phase-pill ${state.phase === 'orders' ? 'active' : 'done'}`}>Orders</span>
-          <span className={`phase-pill ${state.phase === 'terms' ? 'active' : ''}`}>Terms</span>
-        </div>
       </div>
 
       <main className="stage">
@@ -589,8 +581,6 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
           primary={primary}
           onClearOrder={() => sel && play({ type: 'clearOrder', formation: sel.id })}
           onClearHq={() => selectedHq !== null && play({ type: 'moveHq', hq: selectedHq, to: null })}
-          onRejectTerms={() => play({ type: 'rejectTerms' })}
-          onCommit={() => play({ type: 'commit' })}
           onShowSettings={() => setShowSettings((v) => !v)}
           settingsOpen={showSettings}
           onCloseSettings={() => setShowSettings(false)}
@@ -617,15 +607,30 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
             {setup.mission.destroy && (
               <p className="lesson">
                 Hold and you win. ★★ for destroying {setup.mission.destroy[0]} of their corps,
-                ★★★ for {setup.mission.destroy[1]} — or for breaking them before the last turn.
+                ★★★ for {setup.mission.destroy[1]} — or for destroying them all before the last turn.
+              </p>
+            )}
+            {setup.mission.save && (
+              <p className="lesson">
+                Bring {setup.mission.save.stars[0]} of the {setup.mission.save.pocket.length} marked corps out with a
+                route home and you win, whatever the objectives say. ★★ for {setup.mission.save.stars[1]},
+                ★★★ for {setup.mission.save.stars[2]}.
               </p>
             )}
             {setup.level > 0 && (
               <p className="lesson">
-                Level {setup.level + 1}: you have beaten this decisively before, so it is {setup.level} turn
-                {setup.level > 1 ? 's' : ''} shorter and the enemy has {setup.level} more corps arriving on turn 2.
+                Level {setup.level + 1}: you have mastered this campaign before, so every battle in it is{' '}
+                {setup.level} turn{setup.level > 1 ? 's' : ''} {setup.mission.destroy ? 'longer' : 'shorter'} and
+                the enemy has {setup.level} more corps arriving on turn 2.
               </p>
             )}
+            <p className="lesson">
+              {setup.inRun
+                ? setup.army
+                  ? <>Your army is what came out of the last battle: {armyLine(setup.army)}. A slot with nobody left to fill it stays empty.</>
+                  : <>{setup.campaign.name}, battle 1 of {setup.campaign.missions.length}. Whatever comes out of it fights the next.</>
+                : <>Practice: fought as written, outside the campaign.</>}
+            </p>
             {setup.lesson && <p className="lesson">{setup.lesson}</p>}
             <button className="go" onClick={() => setBriefed(true)}>Take the field</button>
           </div>
@@ -635,9 +640,7 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
       {over && setup && (
         <MissionEnd
           state={state}
-          mission={setup.mission.id}
-          level={setup.level}
-          player={setup.mission.player}
+          setup={setup}
           onPlay={onPlay}
           onReview={() => onReview(recordId.current)}
           onExit={onExit}
@@ -705,24 +708,39 @@ export function KesselGame({ seats, scenario, onPlay, onExit, onReview }: Props)
   )
 }
 
+/** A campaign's army in a line: corps by type, and the steps they add up to. */
+const armyLine = (army: Carried[]) => {
+  const n = (t: Carried['type']) => army.filter((c) => c.type === t).length
+  const steps = army.reduce((k, c) => k + c.strength, 0)
+  return `${n('infantry')} infantry, ${n('armour')} armour, ${n('recon')} recon — ${steps} steps`
+}
+
 function MissionEnd({
-  state, mission, level, player, onPlay, onReview, onExit,
+  state, setup, onPlay, onReview, onExit,
 }: {
   state: KesselState
-  mission: string
-  level: number
-  player: PlayerId
+  setup: ReturnType<typeof missionSetup>
   onPlay(scenario: string): void
   onReview(): void
   onExit(): void
 }) {
   const m = mapOf(state.mapId)
-  const defence = missionOf(mission).destroy
-  const stars = starsFor(state, player, missionOf(mission))
-  const next = MISSIONS[MISSIONS.findIndex((x) => x.id === mission) + 1]
-  // the save that records these stars runs after this renders, so count them here too
-  const passed = Math.max(stars, missionStars()[missionKey(mission)] ?? 0) > 0
+  const { mission, campaign, inRun } = setup
+  const player = mission.player
+  const stars = starsFor(state, player, mission)
+  const index = campaign.missions.findIndex((x) => x.id === mission.id)
+  const next = campaign.missions[index + 1]
+  const army = survivors(state, player)
   const r = aimReport(m, state, player)
+  const moved = useRef(false)
+  const carryOn = (then: () => void) => () => {
+    if (moved.current) return
+    moved.current = true
+    advanceCampaign(campaign.id, campaign.missions.length, stars, army)
+    then()
+  }
+  const run = campaignProgress(campaign.id).run
+  const total = run.stars.reduce((a, b) => a + b, 0) + stars
 
   return (
     <div className="overlay">
@@ -738,9 +756,11 @@ function MissionEnd({
             ? state.winner === null
               ? 'neither side carried it'
               : 'the enemy carried it'
-            : defence
-              ? `held · ${corpsLost(state, (1 - player) as PlayerId)} enemy corps destroyed`
-              : `a ${state.peace?.verdict} win`}
+            : state.peace?.saved !== undefined
+              ? `${state.peace.saved} of ${mission.save?.pocket.length} corps brought out`
+              : mission.destroy
+                ? `held · ${corpsLost(state, (1 - player) as PlayerId)} enemy corps destroyed`
+                : `a ${state.peace?.verdict} win`}
           {` · ${r.got}/${r.total} vp`}
         </div>
         <div className="field kpeace" style={{ ['--c' as string]: playerColor(state.sides[player].color) }}>
@@ -752,17 +772,24 @@ function MissionEnd({
             ))}
           </div>
         </div>
-        {stars === 3 && level < MAX_LEVEL && (
-          <p className="lesson">Mastered. Played again it is level {level + 2}: a turn shorter, a corps more for the enemy.</p>
+        {inRun && stars > 0 && (
+          <p className="lesson">
+            {next
+              ? <>Coming out of it: {armyLine(army)}. That is the army for {next.name}.</>
+              : <>{campaign.name} is won: {total} of {campaign.missions.length * 3} stars across the campaign.</>}
+          </p>
         )}
+        {!inRun && <p className="lesson">Practice — nothing carries into the campaign.</p>}
         <div className="endgame-actions">
           <button className="btn ghost" onClick={onReview}>Review</button>
-          <button className="btn ghost" onClick={onExit}>Missions</button>
-          <button className={next && passed ? 'btn ghost' : 'go'} onClick={() => onPlay(mission)}>
-            {stars === 3 && level < MAX_LEVEL ? `Level ${level + 2}` : 'Retry'}
+          <button className="btn ghost" onClick={onExit}>Campaigns</button>
+          <button className={inRun && stars > 0 ? 'btn ghost' : 'go'} onClick={() => onPlay(mission.id)}>
+            Retry
           </button>
-          {next && passed && (
-            <button className="go" onClick={() => onPlay(next.id)}>Next · {next.name}</button>
+          {inRun && stars > 0 && (
+            next
+              ? <button className="go" onClick={carryOn(() => onPlay(next.id))}>Continue · {next.name}</button>
+              : <button className="go" onClick={carryOn(onExit)}>Finish the campaign</button>
           )}
         </div>
       </div>

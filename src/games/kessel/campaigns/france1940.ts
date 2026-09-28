@@ -1,0 +1,325 @@
+import arras from '../../../../data/maps/arras.json'
+import flanders from '../../../../data/maps/flanders.json'
+import gembloux from '../../../../data/maps/gembloux.json'
+import loire from '../../../../data/maps/loire.json'
+import sedan from '../../../../data/maps/sedan.json'
+import somme from '../../../../data/maps/somme.json'
+import { registerMap } from '../map'
+import type { MapData } from '../map'
+import type { Campaign } from '../missions'
+import { arm, inf, rec } from './oob'
+
+for (const map of [gembloux, sedan, arras, flanders, somme, loire]) registerMap(map as unknown as MapData)
+
+export const FRANCE_1940: Campaign = {
+  id: 'france1940',
+  name: 'France 1940',
+  side: 'Germany',
+  blurb: 'Through the Ardennes, across the Meuse and on to the sea — then south to finish it.',
+  missions: [
+    {
+      id: 'gembloux@2',
+      name: 'Gembloux',
+      date: 'May 1940',
+      briefing:
+        'The Allies are doing what you want them to: marching their best armies into Belgium to ' +
+        'meet you on the plain. Hoepner\'s panzers are over the Maas at Maastricht, and the French ' +
+        'Cavalry Corps is coming forward to fight them. Beat it, then take Liège, Namur, the Gembloux ' +
+        'gap, Leuven, Brussels and Antwerp — the harder you press the north, the less they look south to the Ardennes.',
+      mapId: 'gembloux',
+      sides: ['Germany', 'Allies'],
+      held: ['maastricht', 'sittard', 'heerlen', 'roermond', 'venlo', 'weert', 'eindhoven', 'helmond', 'aachen', 'geilenkirchen', 'julich', 'duren', 'monchengladbach', 'monschau'],
+      home: [['duren', 'julich', 'monchengladbach'], ['ghent', 'mons', 'charleroi']],
+      formations: [
+        arm(0, 'maastricht'),
+        arm(0, 'maastricht'),
+        rec(0, 'maastricht'),
+        inf(0, 'aachen'),
+        inf(0, 'aachen'),
+        inf(0, 'aachen'),
+        inf(0, 'eindhoven'),
+        inf(0, 'eindhoven'),
+        inf(0, 'eindhoven'),
+        inf(0, 'venlo'),
+
+        arm(1, 'hannut'),
+        inf(1, 'liege', 1),
+        inf(1, 'leuven'),
+        inf(1, 'namur', 2),
+        inf(1, 'antwerp', 2),
+        inf(1, 'brussels', 2),
+      ],
+      aims: ['liege', 'namur', 'gembloux', 'leuven', 'brussels', 'antwerp'],
+      turns: 10,
+      arrivals: [
+        { turn: 4, side: 1, type: 'infantry' },
+      ],
+      player: 0,
+      enemy: 'maneuver',
+    },
+    {
+      id: 'sedan@3',
+      name: 'Sedan',
+      date: 'May 1940',
+      briefing:
+        'The Allies have marched their best armies north into Belgium to meet you on the plain. ' +
+        'Behind them the Ardennes is held by little, and the Meuse at Sedan by less. Break through ' +
+        'the forest, cross the river, and drive for the Channel before they turn round — every ' +
+        'objective you hold at the end is theirs cut off from France.',
+      mapId: 'sedan',
+      sides: ['Germany', 'Allies'],
+      held: ['duisburg', 'bonn', 'koblenz', 'wittlich', 'kaiserslautern', 'cologne', 'dusseldorf', 'venlo', 'eindhoven', 'maastricht', 'aachen', 'prum', 'bitburg', 'trier', 'saarbrucken', 'luxembourg'],
+      home: [['duisburg', 'koblenz', 'kaiserslautern'], ['paris', 'meaux', 'calais', 'dunkirk', 'boulogne']],
+      formations: [
+        { ...arm(0, 'luxembourg'), fresh: true },
+        { ...arm(0, 'luxembourg'), fresh: true },
+        { ...arm(0, 'bitburg'), fresh: true },
+        { ...arm(0, 'bitburg'), fresh: true },
+        arm(0, 'prum'),
+        arm(0, 'prum'),
+        rec(0, 'luxembourg'),
+        inf(0, 'aachen'),
+        inf(0, 'aachen'),
+        inf(0, 'maastricht'),
+        inf(0, 'maastricht'),
+        inf(0, 'eindhoven'),
+        { ...inf(0, 'trier'), fresh: true },
+        { ...inf(0, 'trier'), fresh: true },
+        { ...inf(0, 'saarbrucken'), fresh: true },
+
+        inf(1, 'antwerp'),
+        inf(1, 'antwerp'),
+        inf(1, 'hasselt'),
+        arm(1, 'hasselt'),
+        inf(1, 'liege', 1),
+        inf(1, 'brussels'),
+        rec(1, 'stvith'),
+        rec(1, 'bastogne'),
+        inf(1, 'dinant', 2),
+        inf(1, 'sedan', 2),
+        inf(1, 'metz'),
+        arm(1, 'reims'),
+        inf(1, 'verdun'),
+        inf(1, 'laon', 2),
+      ],
+      aims: ['brussels', 'antwerp', 'sedan', 'amiens', 'abbeville', 'calais'],
+      turns: 12,
+      arrivals: [
+        { turn: 3, side: 1, type: 'infantry' },
+        { turn: 4, side: 1, type: 'armour' },
+        { turn: 5, side: 1, type: 'infantry' },
+        { turn: 7, side: 1, type: 'infantry' },
+      ],
+      player: 0,
+      enemy: 'depth',
+    },
+    {
+      id: 'arras@2',
+      name: 'Arras',
+      date: 'May 1940',
+      briefing:
+        'Your panzers have reached the sea at Abbeville and cut the Allied armies in two. Now turn ' +
+        'them north, up the coast for Boulogne and through Arras for Douai and Lille, and hold the corridor ' +
+        'behind you while you do it: it is three provinces wide at Péronne, and there are Allied armies ' +
+        'on both sides of it.',
+      mapId: 'arras',
+      sides: ['Germany', 'Allies'],
+      held: ['abbeville', 'blangy', 'airaines', 'poix', 'conty', 'moreuil', 'auxilechateau', 'amiens', 'corbie', 'rosieres', 'ham', 'doullens', 'albert', 'bapaume', 'peronne', 'epehy', 'cambrai', 'bohain', 'lecateau', 'stquentin', 'guise', 'laon'],
+      home: [['guise', 'lecateau', 'laon'], ['boulogne', 'lille', 'tournai', 'beauvais', 'clermont', 'soissons']],
+      formations: [
+        arm(0, 'abbeville'),
+        arm(0, 'amiens'),
+        arm(0, 'cambrai'),
+        arm(0, 'cambrai'),
+        rec(0, 'peronne'),
+        inf(0, 'amiens'),
+        inf(0, 'peronne'),
+        inf(0, 'stquentin'),
+        inf(0, 'laon'),
+        inf(0, 'lecateau'),
+
+        inf(1, 'arras', 2),
+        inf(1, 'lille'),
+        inf(1, 'lille'),
+        inf(1, 'tournai'),
+        inf(1, 'stomer'),
+        inf(1, 'montreuil', 1),
+        inf(1, 'boulogne', 1),
+        inf(1, 'beauvais'),
+      ],
+      aims: ['abbeville', 'amiens', 'arras', 'douai', 'lille', 'boulogne'],
+      turns: 8,
+      arrivals: [
+        { turn: 2, side: 1, type: 'armour', at: 'arras' },
+        { turn: 2, side: 1, type: 'infantry', at: 'arras' },
+        { turn: 3, side: 1, type: 'armour', at: 'compiegne' },
+        { turn: 4, side: 1, type: 'infantry', at: 'beauvais' },
+      ],
+      player: 0,
+      enemy: 'maneuver',
+    },
+    {
+      id: 'dunkirk@2',
+      name: 'Dunkirk',
+      date: 'May 1940',
+      briefing:
+        'The British, the French First Army and the Belgians are penned against the Channel, and ' +
+        'every day they hold the ports more of them get away by sea. You have six turns. Take ' +
+        'Boulogne, Calais and Dunkirk, and Lille behind them, before the perimeter fills up — and ' +
+        'keep Arras and St-Pol, because the pocket will try to break south through them.',
+      mapId: 'flanders',
+      sides: ['Germany', 'Allies'],
+      held: ['montreuil', 'desvres', 'hesdin', 'fruges', 'stomer', 'aire', 'stpol', 'arras', 'douai', 'valenciennes', 'stamand', 'ath', 'geraardsbergen', 'aalst', 'wetteren', 'lokeren', 'dendermonde'],
+      home: [['valenciennes', 'stamand', 'aalst', 'dendermonde'], ['dunkirk', 'calais', 'ostend', 'bruges']],
+      formations: [
+        arm(0, 'desvres'),
+        arm(0, 'desvres'),
+        arm(0, 'arras'),
+        arm(0, 'arras'),
+        rec(0, 'montreuil'),
+        inf(0, 'arras'),
+        inf(0, 'douai'),
+        inf(0, 'douai'),
+        inf(0, 'hesdin'),
+        inf(0, 'stpol'),
+        { ...inf(0, 'ath'), fresh: true },
+        { ...inf(0, 'ath'), fresh: true },
+        { ...inf(0, 'aalst'), fresh: true },
+        { ...inf(0, 'aalst'), fresh: true },
+
+        inf(1, 'boulogne', 2),
+        inf(1, 'calais', 2),
+        inf(1, 'dunkirk'),
+        inf(1, 'ypres'),
+        inf(1, 'ypres'),
+        inf(1, 'lille'),
+        inf(1, 'lille'),
+        inf(1, 'lille'),
+        inf(1, 'tournai'),
+        inf(1, 'tournai'),
+        inf(1, 'ghent', 2),
+        inf(1, 'ghent', 2),
+        inf(1, 'hazebrouck'),
+        inf(1, 'lens', 1),
+      ],
+      aims: ['boulogne', 'calais', 'dunkirk', 'lille', 'arras', 'stpol'],
+      turns: 6,
+      arrivals: [
+        { turn: 2, side: 1, type: 'infantry', at: 'dunkirk' },
+        { turn: 3, side: 1, type: 'armour' },
+        { turn: 3, side: 1, type: 'infantry', at: 'dunkirk' },
+        { turn: 4, side: 1, type: 'infantry', at: 'calais' },
+      ],
+      player: 0,
+      enemy: 'depth',
+    },
+    {
+      id: 'fallrot@1',
+      name: 'Fall Rot',
+      date: 'June 1940',
+      briefing:
+        'What is left of the French army stands on the Somme and the Aisne, and Weygand has had ' +
+        'it fortify every village and wood as a hedgehog that holds when it is bypassed. There is ' +
+        'no open flank this time: you have to break in, and then through. Rouen, Beauvais, ' +
+        'Compiègne, Soissons, Reims and Château-Thierry are the objectives — and the mud comes on the ninth turn.',
+      mapId: 'somme',
+      sides: ['Germany', 'Allies'],
+      held: ['arras', 'cambrai', 'abbeville', 'doullens', 'amiens', 'bapaume', 'peronne', 'stquentin', 'laon', 'rethel'],
+      home: [['arras', 'cambrai', 'doullens'], ['paris', 'lehavre', 'troyes', 'orleans', 'lemans']],
+      formations: [
+        arm(0, 'abbeville'),
+        arm(0, 'amiens'),
+        arm(0, 'amiens'),
+        arm(0, 'peronne'),
+        { ...arm(0, 'rethel'), fresh: true },
+        { ...arm(0, 'rethel'), fresh: true },
+        rec(0, 'rethel'),
+        inf(0, 'abbeville'),
+        inf(0, 'abbeville'),
+        inf(0, 'amiens'),
+        inf(0, 'peronne'),
+        inf(0, 'stquentin'),
+        inf(0, 'bapaume'),
+        inf(0, 'doullens'),
+        { ...inf(0, 'laon'), fresh: true },
+        { ...inf(0, 'laon'), fresh: true },
+
+        inf(1, 'dieppe', 2),
+        inf(1, 'neufchatel'),
+        inf(1, 'aumale'),
+        inf(1, 'poix'),
+        inf(1, 'moreuil'),
+        inf(1, 'roye'),
+        inf(1, 'noyon'),
+        inf(1, 'soissons'),
+        inf(1, 'fismes'),
+        inf(1, 'berryaubac'),
+        inf(1, 'reims'),
+        inf(1, 'beauvais', 2),
+        inf(1, 'compiegne', 2),
+        inf(1, 'rouen', 2),
+        inf(1, 'chateauthierry', 2),
+        { side: 1, type: 'armour', at: 'gournay', strength: 2 },
+      ],
+      aims: ['rouen', 'beauvais', 'compiegne', 'soissons', 'reims', 'chateauthierry'],
+      turns: 10,
+      arrivals: [
+        { turn: 2, side: 1, type: 'infantry' },
+        { turn: 3, side: 1, type: 'armour' },
+        { turn: 4, side: 1, type: 'infantry' },
+        { turn: 6, side: 1, type: 'infantry' },
+      ],
+      player: 0,
+      enemy: 'depth',
+    },
+    {
+      id: 'loire@2',
+      name: 'The Loire',
+      date: 'June 1940',
+      briefing:
+        'Paris has fallen without a fight and the French army is streaming south for the Loire, ' +
+        'where the government means to stand. Get to the bridges first. Orléans, Sully, Gien, Blois, ' +
+        'Amboise and Tours are the objectives; the rearguards on the roads are there to make you late, ' +
+        'and the four main crossings still in French hands on the fourth turn get a fresh corps each.',
+      mapId: 'loire',
+      sides: ['Germany', 'Allies'],
+      held: ['paris', 'mantes', 'pontoise', 'meaux', 'evreux', 'dreux', 'corbeil', 'melun', 'provins', 'nogent', 'verneuil'],
+      home: [['evreux', 'pontoise', 'meaux'], ['bourges', 'vierzon', 'loches']],
+      formations: [
+        arm(0, 'dreux'),
+        arm(0, 'dreux'),
+        arm(0, 'paris'),
+        arm(0, 'paris'),
+        arm(0, 'nogent'),
+        rec(0, 'nogent'),
+        inf(0, 'evreux'),
+        inf(0, 'verneuil'),
+        inf(0, 'paris'),
+        inf(0, 'provins'),
+        inf(0, 'nogent'),
+        { ...inf(0, 'mantes'), fresh: true },
+        { ...inf(0, 'meaux'), fresh: true },
+
+        inf(1, 'mortagne', 1),
+        inf(1, 'chartres', 2),
+        inf(1, 'etampes', 2),
+        inf(1, 'fontainebleau', 1),
+        inf(1, 'sens', 1),
+        { side: 1, type: 'armour', at: 'chateaudun', strength: 2 },
+        inf(1, 'orleans', 2),
+        inf(1, 'tours', 1),
+        inf(1, 'blois', 2),
+      ],
+      aims: ['orleans', 'sully', 'gien', 'blois', 'amboise', 'tours'],
+      turns: 6,
+      arrivals: [
+        { turn: 4, side: 1, type: 'infantry', at: 'orleans' },
+        { turn: 4, side: 1, type: 'infantry', at: 'gien' },
+        { turn: 4, side: 1, type: 'infantry', at: 'blois' },
+        { turn: 4, side: 1, type: 'infantry', at: 'tours' },
+      ],
+      player: 0,
+      enemy: 'depth',
+    },
+  ],
+}

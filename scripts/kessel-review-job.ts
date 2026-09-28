@@ -1,15 +1,15 @@
 /**
- * One war played and judged, and the pool that runs a pile of them.
+ * One battle played and judged, and the pool that runs a pile of them.
  *
  * Split out of `review-check-kessel.ts` so that the serial path and the worker
  * threads drive exactly one implementation — a second copy of this loop would be
- * a second set of results. Reviewing a war is a couple of seconds of arithmetic
+ * a second set of results. Reviewing a battle is a couple of seconds of arithmetic
  * with nothing shared between games, so it parallelises for free, and without
  * that the check is minutes of a still terminal.
  */
 import { cpus } from 'node:os'
 import { Worker } from 'node:worker_threads'
-import { kessel } from '../src/games/kessel'
+import { rulesFor } from '../src/games'
 import { KESSEL_BOTS, decideFor } from '../src/games/kessel/bot'
 import type { Doctrine } from '../src/games/kessel/bot'
 import { createGame } from '../src/games/kessel/game'
@@ -25,8 +25,8 @@ import type { GameRecord } from '../src/review/store'
  * charges the objectives with no regard for where its supply reaches.
  *
  * It exists because the three doctrines are all *competent* — the difference
- * between them is strategic and takes a war to show — while the thing a reviewer
- * is for is a player making mistakes inside a turn. Six numbers, so it
+ * between them is strategic and takes a battle to show — while the thing a reviewer
+ * is for is a player making mistakes inside a turn. Seven numbers, so it
  * structured-clones to a worker for free.
  */
 export const RECKLESS: Doctrine = {
@@ -39,6 +39,7 @@ export const RECKLESS: Doctrine = {
   objectivePull: 1.2,
   overreach: 1,
   counterattack: 0,
+  sever: 0,
 }
 
 export interface ReviewJob {
@@ -46,12 +47,13 @@ export interface ReviewJob {
   order: string[]
   seed: number
   turnCap: number
+  scenario: string
   /** policies built for this run alone, keyed by the name used in `order` */
   doctrines?: Record<string, Doctrine>
 }
 
 export interface SeatResult {
-  /** which turn of the war each judgement below belongs to */
+  /** which turn of the battle each judgement below belongs to */
   turns: number[]
   losses: number[]
   lucks: number[]
@@ -69,8 +71,8 @@ export interface ReviewResult {
 
 const BOTS = Object.fromEntries(KESSEL_BOTS.map((b) => [b.key, b]))
 
-/** One war, packaged exactly as the app would store it. */
-function play({ order, seed, turnCap, doctrines }: ReviewJob): GameRecord {
+/** One battle, packaged exactly as the app would store it. */
+function play({ order, seed, turnCap, scenario, doctrines }: ReviewJob): GameRecord {
   const rng = rngFrom((seed ^ 0x9e3779b9) >>> 0)
   const seats = order.map((key) => {
     const probe = doctrines?.[key]
@@ -86,6 +88,7 @@ function play({ order, seed, turnCap, doctrines }: ReviewJob): GameRecord {
   let s = createGame({
     seats: order.map((key, i) => ({ name: `P${i}`, bot: `kessel-${key}` })),
     seed,
+    scenario,
   })
   while (s.phase !== 'gameOver' && s.turn < turnCap) {
     s = stepBot(s, seats[s.current] as never, () => rng.next())
@@ -93,10 +96,11 @@ function play({ order, seed, turnCap, doctrines }: ReviewJob): GameRecord {
   return {
     id: `${order.join('-')}-${seed}`,
     schema: 1,
-    rules: kessel.rulesVersion,
+    rules: rulesFor('kessel', scenario),
     seed,
     botSeed: seed ^ 0x9e3779b9,
     game: 'kessel',
+    scenario,
     // Both seats are recorded as human, which is what makes every turn either
     // doctrine played a decision the reviewer takes up.
     seats: order.map((_, i) => ({ name: `P${i}`, bot: null })),

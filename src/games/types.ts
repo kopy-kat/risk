@@ -35,6 +35,8 @@ export interface CreateOptions {
   scenario?: string
   /** how much harder the scenario is set, where the game has such a thing */
   level?: number
+  /** Kessel: the army carried in from the campaign's last battle */
+  army?: { type: string; strength: number }[]
 }
 
 /**

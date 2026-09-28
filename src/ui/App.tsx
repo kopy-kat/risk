@@ -92,7 +92,7 @@ export function App() {
    * rules, different map, different bar. Only the seats cross over, so it owns
    * its own state rather than trying to be a phase of this one.
    */
-  const [kesselGame, setKesselGame] = useState<{ seats: SeatConfig[]; scenario?: string; n: number } | null>(null)
+  const [kesselGame, setKesselGame] = useState<{ scenario: string; practice: boolean; n: number } | null>(null)
 
   const start = useCallback((seats: SeatConfig[]) => {
     const s = Math.floor(Math.random() * 1e9)
@@ -421,9 +421,9 @@ export function App() {
       <KesselGame
         // counted, so Retry and Next mission remount rather than carry the last battle over
         key={kesselGame.n}
-        seats={kesselGame.seats}
         scenario={kesselGame.scenario}
-        onPlay={(scenario) => setKesselGame({ seats: kesselGame.seats, scenario, n: kesselGame.n + 1 })}
+        practice={kesselGame.practice}
+        onPlay={(scenario) => setKesselGame({ ...kesselGame, scenario, n: kesselGame.n + 1 })}
         onExit={() => setKesselGame(null)}
         onReview={(id) => { setKesselGame(null); setReviewing(id) }}
       />
@@ -431,8 +431,8 @@ export function App() {
   if (!game)
     return (
       <Setup
-        onStart={(seats, picked, scenario) =>
-          picked === 'kessel' ? setKesselGame({ seats, scenario, n: 0 }) : start(seats)}
+        onStart={start}
+        onCampaign={(scenario, practice) => setKesselGame({ scenario, practice, n: 0 })}
         onReview={setReviewing}
       />
     )

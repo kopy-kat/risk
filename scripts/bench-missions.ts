@@ -15,7 +15,7 @@
 import { adapt, meanTells } from '../src/games/kessel/adapt'
 import type { Tells } from '../src/games/kessel/adapt'
 import { DOCTRINES } from '../src/games/kessel/bot'
-import { MISSIONS } from '../src/games/kessel/missions'
+import { MISSIONS, levelled } from '../src/games/kessel/missions'
 import type { Job, Outcome } from './match'
 import { playGames } from './parallel'
 import { wilson } from './stats'
@@ -35,12 +35,13 @@ function summarise(outcomes: Outcome[], player: number) {
   const turns = outcomes.reduce((n, o) => n + o.turns, 0) / outcomes.length
   const share = outcomes.reduce((n, o) => n + (o.aims?.[player] ?? 0), 0) / outcomes.length
   const tells = meanTells(outcomes.map((o) => o.tells?.[player]).filter((t): t is Tells => !!t))
-  return { w, stars, turns, share, tells }
+  const killed = outcomes.reduce((n, o) => n + (o.lost?.[1 - player] ?? 0), 0) / outcomes.length
+  return { w, stars, turns, share, tells, killed }
 }
 
 const t0 = Date.now()
 for (const mission of MISSIONS.filter((m) => missions.includes(m))) {
-  const base = DOCTRINES.find((d) => d.key === mission.enemy)!
+  const base = DOCTRINES.find((d) => d.key === levelled(mission, level).enemy)!
   const player = mission.player
   const jobsFor = (d: string, enemy?: typeof base): Job[] =>
     Array.from({ length: games }, (_, i) => {
@@ -59,15 +60,16 @@ for (const mission of MISSIONS.filter((m) => missions.includes(m))) {
     })
 
   console.log(`\n${mission.name} (${mission.id}, level ${level + 1}) — you are ${mission.sides[player]}, the enemy fights ${base.name}`)
-  console.log('doctrine      win            ★/★★/★★★     held   turns  rings   adapted win   Δ')
+  console.log('doctrine      win            ★/★★/★★★     held   turns  killed  rings   adapted win   Δ')
   for (const d of DOCTRINES) {
     const first = summarise((await playGames(jobsFor(d.key))).outcomes, player)
-    const { doctrine } = adapt(base, mission.destroy ? null : first.tells)
+    const { doctrine } = adapt(base, mission.enemy === 'depth' ? first.tells : null)
     const second = summarise((await playGames(jobsFor(d.key, doctrine))).outcomes, player)
     const delta = second.w.p - first.w.p
     console.log(
       `${d.name.padEnd(13)} ${pct(first.w.p).padStart(4)} ±${pct(first.w.half).padEnd(5)}   ` +
         `${first.stars.join("/").padEnd(12)} ${pct(first.share).padStart(4)}   ${first.turns.toFixed(1).padStart(5)}  ` +
+        `${first.killed.toFixed(1).padStart(6)}  ` +
         `${pct(first.tells?.rings ?? 0).padStart(5)}   ` +
         `${pct(second.w.p).padStart(4)} ±${pct(second.w.half).padEnd(5)} ${delta >= 0 ? '+' : ''}${pct(delta)}`,
     )
