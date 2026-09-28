@@ -24,10 +24,12 @@ import { retreatOptions, supplyNext } from './supply'
 import type { KesselState } from './types'
 
 /**
- * Winning, in steps. Large enough that no positional consideration outbids it and
- * finite so that differences either side of it still mean something.
+ * Winning the battle, in steps, over and above the position it was won in: about
+ * four corps. Bounded, because a battle is ten turns and the review's one ply
+ * reaches its end often — scored as a cliff, the turn that decided it priced every
+ * alternative thousands of steps apart and drowned what the other turns cost.
  */
-export const WIN_SCORE = 2000
+export const WIN_BONUS = 20
 
 /**
  * What a step is worth at each supply state, 0–3.
@@ -312,11 +314,7 @@ function distanceFromHeld(m: GameMap, s: KesselState, p: PlayerId): Record<Provi
  * dividing a rival's score between everyone still standing applies here.
  */
 export function evaluate(s: KesselState, me: PlayerId): number {
-  if (s.winner !== null) return s.winner === me ? WIN_SCORE : -WIN_SCORE
-  // A battle that ended with nobody ahead is worth nothing to either side, whatever
-  // the line looks like: it has already been scored and it was a draw.
-  if (s.phase === 'gameOver') return 0
-
+  const bonus = s.winner === null ? 0 : s.winner === me ? WIN_BONUS : -WIN_BONUS
   const m = mapOf(s.mapId)
   const them = (1 - me) as PlayerId
   // The side to move drew its supply at the start of this turn; the other side's
@@ -325,5 +323,5 @@ export function evaluate(s: KesselState, me: PlayerId): number {
     p === s.current
       ? {}
       : Object.fromEntries(Object.entries(supplyNext(m, s, p)).map(([id, x]) => [id, x.supply]))
-  return assess(m, s, me, supplyOf(me)).score - assess(m, s, them, supplyOf(them)).score
+  return assess(m, s, me, supplyOf(me)).score - assess(m, s, them, supplyOf(them)).score + bonus
 }

@@ -16,7 +16,7 @@ import { rngFrom } from '../src/engine/rng'
 import type { PlayerId } from '../src/engine/types'
 import { rulesFor } from '../src/games'
 import { DOCTRINES, KESSEL_BOTS } from '../src/games/kessel/bot'
-import { WIN_SCORE, assess, evaluate } from '../src/games/kessel/evaluate'
+import { WIN_BONUS, assess, evaluate } from '../src/games/kessel/evaluate'
 import { applyMove, createGame, inCommand } from '../src/games/kessel/game'
 import { STACK_LIMIT, mapOf, registerMap } from '../src/games/kessel/map'
 import type { MapData, Province, Terrain } from '../src/games/kessel/map'
@@ -119,9 +119,11 @@ const faultsOf = (m: ReturnType<typeof fixture>, s: KesselState, orders: OrderSe
   const s = stateOn(m.id, split(), [corps(0, id(2, 1)), corps(1, id(4, 1))])
 
   near(evaluate(s, 0), -evaluate(s, 1), 1e-9, 'a position is worth to one side what it costs the other')
-  eq(evaluate({ ...s, winner: 0, phase: 'gameOver' }, 0), WIN_SCORE, 'winning is worth the win score')
-  eq(evaluate({ ...s, winner: 0, phase: 'gameOver' }, 1), -WIN_SCORE, 'and losing costs it')
-  eq(evaluate({ ...s, winner: null, phase: 'gameOver' }, 0), 0, 'a stalemate is worth nothing to either side')
+  near(evaluate({ ...s, winner: 0, phase: 'gameOver' }, 0), evaluate(s, 0) + WIN_BONUS, 1e-9,
+    'winning is worth the position it was won in, and the bonus')
+  near(evaluate({ ...s, winner: 0, phase: 'gameOver' }, 1), evaluate(s, 1) - WIN_BONUS, 1e-9, 'and losing costs it')
+  near(evaluate({ ...s, winner: null, phase: 'gameOver' }, 0), evaluate(s, 0), 1e-9,
+    'a stalemate is worth the position and nothing more')
 }
 
 // ── war aims dominate everything else it weighs ─────────────────────
@@ -472,7 +474,12 @@ eq(
     { type: 'commit' },
   )
   eq(finish.winner, 0, 'taking the last formation in a pocket ends the war')
-  eq(evaluate(finish, 0), WIN_SCORE, 'and the position after it is worth the win score')
+  near(
+    evaluate(finish, 0),
+    evaluate({ ...finish, winner: null, phase: 'orders' }, 0) + WIN_BONUS,
+    1e-9,
+    'and the position after it is worth the win bonus on top',
+  )
   eq(
     STACK_LIMIT[m.province[id(4, 1)].terrain] > 0,
     true,

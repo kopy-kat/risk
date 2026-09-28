@@ -19,11 +19,12 @@
  * `src/games/kessel/evaluate.ts` is wrong. The honest response to that is to say
  * so, not to tune until the number comes out right.
  *
- * Compared **paired by seed**: both doctrines fight the same mission with the
- * seats swapped on odd seeds, so differencing within a pair cancels the mission
- * and its sides instead of adding them.
- * The unit of independence is the game, not the turn — a bad position produces a
- * run of bad turns — so per-game means are what get differenced.
+ * Compared **paired**: each pair of games is one mission on one seed with the
+ * seats swapped, so each doctrine fights both sides of it once. A mission's sides
+ * are nothing alike — which side a doctrine plays moves its loss far more than how
+ * well it plays — so what gets differenced is each doctrine's mean over the pair,
+ * and that cancels the mission and its sides instead of adding them. The unit of
+ * independence is the pair, not the turn: a bad position produces a run of bad turns.
  *
  * It also prints the loss distribution, which is where the grade bands in
  * `src/review/kessel/review.ts` come from: percentiles of real play rather than
@@ -76,7 +77,7 @@ for (const [a, b] of PAIRS) {
     // Odd seeds swap the seats, so the same board is fought from both sides.
     const order = g % 2 === 1 ? [b, a] : [a, b]
     const scenario = MISSIONS[Math.floor(g / 2) % MISSIONS.length].id
-    jobs.push({ order, seed: g * 104729 + 7, turnCap: TURN_CAP, scenario, doctrines: DOCTRINES })
+    jobs.push({ order, seed: Math.floor(g / 2) * 104729 + 7, turnCap: TURN_CAP, scenario, doctrines: DOCTRINES })
   }
 }
 
@@ -92,7 +93,7 @@ process.stderr.write('\r'.padEnd(40) + '\r')
 
 interface Side {
   key: string
-  /** mean loss per turn, indexed by seed */
+  /** mean loss per turn, by game */
   perGame: number[]
   losses: number[]
   grades: Record<Grade, number>
@@ -113,9 +114,15 @@ const mean = (xs: number[]) => xs.reduce((n, x) => n + x, 0) / Math.max(1, xs.le
 const quantile = (sorted: number[], q: number) =>
   sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] : 0
 
-/** Paired difference in per-game means. Negative means the *stronger* side lost less. */
+/**
+ * Paired difference over each swapped pair of games, both sides of one mission for
+ * each doctrine. Negative means the *stronger* side lost less.
+ */
 function pairedDiff(strong: number[], weak: number[]) {
-  const diffs = strong.map((x, i) => x - weak[i])
+  const diffs: number[] = []
+  for (let i = 0; i + 1 < strong.length; i += 2) {
+    diffs.push((strong[i] + strong[i + 1]) / 2 - (weak[i] + weak[i + 1]) / 2)
+  }
   const m = mean(diffs)
   const variance =
     diffs.length > 1 ? diffs.reduce((n, x) => n + (x - m) ** 2, 0) / (diffs.length - 1) : 0
@@ -245,7 +252,7 @@ console.log(`\n${GAMES} games per pair, ${jobs.length} battles in ${((Date.now()
 console.log(
   ok
     ? `\n✓ ${PAIRS[HEADLINE][0]} gives up significantly less per turn than ${PAIRS[HEADLINE][1]}, ` +
-      'on both readings, in games it also wins — and luck averages to nothing'
+      'over both sides of every mission — and luck averages to nothing'
     : '\n✗ see above — the reviewer is not separating the sides it is meant to',
 )
 if (!ok) process.exitCode = 1

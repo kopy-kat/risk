@@ -446,7 +446,10 @@ place the real outcome is read.
 `src/games/kessel/evaluate.ts` is the position score. Objectives dominate — they are
 worth more than a whole army, which is what makes a battle you did not annihilate
 winnable — over ground held, force discounted by supply, cohesion, readiness,
-entrenchment, corps standing, and a debit for formations at or near a pocket. Two of those weights
+entrenchment, corps standing, and a debit for formations at or near a pocket. A battle
+that has ended is scored the same way, with a bounded bonus of about four corps to the
+winner: one ply reaches the end of a ten-turn battle often, and a win scored as a cliff
+priced the deciding turn's alternatives thousands of steps apart. Two of those weights
 were wrong in ways worth recording, because both made the reviewer recommend the opposite
 of the game's thesis:
 
@@ -477,7 +480,9 @@ includes the enemy's hidden cohesion and supply, so loss is a hindsight measure:
 between candidates, which all see the same board, and not a measure of what was knowable.
 
 `npm run review-check:kessel` is the check that this measures skill rather than noise,
-over the missions with the seats swapped on paired seeds. The headline pairing is
+over the missions, differenced over pairs of games that give each doctrine both sides of
+one mission on one seed — a mission's sides are nothing alike, and which one a doctrine
+plays moves its loss more than how well it plays. The headline pairing is
 Maneuver against a commander who fights hard and badly, because every doctrine is
 competent and what separates them takes a battle to show, while what a reviewer exists
 to catch is a mistake inside a turn. It also checks that luck averages to nothing while
