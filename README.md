@@ -7,6 +7,8 @@ the keyboard and has bots that are actually good.
 Play it at [risk.konradkopp.com](https://risk.konradkopp.com), with 2 to 6 players in
 any mix of humans and bots.
 
+![A game mid-attack](screenshot.png)
+
 ```bash
 npm install
 npm run dev
