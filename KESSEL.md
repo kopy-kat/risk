@@ -10,6 +10,141 @@ Rules live in `src/games/kessel` as pure functions, on the same `applyMove` cont
 as Risk. `npm run test:kessel` asserts them on a synthetic grid rather than the real
 map — a rule that only holds on one arrangement of provinces isn't a rule.
 
+## How to play
+
+### Campaigns
+
+Picking Kessel opens its campaigns. A campaign is a run of historical battles fought by
+one side in order, each a short fight on its own map at a scale where a pocket is
+several provinces across: a fixed order of battle, one set of objectives both sides
+contest, and a turn limit. **The army carries**: whatever comes out of one battle is the
+army for the next — each corps at the strength it ended on, a slot with nobody left to
+fill it empty — plus whatever fresh draft the next battle brings. Lose a battle and you
+fight it again with the army you went in with; win it and you choose to go on or to try
+it again for more.
+
+- **France 1940** — Germany, six battles: Gembloux on the Belgian plain, the Sedan
+  breakthrough, the Arras counterattack, the race for the Channel ports at Dunkirk, the
+  Weygand line in Fall Rot, and the race to the Loire crossings.
+- **East 1941** — the Soviet Union, seven battles from the frontier to Moscow: a fighting
+  withdrawal, the Dubno counterstroke, breakouts at Minsk and Kiev, the Smolensk relief,
+  holding against Typhoon, and the December counteroffensive.
+- **Kiev 1941** — Germany, two panzer pincers meeting behind Kyiv before the mud.
+- **Uranus 1942** — the Soviet Union, ringing Stalingrad and holding the ring.
+- **Kursk 1943** — the Soviet Union, holding the salient against pincers from Oryol and Belgorod.
+- **Falaise 1944** — the Allies, shutting the sack on two German armies at Trun and Chambois.
+- **Bastogne 1944** — the United States, holding the road hubs and the Meuse.
+
+The briefing names the objectives; hold more than half their value when the last turn
+has been fought and you have won. The margin is the stars — ★ narrow, ★★ clear, ★★★
+decisive. In a defence you start with everything, so holding is ★ and the other stars
+are for enemy corps destroyed, or for destroying them all before the last turn. In a
+breakout, a relief or a withdrawal the stars are for the marked corps you bring out with
+a route home. A campaign is scored by its stars across all its battles, and one finished
+with two thirds of them goes up a level, to four: every battle a turn shorter — in a
+defence a turn longer to hold — with one more enemy corps arriving by rail on turn 2.
+Any battle a run has reached can be practised as written, outside the campaign. On the
+attack you face **Defence in Depth**, which walks corps out of a closing ring rather than
+dig in and lose them.
+
+**The enemy learns you.** After every commit the board you leave is read for how much
+of the enemy's line you have left with one way out or none. Averaged over your recent
+missions, that teaches an enemy on the defensive caution: a corps with the ring closing on it is ordered
+first and walks out rather than dig in, unless it is standing on an objective. The
+briefing says when it has noticed. Nothing is hidden and nothing is random.
+
+A turn is orders, then one resolve. Select a formation — click it, or `←` `→` to
+cycle through them, the contact line first — then click a province: enemy-held
+attacks, anything else moves. **Standing still digs in**, so a formation with no order
+is holding; `R` refits, and a refit stands from turn to turn until the formation is
+whole. After staging an attack with armour or recon, click further on to set where it
+rides to if the ground falls — the exploitation. `G` selects a headquarters, again for
+the other, and a click sends it. `⌫` clears the staged order or calls the headquarters
+back, `Esc` deselects, `⌘Z` undoes, and `Space` presses the one dark button — `Commit
+turn`.
+
+**Command.** Each side has two headquarters, drawn as flags. A formation more than
+three provinces of your own ground from both is out of command and drawn faded: an
+order to move or attack it is carried out a turn late, dotted on the map until then,
+and it takes no other order meanwhile. A headquarters moves up to four provinces
+through your own ground and commands from there the next turn; overrun, it falls back.
+
+Movement: infantry 2, armour 4, recon 5, across terrain that costs what it costs, and
+the march ends the moment it enters ground an enemy watches. A formation out of contact
+and in full supply can instead ride the **railway** six along its own supply network,
+starting and ending out of contact — the interior line. Two turns in every ten are
+**mud**: the march halves, the trains still run, and the topbar counts down to it.
+
+Supply enters the map at each side's **rear**, the provinces the mission names, and
+flows through friendly ground the enemy does not overlook. Depots are railheads on that
+line: one cut off from home issues nothing, and is drawn struck through. A corps under
+strength that refits on a live railhead regains a step every three turns. What else
+arrives, and when, is the mission's timetable — by rail, or for a reserve that was there
+all along, where it stood.
+
+**The map zooms.** Scroll or pinch to zoom about the pointer, drag to pan, `+` `−` to zoom about the
+middle and `0` to fit. It goes to 4×, and the counters grow with the ground rather
+than floating over it at a fixed size. Beyond the theatre the plate ends in a drawn
+neatline with the off-map sheet showing past it — the coastline is clipped to a
+lon/lat box, and that is where the box is.
+
+The map carries the things you can't play without:
+
+- **Fog.** Ownership and the number of counters on a province are public — a front
+  line is known. What a counter is worth is known only where you can see: beside your
+  formations, or within two of your recon. Elsewhere it is drawn from what you last
+  saw, with how many turns ago in the corner, or as `?` if never. Bots see everything.
+- **Supply, in four bands.** Supplied · strained · failing · exhausted, on a strip down
+  each counter, with the key above the bar. Anything short of full supply cannot start
+  an attack — that is the culminating point, and it is what a strained counter's broken
+  outline means. A counter with no route home is hatched and struck through: it keeps
+  its band the turn it is cut off, loses one a turn after, and once exhausted is losing
+  strength every turn while an enemy presses it.
+- **Pockets.** A province whose garrison has nowhere to retreat is ringed in red,
+  measured against the board *this turn's staged moves* would produce — so a ring you
+  are about to close counts before you press the button.
+- **The odds, before you commit.** Staging or hovering an attack prices it in the bar:
+  the force ratio, how many of your formations the borders actually admit — each border
+  takes its frontage, the best attack value first, four in all — and whether the
+  defender has anywhere to fall back to.
+- **Depots** (capacity as pips, struck when cut from home), **objective values** (a
+  diamond, the province hatched), and **headquarters** (a flag in the side's colour).
+
+Four doctrines rather than difficulty rungs: **Attrition**, **Maneuver**, **Elastic
+Defence** and **Defence in Depth** are one policy at different settings — how much it pays to close a ring rather
+than force a front, how far it will outrun its supply, when it pulls a formation out to
+refit, and how much a corps cut off from home is worth, so they ride through an empty rear
+to cut it and counterattack whoever cuts theirs. All four garrison a railhead or a city an
+enemy is closing on before they spend
+the turn's activations at the front, order what is in command before what is not, and
+send their headquarters wherever they command the most of the line.
+
+### Reviewing a battle
+
+Battles are stored and reviewed like Risk games, and the screen is the same one — but the
+unit of judgement is different. You stage orders for every formation and press one
+button, so **the decision is the whole turn**, and a turn is priced against whole
+alternatives: what each doctrine would have ordered from that board, and your own orders
+with one thing changed. Each candidate is resolved through the engine five times under
+different generator states and averaged, because the ±15% on the cohesion bill decides a
+step loss or a surrender often enough to price the roll instead of the plan. **Loss** is
+the gap to the best alternative, in *steps*; **luck** is what the one resolution that
+happened did against that average. Neither can reach the other.
+
+The one-change alternatives are what makes it advice. Each names a fault and carries what
+fixing only that was measured to be worth — *"The corps in Dinant had one way out, and
+the corps beside it could have stood in it."* Counted across the battle they become the habits
+panel: *leaving the last way out open, 4× −70*. The faults are
+attacking under the odds an assault has to clear, advancing past your own supply, leaving
+a formation strained and idle, leaving an enemy's last way out open, standing where you
+cannot fall back, and attacking in too many places at once. The review sees the whole
+board; the fog is yours, not its.
+
+`npm run review-check:kessel` is the check that this measures skill rather than noise,
+and `npm run test:kessel-review` the one that pins the properties it rests on.
+[`KESSEL.md`](KESSEL.md) has the position evaluation, the numbers and where it is still
+weak.
+
 ## The one rule
 
 Formations are pushed back by combat and destroyed only when they cannot retreat —
